@@ -10,7 +10,6 @@ CMakeCache.txt
 
 # IDE files
 .idea/
-.vscode/
 *.user
 *.suo
 *.vcxproj*

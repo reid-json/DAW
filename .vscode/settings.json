@@ -1,0 +1,8 @@
+// this is to force the build to use MSVC instead of MinGW for Cmake and JUCE or we would have to manually do it in the command line ever time.
+{
+    "cmake.generator": "Visual Studio 17 2022",
+    "cmake.configureSettings": {
+        "CMAKE_GENERATOR_PLATFORM": "x64"
+    },
+    "cmake.buildDirectory": "${workspaceFolder}/build"
+}
