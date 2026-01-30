@@ -1,0 +1,32 @@
+# Build artifacts
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+*.cmake
+
+# JUCE-generated files
+*.jucer
+
+# IDE files
+.idea/
+.vscode/
+*.user
+*.suo
+*.vcxproj*
+*.xcodeproj
+*.xcworkspace
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
+
+# Binaries
+*.exe
+*.dll
+*.app
+*.dylib
+*.so
