@@ -16,7 +16,7 @@ juce_add_gui_app(DAW
     PRODUCT_NAME "DAW"
 )
 
-# This is targeting the code from our app
+# This is finding the code from our app
 target_sources(DAW PRIVATE
     source/Main.cpp
     source/MainComponent.cpp
@@ -26,8 +26,13 @@ target_sources(DAW PRIVATE
 
 # This is adding libraries or modules and we can add more later
 target_link_libraries(DAW PRIVATE
-    juce::juce_gui_extra
-    juce::juce_audio_utils
+        juce::juce_gui_basics
+        juce::juce_gui_extra
+        juce::juce_audio_utils
+        juce::juce_audio_devices
+        juce::juce_audio_formats
+        juce::juce_audio_processors
+
 )
 
 # https://cmake.org/cmake/help/latest/manual/cmake-commands.7.html used this documentation and videos to setup this

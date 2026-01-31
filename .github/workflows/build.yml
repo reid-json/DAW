@@ -1,6 +1,7 @@
 # this is to check if a pull request to main will build successfully
 # if it does then the restrictions i setup for main will pass and allow the pull request to go through
 # trying to make it to where we have a CI/CD pipeline thing going on for this project
+#this is a test
 name: Build
 
 on:
