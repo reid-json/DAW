@@ -70,8 +70,9 @@ public:
            #if JUCE_IOS || JUCE_ANDROID
             setFullScreen (true);
            #else
+            setUsingNativeTitleBar (true);
             setResizable (true, true);
-            centreWithSize (getWidth(), getHeight());
+            setFullScreen (true);
            #endif
 
             setVisible (true);
