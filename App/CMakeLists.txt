@@ -27,6 +27,7 @@ target_link_libraries(DAW PRIVATE
     Plugin_Hosting
 
     foleys_gui_magic
+    JIVE
 
     juce::juce_gui_basics
     juce::juce_gui_extra
