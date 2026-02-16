@@ -19,6 +19,13 @@ FetchContent_Declare(
     GIT_TAG        main
 
 )
+# Fetch JIVE extension
+FetchContent_Declare(
+    CPMAddPackage("gh:ImJimmi/JIVE@main")
+)
+
+
+
 #looked up how to turn off building all the examples, kinda speeding up the build process
 #still figuring out all the stuff regarding the build process
 set(FOLEYS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
