@@ -1,9 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 project(DAW VERSION 1.0)
 
-
-
-# Fetching JUCE for the project
+# This is downloading JUCE
 include(FetchContent)
 FetchContent_Declare(
     juce
@@ -12,39 +10,29 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(juce)
 
-# Fetching gui extension for the project
-FetchContent_Declare(
-    foleys_gui_magic
-    GIT_REPOSITORY https://github.com/ffAudio/foleys_gui_magic.git
-    GIT_TAG        main
+
+# This is creating the JUCE app
+juce_add_gui_app(DAW
+    PRODUCT_NAME "DAW"
+)
+
+# This is finding the code from our app
+target_sources(DAW PRIVATE
+    source/Main.cpp
+    source/MainComponent.cpp
+    source/MainComponent.h
+)
+
+
+# This is adding libraries or modules and we can add more later
+target_link_libraries(DAW PRIVATE
+        juce::juce_gui_basics
+        juce::juce_gui_extra
+        juce::juce_audio_utils
+        juce::juce_audio_devices
+        juce::juce_audio_formats
+        juce::juce_audio_processors
 
 )
-#looked up how to turn off building all the examples, kinda speeding up the build process
-#still figuring out all the stuff regarding the build process
-set(FOLEYS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
-FetchContent_MakeAvailable(foleys_gui_magic)
-
-
-
-# Adding modules here
-# within each module is where we can add libraries specific for each
-# This is where you have to add an "entry point" if you will so the root cmake will know to build it
-add_subdirectory(Utilities)
-
-add_subdirectory(Audio_Engine)
-add_subdirectory(Audio_Engine/Test)
-
-add_subdirectory(Piano_Roll)
-add_subdirectory(Piano_Roll/Test)
-
-add_subdirectory(GUI)
-add_subdirectory(GUI/Test)
-
-add_subdirectory(Plugin)
-add_subdirectory(Plugin/Test)
-
-add_subdirectory(Plugin_Hosting)
-add_subdirectory(Plugin_Hosting/Test)
-
-add_subdirectory(App)
+# https://cmake.org/cmake/help/latest/manual/cmake-commands.7.html used this documentation and videos to setup this
