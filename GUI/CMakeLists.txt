@@ -8,5 +8,4 @@ target_link_libraries(GUI
     PRIVATE
         juce::juce_gui_basics
         foleys_gui_magic
-        JIVE
 )

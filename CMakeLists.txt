@@ -19,10 +19,7 @@ FetchContent_Declare(
     GIT_TAG        main
 
 )
-# Fetch JIVE extension
-FetchContent_Declare(
-    CPMAddPackage("gh:ImJimmi/JIVE@main")
-)
+
 
 
 
@@ -55,3 +52,10 @@ add_subdirectory(Plugin_Hosting)
 add_subdirectory(Plugin_Hosting/Test)
 
 add_subdirectory(App)
+# Fetch JIVE extension
+add_subdirectory(external/JIVE)
+
+target_link_libraries(DAW
+    PRIVATE
+        jive_layouts
+)
