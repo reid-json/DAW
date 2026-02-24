@@ -1,4 +1,4 @@
-#include "jive_ProgressBar.h"
+#include <jive_layouts/jive_layouts.h>
 
 namespace jive
 {
@@ -34,18 +34,16 @@ namespace jive
 
     NormalisedProgressBar& ProgressBar::getProgressBar()
     {
-        return *dynamic_cast<NormalisedProgressBar*>(getComponent().get());
+        return *dynamic_cast<NormalisedProgressBar*>(component.get());
     }
 
     const NormalisedProgressBar& ProgressBar::getProgressBar() const
     {
-        return *dynamic_cast<const NormalisedProgressBar*>(getComponent().get());
+        return *dynamic_cast<const NormalisedProgressBar*>(component.get());
     }
 } // namespace jive
 
 #if JIVE_UNIT_TESTS
-    #include <jive_layouts/layout/jive_Interpreter.h>
-
 class ProgressBarTest : public juce::UnitTest
 {
 public:

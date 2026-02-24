@@ -1,7 +1,5 @@
 #pragma once
 
-#include <jive_layouts/layout/gui-items/jive_GuiItemDecorator.h>
-
 namespace jive
 {
     class Slider
@@ -12,10 +10,6 @@ namespace jive
         explicit Slider(std::unique_ptr<GuiItem> itemToDecorate);
 
         bool isContainer() const override;
-
-#if JIVE_IS_PLUGIN_PROJECT
-        void attachToParameter(juce::RangedAudioParameter*, juce::UndoManager*) override;
-#endif
 
         juce::Slider& getSlider();
         const juce::Slider& getSlider() const;
@@ -49,10 +43,6 @@ namespace jive
         Property<bool> focusable;
 
         Event onChange;
-
-#if JIVE_IS_PLUGIN_PROJECT
-        std::unique_ptr<juce::SliderParameterAttachment> parameterAttachment;
-#endif
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Slider)
     };

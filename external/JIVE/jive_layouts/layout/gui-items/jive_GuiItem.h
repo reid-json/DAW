@@ -1,68 +1,44 @@
 #pragma once
 
-#include <jive_layouts/hooks/jive_View.h>
-
-#include <jive_core/jive_core.h>
-
-#if JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS
-    #include <jive_style_sheets/jive_style_sheets.h>
-#endif
-
-#if JIVE_IS_PLUGIN_PROJECT
-    #include <juce_audio_processors/juce_audio_processors.h>
-#endif
-
 namespace jive
 {
     class GuiItem
     {
     public:
         GuiItem(std::unique_ptr<juce::Component> component,
-                const juce::ValueTree& sourceState,
-#if JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS
-                StyleSheet::ReferenceCountedPointer styleSheet,
-#endif
-                GuiItem* parent = nullptr);
-
-        GuiItem(std::unique_ptr<juce::Component> component,
-                View::ReferenceCountedPointer sourceView,
+                const juce::ValueTree& stateSource,
 #if JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS
                 StyleSheet::ReferenceCountedPointer styleSheet,
 #endif
                 GuiItem* parent = nullptr);
 
         GuiItem(const GuiItem& other);
-        virtual ~GuiItem();
+        virtual ~GuiItem() = default;
 
-        [[nodiscard]] const std::shared_ptr<const juce::Component> getComponent() const;
-        [[nodiscard]] std::shared_ptr<juce::Component> getComponent();
-        [[nodiscard]] const View::ReferenceCountedPointer getView() const;
-        [[nodiscard]] View::ReferenceCountedPointer getView();
+        const std::shared_ptr<const juce::Component> getComponent() const;
+        const std::shared_ptr<juce::Component> getComponent();
 
         virtual void insertChild(std::unique_ptr<GuiItem> child, int index);
         virtual void setChildren(std::vector<std::unique_ptr<GuiItem>>&& children);
         virtual void removeChild(GuiItem& childToRemove);
-        [[nodiscard]] virtual juce::Array<const GuiItem*> getChildren() const;
-        [[nodiscard]] virtual juce::Array<GuiItem*> getChildren();
-        [[nodiscard]] virtual const GuiItem* getParent() const;
-        [[nodiscard]] virtual GuiItem* getParent();
+        virtual juce::Array<GuiItem*> getChildren();
+        virtual juce::Array<const GuiItem*> getChildren() const;
+        virtual const GuiItem* getParent() const;
+        virtual GuiItem* getParent();
+        bool isTopLevel() const;
 
-        [[nodiscard]] bool isTopLevel() const;
-        [[nodiscard]] virtual bool isContainer() const;
-        [[nodiscard]] virtual bool isContent() const;
+        virtual bool isContainer() const;
+        virtual bool isContent() const;
 
-        void callLayoutChildrenWithRecursionLock();
-        [[nodiscard]] bool isLayingOutChildren() const;
-
-#if JIVE_IS_PLUGIN_PROJECT
-        virtual void attachToParameter(juce::RangedAudioParameter*, juce::UndoManager* = nullptr);
-#endif
+        virtual void layOutChildren() {}
 
         juce::ValueTree state;
 
     protected:
-        virtual void layOutChildren() {}
         virtual void childrenChanged() {}
+
+        const std::shared_ptr<juce::Component> component;
+        GuiItem* const parent;
 
     private:
         friend class GuiItemDecorator;
@@ -85,30 +61,21 @@ namespace jive
 #if JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS
                 StyleSheet::ReferenceCountedPointer sheet,
 #endif
-                View::ReferenceCountedPointer sourceView);
+                const juce::ValueTree& stateSource);
 
-        void insertChild(std::unique_ptr<GuiItem> child, int index, bool invokeCallback);
+        juce::OwnedArray<GuiItem> children;
 
 #if JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS
         const StyleSheet::ReferenceCountedPointer styleSheet;
 #endif
 
-        static View::ReferenceCountedPointer getOrCreateView(juce::ValueTree state);
+        void insertChild(std::unique_ptr<GuiItem> child, int index, bool invokeCallback);
 
-        const std::shared_ptr<juce::Component> component;
-        GuiItem* const parent;
-        juce::OwnedArray<GuiItem> children;
         std::unique_ptr<Remover> remover;
-        View::ReferenceCountedPointer view;
 
-        bool layoutRecursionLock = false;
-
-        JUCE_DECLARE_WEAK_REFERENCEABLE(GuiItem)
         JUCE_LEAK_DETECTOR(GuiItem)
     };
 
     [[nodiscard]] BoxModel& boxModel(GuiItem& decoratedItem);
     [[nodiscard]] const BoxModel& boxModel(const GuiItem& decoratedItem);
-
-    [[nodiscard]] GuiItem* findItemWithID(GuiItem& root, const juce::Identifier& id);
 } // namespace jive

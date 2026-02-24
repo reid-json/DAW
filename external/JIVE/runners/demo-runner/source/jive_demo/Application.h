@@ -1,13 +1,9 @@
 #pragma once
 
-#include "DemoState.h"
+#include "AppState.h"
 
 #include <jive_demo/gui/WindowPresenter.h>
 #include <jive_demo/gui/tokens/Typography.h>
-
-#if JIVE_ENABLE_MELATONIN_INSPECTOR
-    #include <melatonin_inspector/melatonin_inspector.h>
-#endif
 
 namespace jive_demo
 {
@@ -30,32 +26,19 @@ namespace jive_demo
         {
             window = interpreter.interpret(windowPresenter.present());
             interpreter.listenTo(*window);
-
-#if JIVE_ENABLE_MELATONIN_INSPECTOR
-            inspector = std::make_unique<melatonin::Inspector>(*window->getComponent(), false);
-            inspector->setVisible(true);
-#endif
         }
 
         void shutdown() final
         {
             window = nullptr;
-
-#if JIVE_ENABLE_MELATONIN_INSPECTOR
-            inspector = nullptr;
-#endif
         }
 
     private:
-        DemoState state;
+        AppState state;
 
         jive::Interpreter interpreter;
-        WindowPresenter windowPresenter{ state.getWindowState(), "Window" };
+        WindowPresenter windowPresenter{ state.getWindowState() };
         std::unique_ptr<jive::GuiItem> window;
-
-#if JIVE_ENABLE_MELATONIN_INSPECTOR
-        std::unique_ptr<melatonin::Inspector> inspector;
-#endif
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Application)
     };

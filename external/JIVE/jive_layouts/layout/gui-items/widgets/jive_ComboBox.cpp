@@ -1,4 +1,4 @@
-#include "jive_ComboBox.h"
+#include <jive_layouts/jive_layouts.h>
 
 namespace jive
 {
@@ -115,24 +115,14 @@ namespace jive
         return false;
     }
 
-#if JIVE_IS_PLUGIN_PROJECT
-    void ComboBox::attachToParameter(juce::RangedAudioParameter* parameter, juce::UndoManager* undoManager)
-    {
-        if (parameter != nullptr)
-            parameterAttachment = std::make_unique<juce::ComboBoxParameterAttachment>(*parameter, getComboBox(), undoManager);
-        else
-            parameterAttachment = nullptr;
-    }
-#endif
-
     juce::ComboBox& ComboBox::getComboBox()
     {
-        return *dynamic_cast<juce::ComboBox*>(getComponent().get());
+        return *dynamic_cast<juce::ComboBox*>(component.get());
     }
 
     const juce::ComboBox& ComboBox::getComboBox() const
     {
-        return *dynamic_cast<const juce::ComboBox*>(getComponent().get());
+        return *dynamic_cast<const juce::ComboBox*>(component.get());
     }
 
     void ComboBox::updateItems()
@@ -177,8 +167,6 @@ namespace jive
 } // namespace jive
 
 #if JIVE_UNIT_TESTS
-    #include <jive_layouts/layout/jive_Interpreter.h>
-
 class ComboBoxTest : public juce::UnitTest
 {
 public:

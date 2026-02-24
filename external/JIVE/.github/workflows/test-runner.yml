@@ -1,152 +1,75 @@
 name: Test Runner
-run-name: "Test Runner `${{ github.ref_name || github.head_ref }}`"
 
-on: push
+on:
+    pull_request:
+        branches: [main]
 
 env:
-  BUILD_TYPE: Debug
-  CMAKE_BUILD_DIRECTORY: build
-  CPM_CACHE_DIR: .cpm-cache
-  SCCACHE_CACHE_MULTIARCH: 1
-  SCCACHE_GHA_ENABLED: true
-
-defaults:
-  run:
-    shell: bash
+    BUILD_TYPE: Debug
 
 jobs:
-  run-tests:
-    strategy:
-      matrix:
-        platform: [macos-latest, windows-latest]
-        include:
-          - platform: macos-latest
-            platform-name: macOS
-            package-manager: brew
-            additional-cmake-options: -DJIVE_ENABLE_COVERAGE=ON -DJIVE_ENABLE_SANITISERS=ON
+    test-windows:
+        name: Test Windows
+        runs-on: windows-latest
 
-          - platform: windows-latest
-            platform-name: Windows
-            platform-shell: cmd
-            package-manager: choco
-            additional-cmake-options: -DCMAKE_PROGRAM_PATH="C:\ProgramData\chocolatey\lib\pluginval\tools"
+        steps:
+            - uses: actions/checkout@v3
+              with:
+                  submodules: "recursive"
 
-    name: Test ${{ matrix.platform-name }}
-    runs-on: ${{ matrix.platform }}
+            - name: Configure CMake
+              run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DJIVE_BUILD_TEST_RUNNER=ON
 
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: "recursive"
+            - name: Build
+              run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
 
-      - name: Install Ninja
-        run: ${{ matrix.package-manager }} install ninja
-      - name: Install pluginval
-        run: ${{matrix.package-manager}} install pluginval
-      - name: Setup devcmd
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1.13.0
+            - name: Test
+              working-directory: ${{github.workspace}}/build
+              run: ${{github.workspace}}/build/runners/test-runner/jive-test-runner_artefacts/${{env.BUILD_TYPE}}/jive-test-runner
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
+    test-macos:
+        name: Test macOS
+        runs-on: macos-latest
 
-      - name: Restore CPM dependencies
-        uses: actions/cache/restore@v5
-        with:
-          path: ${{ env.CPM_CACHE_DIR }}
-          key: cpm-${{ runner.os }}-${{ github.ref_name || github.head_ref }}-${{ github.run_number }}-${{ github.run_attempt }}
-          restore-keys: |
-            cpm-${{ runner.os }}-${{ github.ref_name || github.head_ref }}-${{ github.run_number }}
-            cpm-${{ runner.os }}-${{ github.ref_name || github.head_ref }}
-            cpm-${{ runner.os }}-main
-            cpm-${{ runner.os }}
+        steps:
+            - uses: actions/checkout@v3
+              with:
+                  submodules: "recursive"
 
-      - name: CMake Generate
-        run: |
-          cmake \
-            -B ${{ env.CMAKE_BUILD_DIRECTORY }} \
-            -G Ninja \
-            -D CMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -D JIVE_BUILD_TEST_RUNNER=ON \
-            -D JIVE_BUILD_DEMO_RUNNER=ON \
-            -D JIVE_BUILD_EXAMPLES=ON \
-            -D CMAKE_C_COMPILER_LAUNCHER=sccache \
-            -D CMAKE_CXX_COMPILER_LAUNCHER=sccache \
-            -D CPM_SOURCE_CACHE=${{ env.CPM_CACHE_DIR }} \
-            -D CMAKE_POLICY_DEFAULT_CMP0141=NEW \
-            -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded \
-            ${{ matrix.additional-cmake-options }}
+            - name: Configure CMake
+              run: cmake -B ${{github.workspace}}/build -G Xcode -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DJIVE_BUILD_TEST_RUNNER=ON -DJIVE_ENABLE_COVERAGE=ON -DJIVE_ENABLE_SANITISERS=ON
 
-      - name: Cache CPM dependencies
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.CPM_CACHE_DIR }}
-          key: cpm-${{ runner.os }}-${{ github.ref_name || github.head_ref }}-${{ github.run_number }}-${{ github.run_attempt }}
+            - name: Build
+              run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
 
-      - name: CMake Build
-        run: |
-          cmake \
-            --build ${{ env.CMAKE_BUILD_DIRECTORY }} \
-            --config ${{ env.BUILD_TYPE }}
+            - name: Test
+              working-directory: ${{github.workspace}}/build
+              run: ${{github.workspace}}/build/runners/test-runner/jive-test-runner_artefacts/${{env.BUILD_TYPE}}/jive-test-runner
 
-      - name: Run CTest
-        run: |
-          cd ${{ env.CMAKE_BUILD_DIRECTORY }}
-          ctest \
-            --output-on-failure \
-            --extra-verbose \
-            -j14 \
-            -C ${{ env.BUILD_TYPE }} \
-            -T test \
-            -O ctest.log
+            - name: Install lcov
+              working-directory: ${{github.workspace}}/build
+              run: brew install lcov
 
-      - name: Install lcov
-        if: runner.os == 'macOS'
-        working-directory: ${{github.workspace}}/build
-        run: brew install lcov
+            - name: Generate Coverage Report
+              working-directory: ${{github.workspace}}/build
+              run: lcov --directory . --capture --output-file coverage.info --ignore-errors inconsistent --ignore-errors gcov
 
-      - name: Generate Coverage Report
-        if: runner.os == 'macOS'
-        working-directory: ${{github.workspace}}/build
-        run: |
-          lcov \
-            --directory . \
-            --capture \
-            --output-file coverage.info \
-            --ignore-errors inconsistent \
-            --ignore-errors gcov \
-            --ignore-errors range \
-            --ignore-errors source \
-            --ignore-errors format
+            - name: Upload Coverage
+              working-directory: ${{github.workspace}}/build
+              run: |
+                  curl -Os https://uploader.codecov.io/latest/macos/codecov
+                  chmod +x codecov
+                  ./codecov -t ${{ secrets.CODECOV_TOKEN }}
 
-      - name: Upload Coverage Report
-        if: runner.os == 'macOS'
-        uses: codecov/codecov-action@v5
-        with:
-          fail_ci_if_error: true
-          files: ./build/coverage.info
-          flags: unittests
-          token: ${{ secrets.CODECOV_TOKEN }}
-          verbose: true
+    verify-formatting:
+        name: Verify Formatting
+        runs-on: macos-latest
 
-      - name: Stage Artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: "${{ matrix.platform-name }} #${{ github.event.pull_request.number }}"
-          path: ${{ env.CMAKE_BUILD_DIRECTORY }}/ctest.log
-          if-no-files-found: ignore
-          retention-days: 7
-          overwrite: true
+        steps:
+            - uses: actions/checkout@v3
 
-  verify-formatting:
-    name: Verify Formatting
-    runs-on: macos-latest
+            - name: Install clang-format
+              run: brew install clang-format
 
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install clang-format
-        run: brew install clang-format
-
-      - name: Verify formatting
-        run: python3 .github/scripts/verify_formatting.py
+            - name: Verify formatting
+              run: python3 ${{github.workspace}}/.github/scripts/verify_formatting.py

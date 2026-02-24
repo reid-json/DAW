@@ -1,88 +1,64 @@
 #pragma once
 
 #include "jive_Object.h"
-#include "jive_PropertyBehaviours.h"
-#include "variant-converters/jive_VariantConvertion.h"
-
-#include <jive_core/algorithms/jive_Visitor.h>
-#include <jive_core/kinetics/jive_Transitions.h>
 
 namespace jive
 {
-    template <typename T>
-    struct isReferenceCountedObjectPointer : std::false_type
+    enum class Inheritance
     {
+        inheritFromParent,
+        inheritFromAncestors,
+        doNotInherit,
     };
 
-    template <typename T>
-    struct isReferenceCountedObjectPointer<juce::ReferenceCountedObjectPtr<T>> : std::true_type
+    enum class Accumulation
     {
+        accumulate,
+        doNotAccumulate,
     };
 
     template <typename ValueType,
               Inheritance inheritance = Inheritance::doNotInherit,
-              Accumulation accumulation = Accumulation::doNotAccumulate,
-              bool autoParseStrings = isReferenceCountedObjectPointer<ValueType>::value,
-              Responsiveness responsiveness = Responsiveness::respondToChanges>
-    class Property
-        : protected juce::ValueTree::Listener
-        , protected Object::Listener
-        , private Transition::Listener
+              Accumulation accumulation = Accumulation::doNotAccumulate>
+    class Property : protected juce::ValueTree::Listener
     {
     public:
-        using Source = std::variant<juce::ValueTree, Object::ReferenceCountedPointer>;
+        using Converter = juce::VariantConverter<ValueType>;
 
-        Property(Source propertySource,
+        Property(juce::ValueTree sourceTree,
                  const juce::Identifier& propertyID)
             : id{ propertyID }
-            , source{ propertySource }
-            , transitionSourceID{ propertyID }
+            , tree{ sourceTree }
         {
-            initialise();
+            switch (inheritance)
+            {
+            case Inheritance::inheritFromParent:
+                treeToListenTo = tree.getParent();
+                break;
+            case Inheritance::inheritFromAncestors:
+                treeToListenTo = tree.getRoot();
+                break;
+            case Inheritance::doNotInherit:
+                treeToListenTo = tree;
+            }
+
+            if (!treeToListenTo.isValid())
+                treeToListenTo = tree;
+
+            treeToListenTo.addListener(this);
+
+            if constexpr (std::is_same<ValueType, Object::ReferenceCountedPointer>())
+            {
+                if (tree[id].isString())
+                    tree.setProperty(id, parseJSON(tree[id].toString()), nullptr);
+            }
         }
 
-        Property(const Property& other)
-            : id{ other.id }
-        {
-            *this = other;
-        }
-
-        Property(Property&& other)
-            : id{ std::move(other.id) }
-        {
-            *this = std::move(other);
-        }
-
-        Property& operator=(const Property& other)
-        {
-            jassert(id == other.id);
-            transitionSourceID = other.transitionSourceID;
-            source = other.source;
-            onValueChange = other.onValueChange;
-
-            initialise();
-
-            return *this;
-        }
-
-        Property& operator=(Property&& other)
-        {
-            jassert(id == other.id);
-            transitionSourceID = std::move(other.transitionSourceID);
-            source = std::move(other.source);
-            onValueChange = std::move(other.onValueChange);
-
-            initialise();
-
-            return *this;
-        }
-
-        ~Property() override
-        {
-            observeTransition(nullptr);
-            removeThisAsListener(source);
-            removeThisAsListener(listenerTarget);
-        }
+        Property(const Property& other) = delete;
+        Property(Property&& other) = delete;
+        Property& operator=(const Property& other) = delete;
+        Property& operator=(Property&& other) = delete;
+        ~Property() override = default;
 
         [[nodiscard]] virtual ValueType get() const
         {
@@ -92,91 +68,59 @@ namespace jive
         [[nodiscard]] auto getOr(const ValueType& valueIfNoneSpecified) const
         {
             if (auto root = getRootOfInheritance();
-                isValid(root))
+                root.isValid())
             {
                 return getFrom(root);
             }
 
             if constexpr (accumulation == Accumulation::accumulate)
             {
-                if (auto src = getFirstDescendantWithProperty(source);
-                    src.isValid())
+                if (auto source = getFirstAncestorWithProperty(tree);
+                    source.isValid())
                 {
-                    return getFrom(src);
+                    return getFrom(tree);
                 }
             }
 
             return valueIfNoneSpecified;
         }
 
-        [[nodiscard]] auto calculateCurrent() const
-        {
-            if (auto* transition = getTransition())
-                return transition->template calculateCurrent<ValueType>();
-
-            return get();
-        }
-
         void set(const ValueType& newValue)
         {
-            set(source, toVar(newValue));
+            tree.setProperty(id, Converter::toVar(newValue), nullptr);
         }
 
         void set(std::function<ValueType()> function)
         {
-            set(source, juce::var{
-                            [function](const auto&) {
-                                return toVar(function());
-                            },
-                        });
+            const auto nativeFunction = [function](const auto&) {
+                return Converter::toVar(function());
+            };
+            tree.setProperty(id, juce::var{ nativeFunction }, nullptr);
         }
 
         void setAuto()
         {
-            set(source, "auto");
+            tree.setProperty(id, "auto", nullptr);
         }
 
         void clear()
         {
-            std::visit(Visitor{
-                           [this](juce::ValueTree& sourceTree) {
-                               sourceTree.removeProperty(id, nullptr);
-                           },
-                           [this](const Object::ReferenceCountedPointer& sourceObject) {
-                               if (sourceObject != nullptr)
-                                   sourceObject->removeProperty(id);
-                           },
-                       },
-                       source);
+            tree.removeProperty(id, nullptr);
         }
 
         [[nodiscard]] auto exists() const
         {
-            return !getVar(source, id).isVoid();
+            return tree.hasProperty(id);
         }
 
         [[nodiscard]] auto isAuto() const
         {
-            return (!exists()) || toString().trim().equalsIgnoreCase("auto");
+            return (!exists()) || tree[id].toString().trim().equalsIgnoreCase("auto");
         }
 
         [[nodiscard]] auto isFunctional() const
         {
-            if (!exists())
-                return false;
-
-            return std::visit(Visitor{
-                                  [this](const juce::ValueTree& sourceTree) {
-                                      return sourceTree[id].isMethod();
-                                  },
-                                  [this](const Object::ReferenceCountedPointer& sourceObject) {
-                                      if (sourceObject != nullptr)
-                                          return sourceObject->getProperty(id).isMethod();
-
-                                      return false;
-                                  },
-                              },
-                              source);
+            return exists() && tree[id].isMethod();
         }
 
         [[nodiscard]] auto toString() const
@@ -184,58 +128,7 @@ namespace jive
             if (!exists())
                 return juce::String{};
 
-            return std::visit(Visitor{
-                                  [this](const juce::ValueTree& sourceTree) {
-                                      return sourceTree[id].toString();
-                                  },
-                                  [this](const Object::ReferenceCountedPointer& sourceObject) {
-                                      return sourceObject->getProperty(id).toString();
-                                  },
-                              },
-                              source);
-        }
-
-        void setTransitionSourceProperty(const juce::Identifier& sourceID)
-        {
-            observeTransition(nullptr);
-            transitionSourceID = sourceID;
-
-            if (auto* transition = getTransition())
-                observeTransition(transition);
-        }
-
-        [[nodiscard]] Transition* getTransition()
-        {
-            if (currentTransition == nullptr)
-            {
-                using TransitionsProperty = Property<Transitions::ReferenceCountedPointer,
-                                                     Inheritance::doNotInherit,
-                                                     Accumulation::doNotAccumulate,
-                                                     true,
-                                                     Responsiveness::ignoreChanges>;
-
-                if (const TransitionsProperty transitions{ source, "transition" }; transitions.exists())
-                    currentTransition = (*transitions.get())[transitionSourceID.toString()];
-            }
-
-            if (currentTransition != nullptr && currentTransition->source.isVoid())
-            {
-                currentTransition->source = getVar(source, id);
-                currentTransition->target = currentTransition->source;
-                currentTransition->commencement = now();
-            }
-
-            return currentTransition;
-        }
-
-        [[nodiscard]] const Transition* getTransition() const
-        {
-            return const_cast<Property*>(this)->getTransition();
-        }
-
-        [[nodiscard]] auto isTransitioning() const
-        {
-            return getTransition() != nullptr;
+            return tree[id].toString();
         }
 
         [[nodiscard]] operator ValueType() const
@@ -262,40 +155,18 @@ namespace jive
         }
 
         const juce::Identifier id;
-        mutable std::function<void(void)> onValueChange = nullptr;
-        mutable std::function<void(void)> onTransitionProgressed = nullptr;
+        std::function<void(void)> onValueChange = nullptr;
 
     protected:
         void valueTreePropertyChanged(juce::ValueTree& treeWhosePropertyChanged,
                                       const juce::Identifier& property) override
         {
             if (property != id)
-            {
-                if (property.toString() == "transition")
-                    currentTransition = getTransition();
-
                 return;
-            }
             if (!treeWhosePropertyChanged.hasProperty(property))
                 return;
             if (!respondToPropertyChanges(treeWhosePropertyChanged))
                 return;
-
-            valueChanged();
-
-            if (onValueChange != nullptr)
-                onValueChange();
-        }
-
-        void propertyChanged(Object& objectWhosePropertyChanged,
-                             const juce::Identifier& property) override
-        {
-            if (property != id)
-                return;
-            if (!objectWhosePropertyChanged.hasProperty(property))
-                return;
-
-            valueChanged();
 
             if (onValueChange != nullptr)
                 onValueChange();
@@ -303,15 +174,15 @@ namespace jive
 
         [[nodiscard]] auto respondToPropertyChanges(juce::ValueTree& treeWhosePropertyChanged) const
         {
-            if (treeWhosePropertyChanged == std::get<juce::ValueTree>(source))
+            if (treeWhosePropertyChanged == tree)
                 return true;
 
             switch (inheritance)
             {
             case Inheritance::inheritFromParent:
-                return treeWhosePropertyChanged == std::get<juce::ValueTree>(source).getParent();
+                return treeWhosePropertyChanged == tree.getParent();
             case Inheritance::inheritFromAncestors:
-                return std::get<juce::ValueTree>(source).isAChildOf(treeWhosePropertyChanged);
+                return tree.isAChildOf(treeWhosePropertyChanged);
             case Inheritance::doNotInherit:
                 break;
             }
@@ -319,7 +190,7 @@ namespace jive
             switch (accumulation)
             {
             case Accumulation::accumulate:
-                return treeWhosePropertyChanged.isAChildOf(std::get<juce::ValueTree>(source));
+                return treeWhosePropertyChanged.isAChildOf(tree);
             case Accumulation::doNotAccumulate:
                 break;
             }
@@ -327,75 +198,67 @@ namespace jive
             return false;
         }
 
-        [[nodiscard]] auto respondToPropertyChanges(Object& objectWhosePropertyChanged) const
-        {
-            return &objectWhosePropertyChanged == static_cast<Object*>(std::get<Object::ReferenceCountedPointer>(source));
-        }
-
         [[nodiscard]] auto getRootOfInheritance() const
         {
             if (exists() || accumulation == Accumulation::accumulate)
-                return source;
+                return tree;
 
             if constexpr (inheritance == Inheritance::inheritFromParent)
             {
-                if (auto parent = getParent(source);
-                    !getVar(parent, id).isVoid())
+                if (auto parent = tree.getParent();
+                    parent.hasProperty(id))
                 {
                     return parent;
                 }
             }
             if constexpr (inheritance == Inheritance::inheritFromAncestors)
             {
-                for (auto ancestor = getParent(source);
-                     isValid(ancestor);
-                     ancestor = getParent(ancestor))
+                for (auto ancestor = tree.getParent();
+                     ancestor.isValid();
+                     ancestor = ancestor.getParent())
                 {
-                    if (!getVar(ancestor, id).isVoid())
+                    if (ancestor.hasProperty(id))
                         return ancestor;
                 }
             }
 
-            return Source{};
+            return juce::ValueTree{};
         }
 
-        [[nodiscard]] auto getFirstDescendantWithProperty(const Source& root) const
+        [[nodiscard]] auto getFirstAncestorWithProperty(const juce::ValueTree& root) const
         {
-            for (auto i = 0; i < getNumChildren(root); i++)
+            for (const auto& child : root)
             {
-                if (auto child = getChild(root, i); !getVar(child, id).isVoid())
+                if (child.hasProperty(id))
                     return child;
             }
 
-            for (auto i = 0; i < getNumChildren(root); i++)
+            for (const auto& child : root)
             {
-                if (auto descendant = getFirstDescendantWithProperty(getChild(root, i));
-                    isValid(descendant))
+                if (auto ancestor = getFirstAncestorWithProperty(child);
+                    ancestor.isValid())
                 {
-                    return descendant;
+                    return ancestor;
                 }
             }
 
-            return Source{};
+            return juce::ValueTree{};
         }
 
         [[nodiscard]] ValueType getFrom(const juce::ValueTree& root) const
         {
-            if (!isValid(root))
-                return fromVar<ValueType>(juce::var{});
-
             if constexpr (accumulation == Accumulation::accumulate)
             {
-                auto result = fromVar<ValueType>(getVar(root, id));
+                auto result = Converter::fromVar(root[id]);
 
-                for (auto i = 0; i < getNumChildren(root); i++)
-                    result += getFrom(getChild(root, i));
+                for (const auto& child : root)
+                    result += getFrom(child);
 
                 return result;
             }
             else
             {
-                auto var = root.hasProperty(id) ? root[id] : getVar(getFirstDescendantWithProperty(root), id);
+                auto var = root.hasProperty(id) ? root[id] : getFirstAncestorWithProperty(root).getProperty(id, juce::var{});
 
                 if (var.isMethod())
                 {
@@ -403,297 +266,11 @@ namespace jive
                     var = var.getNativeFunction()(args);
                 }
 
-                return fromVar<ValueType>(var);
+                return Converter::fromVar(var);
             }
         }
 
-        [[nodiscard]] ValueType getFrom(Object* root) const
-        {
-            if (!isValid(root))
-                return fromVar<ValueType>(juce::var{});
-
-            if constexpr (accumulation == Accumulation::accumulate)
-            {
-                auto result = fromVar<ValueType>(getVar(root, id));
-
-                for (auto i = 0; i < getNumChildren(root); i++)
-                    result += getFrom(getChild(root, i));
-
-                return result;
-            }
-            else
-            {
-                if (root->hasMethod(id))
-                {
-                    juce::var::NativeFunctionArgs args{ juce::var{}, nullptr, 0 };
-                    return fromVar<ValueType>(root->invokeMethod(id, args));
-                }
-
-                return fromVar<ValueType>(root->getProperty(id));
-            }
-        }
-
-        [[nodiscard]] auto getFrom(const Source& root) const
-        {
-            return std::visit(Visitor{
-                                  [this](const juce::ValueTree& sourceTree) {
-                                      return getFrom(sourceTree);
-                                  },
-                                  [this](const Object::ReferenceCountedPointer& sourceObject) {
-                                      return getFrom(sourceObject.get());
-                                  },
-                              },
-                              root);
-        }
-
-        [[nodiscard]] auto isValid(const Source& src) const
-        {
-            return std::visit(Visitor{
-                                  [](const juce::ValueTree& sourceTree) {
-                                      return sourceTree.isValid();
-                                  },
-                                  [](const Object::ReferenceCountedPointer& sourceObject) {
-                                      return sourceObject != nullptr;
-                                  },
-                              },
-                              src);
-        }
-
-        [[nodiscard]] juce::var getVar(const Source& src, const juce::Identifier& name) const
-        {
-            return std::visit(Visitor{
-                                  [name](const juce::ValueTree& sourceTree) {
-                                      return sourceTree[name];
-                                  },
-                                  [name](const Object::ReferenceCountedPointer& sourceObject) {
-                                      if (sourceObject != nullptr)
-                                          return sourceObject->getProperty(name);
-
-                                      return juce::var{};
-                                  },
-                              },
-                              src);
-        }
-
-        [[nodiscard]] auto getParent(const Source& src) const
-        {
-            return std::visit(Visitor{
-                                  [](const juce::ValueTree& sourceTree) -> Source {
-                                      return sourceTree.getParent();
-                                  },
-                                  [](const Object::ReferenceCountedPointer& sourceObject) -> Source {
-                                      return sourceObject->getParent();
-                                  },
-                              },
-                              src);
-        }
-
-        [[nodiscard]] auto getNumChildren(const Source& src) const
-        {
-            return std::visit(Visitor{
-                                  [](const juce::ValueTree& sourceTree) {
-                                      return sourceTree.getNumChildren();
-                                  },
-                                  [](const Object::ReferenceCountedPointer& sourceObject) {
-                                      if (sourceObject == nullptr)
-                                          return 0;
-
-                                      return static_cast<int>(std::count_if(std::begin(sourceObject->getProperties()),
-                                                                            std::end(sourceObject->getProperties()),
-                                                                            [](const auto& property) {
-                                                                                return dynamic_cast<const Object*>(property.value.getDynamicObject()) != nullptr;
-                                                                            }));
-                                  },
-                              },
-                              src);
-        }
-
-        [[nodiscard]] auto getChild(const Source& src, int index) const
-        {
-            return std::visit(Visitor{
-                                  [index](const juce::ValueTree& sourceTree) -> Source {
-                                      return sourceTree.getChild(index);
-                                  },
-                                  [index](const Object::ReferenceCountedPointer& sourceObject) -> Source {
-                                      if (sourceObject == nullptr)
-                                          return nullptr;
-
-                                      auto current = 0;
-
-                                      for (const auto& [_, value] : sourceObject->getProperties())
-                                      {
-                                          if (auto* child = dynamic_cast<Object*>(value.getDynamicObject()))
-                                          {
-                                              if (current++ == index)
-                                                  return child;
-                                          }
-                                      }
-
-                                      return nullptr;
-                                  },
-                              },
-                              src);
-        }
-
-        [[nodiscard]] auto findListenerTarget(const Source& src) const
-        {
-            switch (inheritance)
-            {
-            case Inheritance::inheritFromParent:
-                return getParent(src);
-            case Inheritance::inheritFromAncestors:
-                return getRoot(src);
-            case Inheritance::doNotInherit:
-                return src;
-            }
-
-            jassertfalse;
-            return src;
-        }
-
-        [[nodiscard]] auto getRoot(const Source& src) const
-        {
-            return std::visit(Visitor{
-                                  [](const juce::ValueTree& sourceTree) -> Source {
-                                      return sourceTree.getRoot();
-                                  },
-                                  [](const Object::ReferenceCountedPointer& sourceObject) -> Source {
-                                      return sourceObject->getRoot();
-                                  },
-                              },
-                              src);
-        }
-
-        void addThisAsListener(Source& src)
-        {
-            std::visit(Visitor{
-                           [this](juce::ValueTree& sourceTree) {
-                               sourceTree.addListener(this);
-                           },
-                           [this](const Object::ReferenceCountedPointer& sourceObject) {
-                               if (sourceObject != nullptr)
-                                   sourceObject->addListener(*this);
-                           },
-                       },
-                       src);
-        }
-
-        void removeThisAsListener(Source& src)
-        {
-            std::visit(Visitor{
-                           [this](juce::ValueTree& sourceTree) {
-                               sourceTree.removeListener(this);
-                           },
-                           [this](const Object::ReferenceCountedPointer& sourceObject) {
-                               if (sourceObject != nullptr)
-                                   sourceObject->removeListener(*this);
-                           },
-                       },
-                       src);
-        }
-
-        void set(Source& src, const juce::var& value)
-        {
-            std::visit(Visitor{
-                           [this, &value](juce::ValueTree& sourceTree) {
-                               sourceTree.setProperty(id, value, nullptr);
-                           },
-                           [this, &value](Object::ReferenceCountedPointer sourceObject) {
-                               sourceObject->setProperty(id, value);
-                           },
-                       },
-                       src);
-        }
-
-        virtual void transitionProgressed() {}
-
-        Source source;
-
-    private:
-        void initialise()
-        {
-            listenerTarget = findListenerTarget(source);
-
-            if (!isValid(listenerTarget))
-                listenerTarget = source;
-
-            if constexpr (responsiveness == Responsiveness::respondToChanges)
-                addThisAsListener(listenerTarget);
-
-            if constexpr (autoParseStrings)
-            {
-                if (auto value = getVar(source, id); value.isString())
-                    set(get());
-            }
-
-            if constexpr (!std::is_same<ValueType, Transitions::ReferenceCountedPointer>())
-                updateTransition();
-        }
-
-        void transitionProgressed(const juce::String& propertyName,
-                                  const Transition&) final
-        {
-            jassertquiet(propertyName == transitionSourceID.toString());
-
-            transitionProgressed();
-
-            if (onTransitionProgressed != nullptr)
-                onTransitionProgressed();
-        }
-
-        void valueChanged()
-        {
-            if constexpr (!std::is_same<ValueType, Transitions::ReferenceCountedPointer>())
-                updateTransition();
-        }
-
-        void updateTransition()
-        {
-            const auto var = getVar(source, id);
-
-            if (auto* transition = getTransition())
-            {
-                const auto isUninitialised = transition->source.isVoid();
-                const auto isAlreadyUpToDate = transition->target == var;
-
-                if (isUninitialised)
-                {
-                    transition->source = var;
-                    transition->target = var;
-                    transition->commencement = now();
-                }
-                else if (!isAlreadyUpToDate)
-                {
-                    transition->source = toVar(transition->template calculateCurrent<ValueType>());
-                    transition->target = var;
-                    transition->commencement = now();
-                }
-
-                observeTransition(transition);
-            }
-            else
-            {
-                observeTransition(nullptr);
-            }
-        }
-
-        void observeTransition(Transition* transition)
-        {
-            if (observedTransition == transition)
-                return;
-
-            if (observedTransition != nullptr)
-                observedTransition->removeListener(*this);
-
-            observedTransition = transition;
-
-            if (transition != nullptr)
-                transition->addListener(*this);
-        }
-
-        Source listenerTarget;
-        juce::Identifier transitionSourceID;
-        Transition* currentTransition = nullptr;
-        Transition* observedTransition = nullptr;
+        juce::ValueTree treeToListenTo;
+        juce::ValueTree tree;
     };
 } // namespace jive

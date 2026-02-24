@@ -1,6 +1,4 @@
-#include "jive_Image.h"
-
-#include <jive_layouts/layout/gui-items/jive_CommonGuiItem.h>
+#include <jive_layouts/jive_layouts.h>
 
 namespace jive
 {
@@ -37,8 +35,8 @@ namespace jive
         state.removeListener(this);
         boxModel.removeListener(*this);
 
-        if (getComponent() != nullptr)
-            getComponent()->removeComponentListener(this);
+        if (component != nullptr)
+            component->removeComponentListener(this);
     }
 
     bool Image::isContainer() const
@@ -63,16 +61,16 @@ namespace jive
 
     void Image::componentMovedOrResized(juce::Component& componentThatWasMovedOrResized, bool, bool)
     {
-        if (&componentThatWasMovedOrResized != getComponent().get())
+        if (&componentThatWasMovedOrResized != component.get())
             return;
 
         if (childComponent != nullptr)
         {
-            childComponent->setBounds(getComponent()->getLocalBounds());
+            childComponent->setBounds(component->getLocalBounds());
 
             if (auto* drawable = dynamic_cast<juce::Drawable*>(childComponent.get()))
             {
-                drawable->setTransformToFit(getComponent()->getLocalBounds().toFloat(),
+                drawable->setTransformToFit(component->getLocalBounds().toFloat(),
                                             placement.get());
             }
         }
@@ -84,7 +82,7 @@ namespace jive
             return;
 
         if (childComponent != nullptr)
-            childComponent->setBounds(getComponent()->getLocalBounds());
+            childComponent->setBounds(component->getLocalBounds());
 
         idealWidth = juce::String{ calculateRequiredWidth() };
         idealHeight = juce::String{ calculateRequiredHeight() };
@@ -98,11 +96,11 @@ namespace jive
             {
                 setChildComponent(createChildComponent());
 
-                childComponent->setBounds(getComponent()->getLocalBounds());
+                childComponent->setBounds(component->getLocalBounds());
 
                 if (auto* drawable = dynamic_cast<juce::Drawable*>(childComponent.get()))
                 {
-                    drawable->setTransformToFit(getComponent()->getLocalBounds().toFloat(),
+                    drawable->setTransformToFit(component->getLocalBounds().toFloat(),
                                                 placement.get());
                 }
             }
@@ -216,19 +214,18 @@ namespace jive
         childComponent.reset();
         childComponent = std::move(newComponent);
 
-        getComponent()->addAndMakeVisible(*childComponent);
-        childComponent->setBounds(getComponent()->getLocalBounds());
+        component->addAndMakeVisible(*childComponent);
+        childComponent->setBounds(component->getLocalBounds());
 
         idealWidth = juce::String{ calculateRequiredWidth() };
         idealHeight = juce::String{ calculateRequiredHeight() };
 
-        getComponent()->addComponentListener(this);
+        component->addComponentListener(this);
+        component->setInterceptsMouseClicks(false, false);
     }
 } // namespace jive
 
 #if JIVE_UNIT_TESTS
-    #include <jive_layouts/layout/jive_Interpreter.h>
-
 class ImageTest : public juce::UnitTest
 {
 public:
@@ -343,7 +340,7 @@ private:
 
     void testChildComponent()
     {
-        beginTest("child-getComponent()");
+        beginTest("child-component");
 
         {
             juce::Image image{ juce::Image::ARGB, 78, 27, true };

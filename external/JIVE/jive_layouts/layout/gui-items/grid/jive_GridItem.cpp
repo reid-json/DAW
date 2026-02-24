@@ -1,4 +1,4 @@
-#include "jive_GridItem.h"
+#include <jive_layouts/jive_layouts.h>
 
 namespace jive
 {
@@ -24,76 +24,52 @@ namespace jive
         if (!gridArea.exists())
             gridArea = defaultGridItem.area;
 
-        const auto updateParentLayout = [this]() {
-            cachedItems.clear();
-
-            if (auto* containerParent = dynamic_cast<GuiItemDecorator&>(*getParent()).getTopLevelDecorator().toType<ContainerItem>())
-                containerParent->updateIdealSizeUnrestrained();
+        const auto invalidateParentBoxModel = [this]() {
+            getParent()->state.setProperty("box-model-valid", false, nullptr);
         };
-        order.onValueChange = updateParentLayout;
-        justifySelf.onValueChange = updateParentLayout;
-        alignSelf.onValueChange = updateParentLayout;
-        gridColumn.onValueChange = updateParentLayout;
-        gridRow.onValueChange = updateParentLayout;
-        gridArea.onValueChange = updateParentLayout;
-
-        box.addListener(*this);
-    }
-
-    GridItem::~GridItem()
-    {
-        box.removeListener(*this);
+        order.onValueChange = invalidateParentBoxModel;
+        justifySelf.onValueChange = invalidateParentBoxModel;
+        alignSelf.onValueChange = invalidateParentBoxModel;
+        gridColumn.onValueChange = invalidateParentBoxModel;
+        gridRow.onValueChange = invalidateParentBoxModel;
+        gridArea.onValueChange = invalidateParentBoxModel;
     }
 
     juce::GridItem GridItem::toJuceGridItem(juce::Rectangle<float> parentContentBounds,
-                                            LayoutStrategy strategy)
+                                            LayoutStrategy strategy) const
     {
-        const auto key = std::make_pair(parentContentBounds, strategy);
+        juce::GridItem gridItem{ *component };
 
-        if (cachedItems.find(key) == std::end(cachedItems))
+        gridItem.column = gridColumn;
+        gridItem.row = gridRow;
+        gridItem.area = gridArea;
+
+        applyConstraints(gridItem,
+                         parentContentBounds,
+                         Orientation::vertical,
+                         strategy);
+
+        switch (strategy)
         {
-            juce::GridItem gridItem{ *getComponent() };
+        case LayoutStrategy::real:
+            gridItem.justifySelf = justifySelf;
+            gridItem.alignSelf = alignSelf;
+            break;
+        case LayoutStrategy::dummy:
+            gridItem.justifySelf = juce::GridItem::JustifySelf::stretch;
+            gridItem.alignSelf = juce::GridItem::AlignSelf::stretch;
 
-            gridItem.column = gridColumn;
-            gridItem.row = gridRow;
-            gridItem.area = gridArea;
-
-            applyConstraints(gridItem,
-                             parentContentBounds,
-                             Orientation::vertical,
-                             strategy);
-
-            switch (strategy)
-            {
-            case LayoutStrategy::real:
-                gridItem.justifySelf = justifySelf;
-                gridItem.alignSelf = alignSelf;
-                break;
-            case LayoutStrategy::dummy:
-                gridItem.justifySelf = juce::GridItem::JustifySelf::stretch;
-                gridItem.alignSelf = juce::GridItem::AlignSelf::stretch;
-
-                if (gridItem.width < 0.0f && gridItem.minWidth > 0.0f)
-                    gridItem.width = gridItem.minWidth;
-                if (gridItem.height < 0.0f && gridItem.minHeight > 0.0f)
-                    gridItem.height = gridItem.minHeight;
-            }
-
-            cachedItems[key] = gridItem;
+            if (gridItem.width < 0.0f && gridItem.minWidth > 0.0f)
+                gridItem.width = gridItem.minWidth;
+            if (gridItem.height < 0.0f && gridItem.minHeight > 0.0f)
+                gridItem.height = gridItem.minHeight;
         }
 
-        return cachedItems.find(key)->second;
-    }
-
-    void GridItem::boxModelChanged(BoxModel&)
-    {
-        cachedItems.clear();
+        return gridItem;
     }
 } // namespace jive
 
 #if JIVE_UNIT_TESTS
-    #include <jive_layouts/layout/jive_Interpreter.h>
-
 static bool compare(juce::GridItem::Property a, juce::GridItem::Property b)
 {
     return a.getName() == b.getName() && a.getNumber() == b.getNumber();

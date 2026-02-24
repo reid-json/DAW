@@ -1,7 +1,5 @@
 #pragma once
 
-#include <jive_layouts/layout/gui-items/jive_ContainerItem.h>
-
 namespace jive
 {
     class FlexContainer
@@ -32,6 +30,8 @@ namespace jive
 
         bool layoutRecursionLock = false;
         bool changesDuringLayout = false;
+
+        const BoxModel& boxModel;
 
         JUCE_LEAK_DETECTOR(FlexContainer)
     };

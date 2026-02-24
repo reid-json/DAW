@@ -1,7 +1,5 @@
 #include "jive_ContainerItem.h"
 
-#include "jive_CommonGuiItem.h"
-
 namespace jive
 {
     class ContainerItem::Child::Pimpl
@@ -165,44 +163,18 @@ namespace jive
     ContainerItem::Child::Child(std::unique_ptr<GuiItem> itemToDecorate)
         : GuiItemDecorator{ std::move(itemToDecorate) }
         , pimpl{ std::make_unique<Pimpl>(*this) }
-        , idealWidth{ state, "ideal-width" }
-        , idealHeight{ state, "ideal-height" }
     {
-        getComponent()->addComponentListener(this);
     }
 
-    ContainerItem::Child::~Child()
-    {
-        getComponent()->removeComponentListener(this);
-    }
-
-    void ContainerItem::Child::applyConstraints(std::variant<std::reference_wrapper<juce::FlexItem>,
-                                                             std::reference_wrapper<juce::GridItem>> flexOrGridItem,
+    template <typename FlexOrGridItem>
+    void ContainerItem::Child::applyConstraints(FlexOrGridItem& flexOrGridItem,
                                                 juce::Rectangle<float> parentContentBounds,
                                                 Orientation orientation,
                                                 LayoutStrategy strategy) const
     {
-        const auto visit = [this,
-                            parentContentBounds,
-                            orientation,
-                            strategy](auto&& gridOrFlexItem) {
-            pimpl->applyConstraints(gridOrFlexItem.get(),
-                                    parentContentBounds,
-                                    orientation,
-                                    strategy);
-        };
-        std::visit(visit, flexOrGridItem);
-    }
-
-    void ContainerItem::Child::componentMovedOrResized(juce::Component&, bool, bool resized)
-    {
-        if (!resized)
-            return;
-
-        if (auto* container = getTopLevelDecorator().toType<ContainerItem>())
-        {
-            if (getComponent()->getWidth() < idealWidth.get() || getComponent()->getHeight() < idealHeight.get())
-                container->updateIdealSizeWithinConstraints();
-        }
+        pimpl->applyConstraints(flexOrGridItem,
+                                parentContentBounds,
+                                orientation,
+                                strategy);
     }
 } // namespace jive

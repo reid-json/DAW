@@ -1,9 +1,5 @@
 #pragma once
 
-#include "jive_Gradient.h"
-
-#include <juce_graphics/juce_graphics.h>
-
 namespace jive
 {
     class Fill
@@ -37,6 +33,4 @@ namespace juce
         static jive::Fill fromVar(const var& v);
         static var toVar(const jive::Fill& fill);
     };
-
-    String& operator<<(String& str, const jive::Fill& fill);
 } // namespace juce

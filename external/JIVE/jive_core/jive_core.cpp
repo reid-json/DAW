@@ -5,19 +5,7 @@
 #include "logging/jive_StringStreams.cpp"
 
 #include "algorithms/jive_Find.cpp"
-#include "algorithms/jive_Interpolate.cpp"
-#include "geometry/jive_BoxModel.cpp"
-#include "geometry/jive_Length.cpp"
-#include "geometry/jive_Orientation.cpp"
-#include "graphics/jive_Fill.cpp"
-#include "graphics/jive_FontUtilities.cpp"
-#include "graphics/jive_Gradient.cpp"
-#include "graphics/jive_LookAndFeel.cpp"
-#include "interface/jive_ComponentInteractionState.cpp"
-#include "kinetics/jive_Easing.cpp"
-#include "kinetics/jive_Transition.cpp"
-#include "kinetics/jive_Transitions.cpp"
-#include "time/jive_Timer.cpp"
+
 #include "values/jive_Colours.cpp"
 #include "values/jive_Event.cpp"
 #include "values/jive_Object.cpp"
@@ -26,4 +14,16 @@
 #include "values/variant-converters/jive_AttributedStringVariantConverters.cpp"
 #include "values/variant-converters/jive_FlexVariantConverters.cpp"
 #include "values/variant-converters/jive_GridVariantConverters.cpp"
+#include "values/variant-converters/jive_MiscVariantConverters.cpp"
 #include "values/variant-converters/jive_VariantConvertion.cpp"
+
+#include "geometry/jive_BoxModel.cpp"
+#include "geometry/jive_Length.cpp"
+#include "geometry/jive_Orientation.cpp"
+
+#include "graphics/jive_Fill.cpp"
+#include "graphics/jive_FontUtilities.cpp"
+#include "graphics/jive_Gradient.cpp"
+#include "graphics/jive_LookAndFeel.cpp"
+
+#include "interface/jive_ComponentInteractionState.cpp"

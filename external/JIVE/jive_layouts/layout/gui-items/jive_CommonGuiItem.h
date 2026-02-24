@@ -1,8 +1,5 @@
 #pragma once
 
-#include <jive_layouts/layout/gui-items/jive_GuiItemDecorator.h>
-#include <jive_layouts/utilities/jive_Display.h>
-
 namespace jive
 {
     class CommonGuiItem
@@ -27,9 +24,6 @@ namespace jive
         void childrenChanged() override;
 
     private:
-#if !JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS
-        ComponentInteractionState interactionState;
-#endif
         Property<juce::String> name;
         Property<juce::String> title;
         Property<juce::Identifier> id;

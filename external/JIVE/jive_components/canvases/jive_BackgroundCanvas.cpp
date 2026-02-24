@@ -1,4 +1,4 @@
-#include "jive_BackgroundCanvas.h"
+#include <jive_core/jive_core.h>
 
 namespace jive
 {
@@ -19,23 +19,14 @@ namespace jive
 
     void BackgroundCanvas::paint(juce::Graphics& g)
     {
-        const auto bounds = getLocalBounds().toFloat();
-
         g.reduceClipRegion(shape);
 
-        const auto backgroundScale = 1.0f - ((borderWidth / 2.0f) / getWidth());
+        const auto bounds = getLocalBounds().toFloat();
         apply(background, g, bounds);
-        g.fillPath(shape,
-                   juce::AffineTransform::scale(backgroundScale,
-                                                backgroundScale,
-                                                bounds.getCentreX(),
-                                                bounds.getCentreY()));
+        g.fillAll();
 
         apply(borderFill, g, bounds);
-        g.strokePath(shape,
-                     juce::PathStrokeType{
-                         borderWidth * 2.0f,
-                     });
+        g.strokePath(shape, juce::PathStrokeType{ borderWidth * 2.0f });
     }
 
     void BackgroundCanvas::resized()
@@ -103,26 +94,10 @@ namespace jive
         juce::Point<float> end{ 1.0f, 1.0f };
     };
 
-    template <typename Arithmetic>
-    [[nodiscard]] static auto limited(BorderRadii<Arithmetic> radii, Arithmetic min, Arithmetic max)
-    {
-        static_assert(std::is_arithmetic<Arithmetic>());
-
-        radii.topLeft = juce::jlimit(min, max, radii.topLeft);
-        radii.topRight = juce::jlimit(min, max, radii.topRight);
-        radii.bottomLeft = juce::jlimit(min, max, radii.bottomLeft);
-        radii.bottomRight = juce::jlimit(min, max, radii.bottomRight);
-
-        return radii;
-    }
-
     static std::array<CubicBezier, 4> getCorners(BorderRadii<float> radii,
                                                  juce::Rectangle<float> bounds)
     {
         static constexpr auto relativeControlPointOffsetForNearPerfectEllipse = 0.552f;
-
-        const auto maxRadius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
-        radii = limited(radii, 0.0f, maxRadius);
 
         CubicBezier topLeft;
         topLeft.start = bounds.getTopLeft().translated(0.0f, radii.topLeft);

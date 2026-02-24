@@ -1,4 +1,4 @@
-#include "jive_GuiItemDecorator.h"
+#include <jive_layouts/jive_layouts.h>
 
 namespace jive
 {
@@ -29,9 +29,6 @@ namespace jive
 
     juce::Array<GuiItem*> GuiItemDecorator::getChildren()
     {
-        if (item == nullptr)
-            return {};
-
         return item->getChildren();
     }
 
@@ -54,13 +51,6 @@ namespace jive
     {
         return item->isContent();
     }
-
-#if JIVE_IS_PLUGIN_PROJECT
-    void GuiItemDecorator::attachToParameter(juce::RangedAudioParameter* parameter, juce::UndoManager* undoManager)
-    {
-        item->attachToParameter(parameter, undoManager);
-    }
-#endif
 
     GuiItem* GuiItemDecorator::getParent()
     {

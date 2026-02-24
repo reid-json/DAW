@@ -1,78 +1,20 @@
-#include "jive_GuiItem.h"
-
-#include "jive_CommonGuiItem.h"
-#include "jive_GuiItemDecorator.h"
+#include <jive_layouts/jive_layouts.h>
 
 namespace jive
 {
-    class PassiveView : public View
-    {
-    public:
-        explicit PassiveView(const juce::ValueTree& sourceState)
-            : view{ sourceState }
-        {
-        }
-
-    protected:
-        [[nodiscard]] juce::ValueTree initialise() final
-        {
-            return view;
-        }
-
-    private:
-        juce::ValueTree view;
-    };
-
-    View::ReferenceCountedPointer GuiItem::getOrCreateView(juce::ValueTree state)
-    {
-        View::ReferenceCountedPointer view;
-
-        if (state.hasProperty("view-object"))
-        {
-            view = dynamic_cast<View*>(state["view-object"].getObject());
-        }
-        else if (state.hasProperty("make-view"))
-        {
-            const auto buildView = state["make-view"].getNativeFunction();
-            const auto viewObjectProperty = buildView({ juce::var{}, nullptr, 0 });
-
-            if (auto* wrappedState = dynamic_cast<ReferenceCountedValueTreeWrapper*>(viewObjectProperty.getObject()))
-            {
-                if (auto* viewObject = dynamic_cast<View*>(wrappedState->state["view-object"].getObject()))
-                    view = viewObject;
-                else
-                    jassertfalse;
-            }
-            else
-            {
-                jassertfalse;
-            }
-        }
-        else
-        {
-            view = new PassiveView{ state };
-        }
-
-        state.removeProperty("view-object", nullptr);
-        view->state = state;
-
-        return view;
-    }
-
     GuiItem::GuiItem(std::shared_ptr<juce::Component> comp,
                      GuiItem* parentItem,
 #if JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS
                      StyleSheet::ReferenceCountedPointer sheet,
 #endif
-                     View::ReferenceCountedPointer sourceView)
-        : state{ sourceView->getState() }
+                     const juce::ValueTree& stateSource)
+        : state{ stateSource }
+        , component{ comp }
+        , parent{ parentItem }
 #if JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS
         , styleSheet{ sheet }
 #endif
-        , component{ comp }
-        , parent{ parentItem }
         , remover{ std::make_unique<Remover>(*this) }
-        , view{ sourceView }
     {
         jassert(component != nullptr);
     }
@@ -83,49 +25,29 @@ namespace jive
                      StyleSheet::ReferenceCountedPointer sheet,
 #endif
                      GuiItem* parentItem)
-        : GuiItem{
-            std::shared_ptr<juce::Component>{ std::move(comp) },
-            parentItem,
-#if JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS
-            std::move(sheet),
-#endif
-            getOrCreateView(sourceState),
-        }
+        : GuiItem
     {
-    }
-
-    GuiItem::GuiItem(std::unique_ptr<juce::Component> comp,
-                     View::ReferenceCountedPointer sourceView,
-#if JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS
-                     StyleSheet::ReferenceCountedPointer sheet,
-#endif
-                     GuiItem* parentItem)
-        : GuiItem{
-            std::shared_ptr<juce::Component>{ std::move(comp) },
+        std::shared_ptr<juce::Component>{ std::move(comp) },
             parentItem,
 #if JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS
             std::move(sheet),
 #endif
-            sourceView,
-        }
+            sourceState,
+    }
     {
     }
 
     GuiItem::GuiItem(const GuiItem& other)
-        : GuiItem{
-            other.component,
+        : GuiItem
+    {
+        other.component,
             other.parent,
 #if JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS
             nullptr,
 #endif
-            other.view,
-        }
-    {
+            other.state,
     }
-
-    GuiItem::~GuiItem()
     {
-        masterReference.clear();
     }
 
     const std::shared_ptr<const juce::Component> GuiItem::getComponent() const
@@ -133,19 +55,9 @@ namespace jive
         return component;
     }
 
-    std::shared_ptr<juce::Component> GuiItem::getComponent()
+    const std::shared_ptr<juce::Component> GuiItem::getComponent()
     {
         return component;
-    }
-
-    const View::ReferenceCountedPointer GuiItem::getView() const
-    {
-        return view;
-    }
-
-    View::ReferenceCountedPointer GuiItem::getView()
-    {
-        return view;
     }
 
     void GuiItem::insertChild(std::unique_ptr<GuiItem> child, int index)
@@ -219,30 +131,6 @@ namespace jive
         return false;
     }
 
-    void GuiItem::callLayoutChildrenWithRecursionLock()
-    {
-        if (isLayingOutChildren() || std::size(getChildren()) == 0)
-            return;
-
-        const BoxModel::ScopedCallbackLock boxModelLock{ boxModel(*this) };
-        const juce::ScopedValueSetter svs{ layoutRecursionLock, true };
-        layOutChildren();
-    }
-
-    bool GuiItem::isLayingOutChildren() const
-    {
-        return layoutRecursionLock;
-    }
-
-#if JIVE_IS_PLUGIN_PROJECT
-    void GuiItem::attachToParameter(juce::RangedAudioParameter*, juce::UndoManager*)
-    {
-        // It doesn't make sense to call this on an item that isn't a widget!
-        // Did you mean to use jive::findItemWithID() to attach to a specific item?
-        jassertfalse;
-    }
-#endif
-
     GuiItem::Remover::Remover(GuiItem& guiItem)
         : item{ guiItem }
         , parent{ item.getParent() }
@@ -281,25 +169,9 @@ namespace jive
     {
         return boxModel(*const_cast<GuiItem*>(&item));
     }
-
-    GuiItem* findItemWithID(GuiItem& root, const juce::Identifier& id)
-    {
-        if (root.state["id"].toString() == id.toString())
-            return &root;
-
-        for (auto* child : root.getChildren())
-        {
-            if (auto* item = findItemWithID(*child, id))
-                return item;
-        }
-
-        return nullptr;
-    }
 } // namespace jive
 
 #if JIVE_UNIT_TESTS
-    #include <jive_layouts/layout/jive_Interpreter.h>
-
 class GuiItemUnitTest : public juce::UnitTest
 {
 public:

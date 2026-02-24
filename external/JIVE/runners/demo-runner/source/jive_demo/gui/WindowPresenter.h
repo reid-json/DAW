@@ -2,11 +2,11 @@
 
 #include "WindowState.h"
 
+#include <jive_demo/gui/pages/ArchitecturePage.h>
 #include <jive_demo/gui/pages/DevelopmentPage.h>
 #include <jive_demo/gui/pages/HomePage.h>
 #include <jive_demo/gui/pages/LayoutsPage.h>
 #include <jive_demo/gui/pages/StyleSheetsPage.h>
-#include <jive_demo/gui/pages/animations/AnimationsPage.h>
 #include <jive_demo/gui/tokens/Colours.h>
 
 #include <jive_layouts/jive_layouts.h>
@@ -15,7 +15,7 @@ namespace jive_demo
 {
     namespace views
     {
-        [[nodiscard]] static auto window(const juce::String& windowType)
+        [[nodiscard]] static auto window()
         {
             static constexpr auto style = [] {
                 return new jive::Object{
@@ -27,7 +27,7 @@ namespace jive_demo
             };
 
             return juce::ValueTree{
-                windowType,
+                "Window",
                 {
                     { "width", 800 },
                     { "height", 500 },
@@ -43,14 +43,14 @@ namespace jive_demo
     class WindowPresenter : private WindowState::Listener
     {
     public:
-        explicit WindowPresenter(WindowState sourceState, const juce::String& windowType)
+        explicit WindowPresenter(WindowState sourceState)
             : state{ sourceState }
-            , window{ views::window(windowType) }
+            , window{ views::window() }
             , homePage{ sourceState }
             , layoutsPage{ sourceState }
             , styleSheetsPage{ sourceState }
             , developmentPage{ sourceState }
-            , animationsPage{ sourceState }
+            , architecturePage{ sourceState }
         {
             window.appendChild(getView(state.getPage()), nullptr);
             state.addListener(*this);
@@ -80,8 +80,8 @@ namespace jive_demo
                 return styleSheetsPage.present();
             case Page::development:
                 return developmentPage.present();
-            case Page::animations:
-                return animationsPage.present();
+            case Page::architecture:
+                return architecturePage.present();
             case Page::numPages:
                 [[fallthrough]];
             default:
@@ -101,6 +101,6 @@ namespace jive_demo
         LayoutsPagePresenter layoutsPage;
         StyleSheetsPagePresenter styleSheetsPage;
         DevelopmentPagePresenter developmentPage;
-        AnimationsPagePresenter animationsPage;
+        ArchitecturePagePresenter architecturePage;
     };
 } // namespace jive_demo

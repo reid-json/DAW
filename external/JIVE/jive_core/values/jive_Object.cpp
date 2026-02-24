@@ -1,6 +1,4 @@
-#include "jive_Object.h"
-
-#include <jive_core/logging/jive_StringStreams.h>
+#include <jive_core/jive_core.h>
 
 namespace jive
 {
@@ -81,63 +79,19 @@ namespace jive
     {
     }
 
-#if JUCE_VERSION >= JIVE_JUCE_VERSION(8, 0, 4)
-    void Object::didModifyProperty(const juce::Identifier& propertyName,
-                                   const std::optional<juce::var>& newValue)
-    {
-        if (auto* childObject = dynamic_cast<Object*>(newValue
-                                                          .value_or(juce::var{})
-                                                          .getDynamicObject()))
-        {
-            childObject->parent = this;
-        }
-
-        listeners.call(&Listener::propertyChanged, *this, propertyName);
-    }
-#else
     void Object::setProperty(const juce::Identifier& propertyName,
                              const juce::var& newValue)
     {
-        if (auto* childObject = dynamic_cast<Object*>(newValue.getDynamicObject()))
-            childObject->parent = this;
-
         const auto propertyChanged = DynamicObject::getProperties()
                                          .set(propertyName, newValue);
 
         if (propertyChanged)
             listeners.call(&Listener::propertyChanged, *this, propertyName);
     }
-#endif
 
     const juce::NamedValueSet& Object::getProperties() const
     {
         return dynamic_cast<juce::DynamicObject*>(const_cast<Object*>(this))->getProperties();
-    }
-
-    Object* Object::getParent() noexcept
-    {
-        return parent;
-    }
-
-    const Object* Object::getParent() const noexcept
-    {
-        return parent;
-    }
-
-    Object* Object::getRoot() noexcept
-    {
-        if (parent == nullptr)
-            return this;
-
-        return parent->getRoot();
-    }
-
-    const Object* Object::getRoot() const noexcept
-    {
-        if (parent == nullptr)
-            return this;
-
-        return parent->getRoot();
     }
 
     void Object::addListener(Listener& listener) const
@@ -163,7 +117,7 @@ namespace jive
                 replaceDynamicObjectsWithJiveObjects(*dynamicObject->getProperties().getVarPointerAt(i));
 
             Object::ReferenceCountedPointer object = new Object{ std::move(*dynamicObject) };
-            value = object.get();
+            value = object;
         }
 
         if (auto* array = value.getArray())
@@ -202,7 +156,7 @@ namespace juce
 
     var VariantConverter<jive::Object::ReferenceCountedPointer>::toVar(jive::Object::ReferenceCountedPointer object)
     {
-        return var{ object.get() };
+        return var{ object };
     }
 } // namespace juce
 

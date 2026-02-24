@@ -1,4 +1,4 @@
-#include "jive_Orientation.h"
+#pragma once
 
 namespace juce
 {

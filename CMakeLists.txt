@@ -12,6 +12,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(juce)
 
+list(APPEND JUCE_MODULE_PATH
+    ${CMAKE_SOURCE_DIR}/external/JIVE
+)
+
 # Fetching gui extension for the project
 FetchContent_Declare(
     foleys_gui_magic
@@ -53,9 +57,16 @@ add_subdirectory(Plugin_Hosting/Test)
 
 add_subdirectory(App)
 # Fetch JIVE extension
-add_subdirectory(external/JIVE)
+add_subdirectory(external/JIVE/jive_core)
+add_subdirectory(external/JIVE/jive_layouts)
+add_subdirectory(external/JIVE/jive_style_sheets)
+add_subdirectory(external/JIVE/jive_components)
 
 target_link_libraries(DAW
     PRIVATE
+        juce::juce_gui_basics
+        jive_core
         jive_layouts
+        jive_style_sheets
+        jive_components
 )

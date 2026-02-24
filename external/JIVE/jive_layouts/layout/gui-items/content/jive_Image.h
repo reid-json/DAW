@@ -1,8 +1,5 @@
 #pragma once
 
-#include <jive_layouts/layout/gui-items/jive_GuiItemDecorator.h>
-#include <jive_layouts/utilities/jive_Drawable.h>
-
 namespace jive
 {
     class Image

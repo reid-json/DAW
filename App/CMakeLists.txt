@@ -13,6 +13,13 @@ target_sources(DAW PRIVATE
     App.h
 )
 
+#add JIVE layout/style sheet to BinaryData
+juce_add_binary_data(BinaryData
+    SOURCES
+        Source/layout.xml
+        Source/style.css
+)
+
 
 
 # This is adding libraries or modules and we can add more later
@@ -27,7 +34,11 @@ target_link_libraries(DAW PRIVATE
     Plugin_Hosting
 
     foleys_gui_magic
-    JIVE
+    
+    jive::jive_core
+    jive::jive_layouts
+    jive::jive_style_sheets
+    jive::jive_gui_basics
 
     juce::juce_gui_basics
     juce::juce_gui_extra

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <BinaryData.h>
+#include <binary_data.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace jive_demo::typography

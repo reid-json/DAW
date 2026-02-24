@@ -1,7 +1,4 @@
-#include "jive_Text.h"
-
-#include <jive_layouts/layout/gui-items/jive_CommonGuiItem.h>
-#include <jive_layouts/layout/gui-items/jive_ContainerItem.h>
+#include <jive_layouts/jive_layouts.h>
 
 namespace jive
 {
@@ -78,34 +75,14 @@ namespace jive
         return true;
     }
 
-#if JIVE_IS_PLUGIN_PROJECT
-    void Text::attachToParameter(juce::RangedAudioParameter* newParameter, juce::UndoManager* undoManager)
-    {
-        parameter = newParameter;
-
-        if (parameter != nullptr)
-        {
-            const auto onChange = [this](float) {
-                text = parameter->getCurrentValueAsText();
-            };
-            parameterAttachment = std::make_unique<juce::ParameterAttachment>(*parameter, onChange, undoManager);
-            text = parameter->getCurrentValueAsText();
-        }
-        else
-        {
-            parameterAttachment = nullptr;
-        }
-    }
-#endif
-
     TextComponent& Text::getTextComponent()
     {
-        return dynamic_cast<TextComponent&>(*getComponent());
+        return dynamic_cast<TextComponent&>(*component);
     }
 
     const TextComponent& Text::getTextComponent() const
     {
-        return dynamic_cast<const TextComponent&>(*getComponent());
+        return dynamic_cast<const TextComponent&>(*component);
     }
 
     void Text::textFontChanged(TextComponent&)
@@ -130,18 +107,6 @@ namespace jive
         layout.createLayout(getTextComponent().getAttributedString(), maxWidth);
 
         return layout;
-    }
-
-    template <typename T>
-    [[nodiscard]] static auto nextWholeNumberAbove(T value)
-    {
-        static_assert(std::is_floating_point<T>());
-        const auto ceiled = std::ceil(value);
-
-        if (juce::approximatelyEqual(value, ceiled))
-            return ceiled + static_cast<T>(1);
-
-        return ceiled;
     }
 
     void Text::updateTextComponent()
@@ -169,16 +134,15 @@ namespace jive
             }
         }
 
-        idealWidth = nextWholeNumberAbove(buildTextLayout(static_cast<float>(std::numeric_limits<juce::uint16>::max()))
-                                              .getWidth());
+        idealWidth = std::ceil(buildTextLayout(static_cast<float>(std::numeric_limits<juce::uint16>::max()))
+                                   .getWidth());
 
         if (auto* parentItem = getParent())
         {
             if (!parentItem->isContainer())
                 getTextComponent().setAccessible(false);
-
-            if (auto* containerParent = dynamic_cast<GuiItemDecorator&>(*parentItem).getTopLevelDecorator().toType<ContainerItem>())
-                containerParent->updateIdealSizeUnrestrained();
+            else
+                parentItem->state.setProperty("box-model-valid", false, nullptr);
         }
     }
 
@@ -200,9 +164,6 @@ namespace jive
 } // namespace jive
 
 #if JIVE_UNIT_TESTS
-    #include <jive_core/graphics/jive_FontUtilities.h>
-    #include <jive_layouts/layout/jive_Interpreter.h>
-
 class TextTest : public juce::UnitTest
 {
 public:
@@ -546,15 +507,13 @@ private:
 
             const auto& boxModel = jive::boxModel(item);
             expectEquals(boxModel.getWidth(),
-                         std::ceil(jive::calculateStringWidth("This side up.", font)));
+                         std::ceil(font.getStringWidthFloat("This side up.")));
             expectEquals(boxModel.getHeight(), std::ceil(font.getHeight()));
 
             textTree.setProperty("text", "This one spans\nmultiple lines.", nullptr);
             expectEquals(boxModel.getWidth(),
-                         std::ceil(std::max({
-                             jive::calculateStringWidth("This one spans", font),
-                             jive::calculateStringWidth("multiple lines.", font),
-                         })));
+                         std::ceil(std::max({ font.getStringWidthFloat("This one spans"),
+                                              font.getStringWidthFloat("multiple lines.") })));
             expectEquals(boxModel.getHeight(),
                          std::ceil(font.getHeight()) * 2.0f);
 

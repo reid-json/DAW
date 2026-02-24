@@ -1,9 +1,5 @@
 #pragma once
 
-#include <jive_components/canvases/jive_Canvas.h>
-
-#include <juce_gui_basics/juce_gui_basics.h>
-
 namespace jive
 {
     class TextComponent : public juce::Component
@@ -24,26 +20,19 @@ namespace jive
         void resized() override;
 
         void setDirection(juce::AttributedString::ReadingDirection direction);
-
-        [[nodiscard]] juce::Font getFont() const;
+        juce::Font getFont() const;
         void setFont(const juce::Font& font);
-
         void setJustification(juce::Justification justification);
-
         void setLineSpacing(float spacing);
-
-        [[nodiscard]] const juce::String& getText() const;
+        const juce::String& getText() const;
         void setText(const juce::String& text);
-
-        [[nodiscard]] juce::Colour getTextColour() const;
         void setTextColour(juce::Colour newColour);
-
         void setWordWrap(juce::AttributedString::WordWrap wrap);
 
         void clearAttributes();
         void append(const juce::AttributedString& attributedStringToAppend);
 
-        [[nodiscard]] juce::AttributedString getAttributedString() const;
+        juce::AttributedString getAttributedString() const;
 
         void addListener(Listener&) const;
         void removeListener(Listener&) const;
@@ -52,11 +41,7 @@ namespace jive
         std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
         juce::AttributedString::ReadingDirection direction{ juce::AttributedString::ReadingDirection::natural };
-        juce::Font font{
-#if JUCE_MAJOR_VERSION >= 8
-            juce::FontOptions{},
-#endif
-        };
+        juce::Font font;
         juce::Justification justification{ juce::Justification::topLeft };
         float lineSpacing{ 0.0f };
         juce::String text;

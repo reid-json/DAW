@@ -3,22 +3,32 @@
 #include "MainComponent.h"
 #include <jive_layouts/jive_layouts.h>
 #include <jive_style_sheets/jive_style_sheets.h>
+#include <jive_gui_basics/jive_gui_basics.h>
 //==============================================================================
 
 MainComponent::MainComponent()
 {
     setSize (600, 400);
-    // jive test
-    using namespace jive;
-    juce::Label testLabel;
-    addAndMakeVisible(testLabel);
-    testLabel.setText("JIVE works!", juce::dontSendNotification);
-    testLabel.setColour(juce::Label::backgroundColourId, juce::Colours::orange);
-    testLabel.setBounds(50, 50, 200, 50);
+    
+    view = std::make_unique<jive::View>(interpreter);
+
+    view->setStyleSheet(BinaryData::style_css);
+    view->setContent(BinaryData::layout_xml);
+
+    addAndMakeVisible(view->getComponent());
 }
 
 MainComponent::~MainComponent()
 {
+}
+
+void MainComponent::resized()
+{
+    // This is called when the MainComponent is resized.
+    // If you add any child components, this is where you should
+    // update their positions.
+    if (view != nullptr)
+        view->getComponent().setBounds(getLocalBounds());
 }
 
 //==============================================================================
@@ -30,11 +40,4 @@ void MainComponent::paint (juce::Graphics& g)
     g.setFont (juce::FontOptions (16.0f));
     g.setColour (juce::Colours::white);
     g.drawText ("Hello World!", getLocalBounds(), juce::Justification::centred, true);
-}
-
-void MainComponent::resized()
-{
-    // This is called when the MainComponent is resized.
-    // If you add any child components, this is where you should
-    // update their positions.
 }

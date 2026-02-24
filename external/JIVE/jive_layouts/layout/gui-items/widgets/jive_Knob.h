@@ -1,7 +1,5 @@
 #pragma once
 
-#include "jive_Slider.h"
-
 namespace jive
 {
     class Knob : public Slider

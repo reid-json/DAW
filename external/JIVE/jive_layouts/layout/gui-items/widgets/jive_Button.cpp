@@ -1,4 +1,4 @@
-#include "jive_Button.h"
+#include <jive_layouts/jive_layouts.h>
 
 namespace jive
 {
@@ -12,17 +12,6 @@ namespace jive
 #else
         button.triggerClick();
 #endif
-    }
-
-    [[nodiscard]] static juce::Button* findFirstChildButton(const juce::Component& container)
-    {
-        for (auto* child : container.getChildren())
-        {
-            if (auto* button = dynamic_cast<juce::Button*>(child))
-                return button;
-        }
-
-        return nullptr;
     }
 
     Button::Button(std::unique_ptr<GuiItem> itemToDecorate)
@@ -103,24 +92,14 @@ namespace jive
         getButton().removeListener(this);
     }
 
-#if JIVE_IS_PLUGIN_PROJECT
-    void Button::attachToParameter(juce::RangedAudioParameter* parameter, juce::UndoManager* undoManager)
-    {
-        if (parameter != nullptr)
-            parameterAttachment = std::make_unique<juce::ButtonParameterAttachment>(*parameter, getButton(), undoManager);
-        else
-            parameterAttachment = nullptr;
-    }
-#endif
-
     juce::Button& Button::getButton()
     {
-        return *dynamic_cast<juce::Button*>(getComponent().get());
+        return *dynamic_cast<juce::Button*>(component.get());
     }
 
     const juce::Button& Button::getButton() const
     {
-        return *dynamic_cast<const juce::Button*>(getComponent().get());
+        return *dynamic_cast<const juce::Button*>(component.get());
     }
 
     void Button::buttonClicked(juce::Button* button)
@@ -131,15 +110,13 @@ namespace jive
         onClick.triggerWithoutSelfCallback();
     }
 
-    void Button::componentParentHierarchyChanged(juce::Component& comp)
+    void Button::componentChildrenChanged(juce::Component& comp)
     {
-        jassertquiet(&comp == &getButton());
+        auto& button = getButton();
+        jassertquiet(&comp == &button);
 
-        if (radioGroup.get() != 0)
-        {
-            if (auto* parentComponent = getButton().getParentComponent())
-                toggled = findFirstChildButton(*parentComponent) == &getButton();
-        }
+        for (auto* child : button.getChildren())
+            child->addMouseListener(&button, true);
     }
 } // namespace jive
 
@@ -166,8 +143,6 @@ namespace juce
 } // namespace juce
 
 #if JIVE_UNIT_TESTS
-    #include <jive_layouts/layout/jive_Interpreter.h>
-
 class ButtonTest : public juce::UnitTest
 {
 public:

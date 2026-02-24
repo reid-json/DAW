@@ -1,4 +1,4 @@
-#include "jive_GridVariantConverters.h"
+#include <jive_layouts/jive_layouts.h>
 
 namespace juce
 {

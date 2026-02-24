@@ -1,87 +1,50 @@
 #pragma once
 
-#include "jive_StyleSelectors.h"
-
-#include <jive_components/jive_components.h>
-
 namespace jive
 {
-    template <typename Value>
-    using Styles = std::unordered_map<StyleIdentifier, Property<Value, Inheritance::doNotInherit, Accumulation::doNotAccumulate, false>>;
-
     class StyleSheet
         : public juce::ReferenceCountedObject
         , private juce::ComponentListener
+        , private juce::ValueTree::Listener
+        , private Object::Listener
     {
     public:
+        struct Selectors;
         using ReferenceCountedPointer = juce::ReferenceCountedObjectPtr<StyleSheet>;
 
+        StyleSheet(juce::Component& component, juce::ValueTree state);
         ~StyleSheet();
 
-        [[nodiscard]] Fill getBackground() const;
-        [[nodiscard]] Fill getForeground() const;
-        [[nodiscard]] Fill getBorderFill() const;
-        [[nodiscard]] BorderRadii<float> getBorderRadii() const;
-        [[nodiscard]] juce::Font getFont() const;
-
-        [[nodiscard]] static ReferenceCountedPointer create(juce::Component& component, juce::ValueTree state);
+        Fill getBackground() const;
+        Fill getForeground() const;
+        Fill getBorderFill() const;
+        BorderRadii<float> getBorderRadii() const;
+        juce::Font getFont() const;
 
     private:
-        StyleSheet(juce::Component& component, juce::ValueTree state);
+        void componentMovedOrResized(juce::Component& componentThatWasMovedOrResized, bool wasMoved, bool wasResized) final;
+        void componentParentHierarchyChanged(juce::Component& childComponent) final;
+        void valueTreePropertyChanged(juce::ValueTree&, const juce::Identifier&) final;
+        void propertyChanged(Object& object, const juce::Identifier& name) final;
 
-        void componentParentHierarchyChanged(juce::Component&) final;
-        void componentMovedOrResized(juce::Component&, bool, bool) final;
+        juce::var findStyleProperty(const juce::Identifier& propertyName) const;
+        juce::var findHierarchicalStyleProperty(const juce::Identifier& propertyName) const;
+        juce::ReferenceCountedObjectPtr<StyleSheet> findClosestAncestorStyleSheet();
+        juce::Array<ReferenceCountedPointer> collectChildSheets();
 
-        [[nodiscard]] juce::String getFontFamily() const;
-        [[nodiscard]] float getFontSize() const;
-        [[nodiscard]] float getFontStretch() const;
-        [[nodiscard]] juce::String getFontStyle() const;
-        [[nodiscard]] juce::String getFontWeight() const;
-        [[nodiscard]] float getLetterSpacing() const;
-        [[nodiscard]] juce::String getTextDecoration() const;
-
-        void updateClosestAncestor();
-        void updateStyles(jive::Object& state, StyleIdentifier);
-        void updateStyles();
         void applyStyles();
-
-        BackgroundCanvas backgroundCanvas;
 
         juce::Component::SafePointer<juce::Component> component;
         juce::ValueTree state;
-        Property<Object::ReferenceCountedPointer,
-                 Inheritance::doNotInherit,
-                 Accumulation::doNotAccumulate,
-                 false>
-            style;
-        ReferenceCountedPointer closestAncestor;
-        StyleSelectors selectors;
-        juce::Array<StyleSheet*> dependants;
+        juce::ValueTree stateRoot;
+        ComponentInteractionState interactionState;
 
-#if !JIVE_UNIT_TESTS
-        const ComponentInteractionState interactionState;
-#endif
+        BackgroundCanvas backgroundCanvas;
 
+        Property<Object::ReferenceCountedPointer> style;
         Property<float> borderWidth;
-        Styles<Fill> backgroundStyles;
-        Styles<Fill> foregroundStyles;
-        Styles<Fill> borderFillStyles;
-        Styles<BorderRadii<float>> borderRadiiStyles;
-        Styles<juce::String> fontFamilyStyles;
-        Styles<float> fontSizeStyles;
-        Styles<float> fontStretchStyles;
-        Styles<juce::String> fontStyleStyles;
-        Styles<juce::String> fontWeightStyles;
-        Styles<float> letterSpacingStyles;
-        Styles<juce::String> textDecorationStyles;
 
-        std::unique_ptr<Property<Fill>> calculatedBackground;
-        std::unique_ptr<Property<Fill>> calculatedForeground;
-        std::unique_ptr<Property<Fill>> calculatedBorderFill;
-        std::unique_ptr<Property<BorderRadii<float>>> calculatedBorderRadii;
-        std::unique_ptr<Property<float>> calculatedFontSize;
-        std::unique_ptr<Property<float>> calculatedFontStretch;
-        std::unique_ptr<Property<float>> calculatedLetterSpacing;
+        const std::unique_ptr<Selectors> selectors;
 
         JUCE_LEAK_DETECTOR(StyleSheet)
     };

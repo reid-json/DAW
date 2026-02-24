@@ -1,7 +1,5 @@
 #include "jive_ComponentFactory.h"
 
-#include <jive_components/jive_components.h>
-
 namespace jive
 {
     ComponentFactory::ComponentFactory()
@@ -26,12 +24,6 @@ namespace jive
         });
         creators.insert({
             "Component",
-            []() {
-                return std::make_unique<IgnoredComponent>();
-            },
-        });
-        creators.insert({
-            "Editor",
             []() {
                 return std::make_unique<IgnoredComponent>();
             },

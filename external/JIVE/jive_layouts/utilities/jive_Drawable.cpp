@@ -1,6 +1,4 @@
-#include "jive_Drawable.h"
-
-#include <jive_core/jive_core.h>
+#include <jive_layouts/jive_layouts.h>
 
 namespace jive
 {

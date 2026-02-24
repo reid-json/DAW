@@ -1,41 +1,7 @@
-#include "jive_FlexItem.h"
+#include <jive_layouts/jive_layouts.h>
 
 namespace jive
 {
-    class FlexLayoutDummy : public juce::Component
-    {
-    public:
-        explicit FlexLayoutDummy(GuiItem& owner)
-            : item{ owner }
-        {
-        }
-
-        void resized() final
-        {
-            if (strategy == LayoutStrategy::real)
-            {
-                boxModel(item)
-                    .setSize(static_cast<float>(getWidth()),
-                             static_cast<float>(getHeight()));
-            }
-        }
-
-        void moved() final
-        {
-            if (strategy == LayoutStrategy::real)
-                item.getComponent()->setTopLeftPosition(getPosition());
-        }
-
-        void setStrategy(LayoutStrategy layoutStrategy)
-        {
-            strategy = layoutStrategy;
-        }
-
-    private:
-        LayoutStrategy strategy;
-        GuiItem& item;
-    };
-
     FlexItem::FlexItem(std::unique_ptr<GuiItem> itemToDecorate)
         : ContainerItem::Child{ std::move(itemToDecorate) }
         , order{ state, "order" }
@@ -43,85 +9,54 @@ namespace jive
         , flexShrink{ state, "flex-shrink" }
         , flexBasis{ state, "flex-basis" }
         , alignSelf{ state, "align-self" }
-        , layoutDummy{ std::make_unique<FlexLayoutDummy>(*this) }
     {
         if (!flexShrink.exists())
             flexShrink = juce::FlexItem{}.flexShrink;
 
         const auto updateParentLayout = [this]() {
-            cachedItems.clear();
-
-            if (auto* containerParent = dynamic_cast<GuiItemDecorator&>(*getParent()).getTopLevelDecorator().toType<ContainerItem>())
-                containerParent->updateIdealSizeUnrestrained();
+            getParent()->layOutChildren();
         };
         order.onValueChange = updateParentLayout;
         flexGrow.onValueChange = updateParentLayout;
-        flexGrow.onTransitionProgressed = updateParentLayout;
         flexShrink.onValueChange = updateParentLayout;
-        flexShrink.onTransitionProgressed = updateParentLayout;
         flexBasis.onValueChange = updateParentLayout;
-        flexBasis.onTransitionProgressed = updateParentLayout;
         alignSelf.onValueChange = updateParentLayout;
-
-        box.addListener(*this);
-    }
-
-    FlexItem::~FlexItem()
-    {
-        box.removeListener(*this);
     }
 
     juce::FlexItem FlexItem::toJuceFlexItem(juce::Rectangle<float> parentContentBounds,
-                                            LayoutStrategy strategy)
+                                            LayoutStrategy strategy) const
     {
-        const auto key = std::make_pair(parentContentBounds, strategy);
+        juce::FlexItem flexItem{ *component };
 
-        if (cachedItems.find(key) == std::end(cachedItems))
-        {
-            juce::FlexItem flexItem{ *layoutDummy };
+        flexItem.flexGrow = flexGrow;
+        flexItem.flexShrink = flexShrink;
+        flexItem.flexBasis = flexBasis;
 
-            flexItem.flexShrink = flexShrink.calculateCurrent();
+        if (strategy == LayoutStrategy::real)
+            flexItem.alignSelf = alignSelf;
 
-            if (strategy == LayoutStrategy::real)
-            {
-                flexItem.flexGrow = flexGrow.calculateCurrent();
-                flexItem.flexBasis = flexBasis.calculateCurrent();
-                flexItem.alignSelf = alignSelf;
-            }
-
-            const auto orientation = [this]() {
-                const Property<juce::FlexBox::Direction> parentDirection{
-                    state.getParent(),
-                    "flex-direction",
-                };
-                const auto direction = parentDirection.get();
-
-                if (direction == juce::FlexBox::Direction::row || direction == juce::FlexBox::Direction::rowReverse)
-                    return Orientation::horizontal;
-
-                return Orientation::vertical;
+        const auto orientation = [this]() {
+            const Property<juce::FlexBox::Direction> parentDirection{
+                state.getParent(),
+                "flex-direction",
             };
-            applyConstraints(flexItem,
-                             parentContentBounds,
-                             orientation(),
-                             strategy);
+            const auto direction = parentDirection.get();
 
-            cachedItems[key] = flexItem;
-        }
+            if (direction == juce::FlexBox::Direction::row || direction == juce::FlexBox::Direction::rowReverse)
+                return Orientation::horizontal;
 
-        dynamic_cast<FlexLayoutDummy&>(*layoutDummy).setStrategy(strategy);
-        return cachedItems.find(key)->second;
-    }
+            return Orientation::vertical;
+        };
+        applyConstraints(flexItem,
+                         parentContentBounds,
+                         orientation(),
+                         strategy);
 
-    void FlexItem::boxModelChanged(BoxModel&)
-    {
-        cachedItems.clear();
+        return flexItem;
     }
 } // namespace jive
 
 #if JIVE_UNIT_TESTS
-    #include <jive_layouts/layout/jive_Interpreter.h>
-
 class FlexItemUnitTest : public juce::UnitTest
 {
 public:
@@ -132,6 +67,7 @@ public:
 
     void runTest() final
     {
+        testComponent();
         testOrder();
         testFlexGrow();
         testFlexShrink();
@@ -143,6 +79,29 @@ public:
     }
 
 private:
+    void testComponent()
+    {
+        beginTest("component");
+
+        jive::Interpreter interpreter;
+        juce::ValueTree state{
+            "Component",
+            {
+                { "width", 222 },
+                { "height", 333 },
+            },
+            {
+                juce::ValueTree{ "Component" },
+            },
+        };
+        auto parent = interpreter.interpret(state);
+        auto& item = *parent->getChildren()[0];
+        const auto flexItem = dynamic_cast<jive::GuiItemDecorator&>(item)
+                                  .toType<jive::FlexItem>()
+                                  ->toJuceFlexItem({}, jive::LayoutStrategy::real);
+        expect(flexItem.associatedComponent == item.getComponent().get());
+    }
+
     void testOrder()
     {
         beginTest("order");
@@ -327,8 +286,8 @@ private:
                        .toType<jive::FlexItem>()
                        ->toJuceFlexItem({}, jive::LayoutStrategy::real);
 
-        expectEquals(flexItem.width, 50.f);
-        expectEquals(flexItem.height, 175.f);
+        expect(flexItem.width == 50.f);
+        expect(flexItem.height == 175.f);
     }
 
     void testMargin()

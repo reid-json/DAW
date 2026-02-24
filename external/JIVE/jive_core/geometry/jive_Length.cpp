@@ -1,32 +1,23 @@
 #include "jive_Length.h"
 
-#include <jive_core/values/variant-converters/jive_VariantConvertion.h>
-
 namespace jive
 {
     [[nodiscard]] float Length::toPixels(const juce::Rectangle<float>& parentBounds) const
     {
-        const auto getCurrent = [this] {
-            if (auto* transition = getTransition())
-                return transition->calculateCurrent<float>();
-
-            return get().getFloatValue();
-        };
-
         if (isAuto())
             return pixelValueWhenAuto;
 
         if (isPixels())
-            return getCurrent();
+            return get().getFloatValue();
 
         if (isPercent())
         {
-            const auto scale = static_cast<double>(getCurrent()) * 0.01;
+            const auto scale = static_cast<double>(get().getFloatValue()) * 0.01;
             return static_cast<float>(scale * getRelativeParentLength(parentBounds.toDouble()));
         }
 
         const auto fontSize = isRem() ? getRootFontSize() : getFontSize();
-        return fontSize * getCurrent();
+        return fontSize * get().getFloatValue();
     }
 
     [[nodiscard]] bool Length::isPixels() const
@@ -51,7 +42,7 @@ namespace jive
 
     [[nodiscard]] double Length::getRelativeParentLength(const juce::Rectangle<double>& parentBounds) const
     {
-        jassert(isValid(getParent(source)));
+        jassert(tree.getParent().isValid());
 
         if (id.toString().containsIgnoreCase("width") || id.toString().containsIgnoreCase("x"))
             return parentBounds.getWidth();
@@ -61,11 +52,11 @@ namespace jive
 
     [[nodiscard]] float Length::getFontSize() const
     {
-        for (auto toSearch = source;
-             isValid(source);
-             toSearch = getParent(source))
+        for (auto toSearch = tree;
+             toSearch.isValid();
+             toSearch = toSearch.getParent())
         {
-            if (const auto style = getVar(toSearch, "style");
+            if (const auto style = toSearch["style"];
                 style.isObject())
             {
                 if (const auto fontSize = style["font-size"];
@@ -81,7 +72,7 @@ namespace jive
 
     [[nodiscard]] float Length::getRootFontSize() const
     {
-        if (const auto style = getVar(getRoot(source), "style");
+        if (const auto style = tree.getRoot()["style"];
             style.isObject())
         {
             if (const auto fontSize = style["font-size"];
@@ -96,8 +87,6 @@ namespace jive
 } // namespace jive
 
 #if JIVE_UNIT_TESTS
-    #include <jive_layouts/jive_layouts.h>
-
 class LengthUnitTest : public juce::UnitTest
 {
 public:

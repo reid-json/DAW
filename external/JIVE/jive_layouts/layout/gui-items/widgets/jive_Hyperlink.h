@@ -1,7 +1,5 @@
 #pragma once
 
-#include "jive_Button.h"
-
 namespace jive
 {
     class Hyperlink : public Button

@@ -1,9 +1,5 @@
 #pragma once
 
-#include <jive_core/geometry/jive_Orientation.h>
-
-#include <juce_graphics/juce_graphics.h>
-
 namespace jive
 {
     struct Gradient
@@ -57,7 +53,4 @@ namespace juce
         static var toVar(const jive::Gradient& gradient);
         static jive::Gradient fromVar(const var& value);
     };
-
-    String& operator<<(String& str, const jive::Gradient::ColourStop& stop);
-    String& operator<<(String& str, const jive::Gradient& gradient);
 } // namespace juce

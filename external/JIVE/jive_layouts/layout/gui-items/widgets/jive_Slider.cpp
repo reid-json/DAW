@@ -1,6 +1,4 @@
-#include "jive_Slider.h"
-
-#include <jive_layouts/layout/gui-items/jive_CommonGuiItem.h>
+#include <jive_layouts/jive_layouts.h>
 
 namespace jive
 {
@@ -113,24 +111,14 @@ namespace jive
         return false;
     }
 
-#if JIVE_IS_PLUGIN_PROJECT
-    void Slider::attachToParameter(juce::RangedAudioParameter* parameter, juce::UndoManager* undoManager)
-    {
-        if (parameter != nullptr)
-            parameterAttachment = std::make_unique<juce::SliderParameterAttachment>(*parameter, getSlider(), undoManager);
-        else
-            parameterAttachment = nullptr;
-    }
-#endif
-
     juce::Slider& Slider::getSlider()
     {
-        return *dynamic_cast<juce::Slider*>(getComponent().get());
+        return *dynamic_cast<juce::Slider*>(component.get());
     }
 
     const juce::Slider& Slider::getSlider() const
     {
-        return *dynamic_cast<const juce::Slider*>(getComponent().get());
+        return *dynamic_cast<const juce::Slider*>(component.get());
     }
 
     void Slider::updateStyle()
@@ -193,8 +181,6 @@ namespace jive
 } // namespace jive
 
 #if JIVE_UNIT_TESTS
-    #include <jive_layouts/layout/jive_Interpreter.h>
-
 class SliderTest : public juce::UnitTest
 {
 public:

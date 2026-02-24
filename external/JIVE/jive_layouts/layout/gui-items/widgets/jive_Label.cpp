@@ -1,4 +1,4 @@
-#include "jive_Label.h"
+#include <jive_layouts/jive_layouts.h>
 
 namespace jive
 {
@@ -29,7 +29,7 @@ namespace jive
 
     juce::Label& Label::getLabel()
     {
-        auto* label = dynamic_cast<juce::Label*>(getComponent().get());
+        auto* label = dynamic_cast<juce::Label*>(component.get());
         jassert(label != nullptr);
 
         return *label;
@@ -37,7 +37,7 @@ namespace jive
 
     const juce::Label& Label::getLabel() const
     {
-        const auto* label = dynamic_cast<const juce::Label*>(getComponent().get());
+        const auto* label = dynamic_cast<const juce::Label*>(component.get());
         jassert(label != nullptr);
 
         return *label;
@@ -45,8 +45,6 @@ namespace jive
 } // namespace jive
 
 #if JIVE_UNIT_TESTS
-    #include <jive_layouts/layout/jive_Interpreter.h>
-
 class LabelUnitTest : public juce::UnitTest
 {
 public:

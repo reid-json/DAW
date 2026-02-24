@@ -1,4 +1,4 @@
-#include "jive_TextComponent.h"
+#include <jive_layouts/jive_layouts.h>
 
 namespace jive
 {
@@ -86,11 +86,6 @@ namespace jive
             lineSpacing = newLineSpacing;
             canvas.repaint();
         }
-    }
-
-    juce::Colour TextComponent::getTextColour() const
-    {
-        return textColour.value_or(juce::Colours::transparentBlack);
     }
 
     void TextComponent::setTextColour(juce::Colour newColour)

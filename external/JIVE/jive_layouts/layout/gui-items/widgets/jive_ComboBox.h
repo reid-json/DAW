@@ -1,7 +1,5 @@
 #pragma once
 
-#include <jive_layouts/layout/gui-items/jive_GuiItemDecorator.h>
-
 namespace jive
 {
     class ComboBox
@@ -46,10 +44,6 @@ namespace jive
 
         bool isContainer() const override;
 
-#if JIVE_IS_PLUGIN_PROJECT
-        void attachToParameter(juce::RangedAudioParameter*, juce::UndoManager*) override;
-#endif
-
         juce::ComboBox& getComboBox();
         const juce::ComboBox& getComboBox() const;
 
@@ -73,10 +67,6 @@ namespace jive
 
         juce::OwnedArray<Option> options;
         juce::OwnedArray<Header> headers;
-
-#if JIVE_IS_PLUGIN_PROJECT
-        std::unique_ptr<juce::ComboBoxParameterAttachment> parameterAttachment;
-#endif
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ComboBox)
     };

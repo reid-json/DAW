@@ -1,7 +1,5 @@
 #pragma once
 
-#include <jive_layouts/layout/gui-items/jive_GuiItemDecorator.h>
-
 namespace jive
 {
     class Button
@@ -19,16 +17,12 @@ namespace jive
         explicit Button(std::unique_ptr<GuiItem> itemToDecorate);
         ~Button() override;
 
-#if JIVE_IS_PLUGIN_PROJECT
-        void attachToParameter(juce::RangedAudioParameter*, juce::UndoManager*) override;
-#endif
-
         juce::Button& getButton();
         const juce::Button& getButton() const;
 
     private:
         void buttonClicked(juce::Button* button) final;
-        void componentParentHierarchyChanged(juce::Component& component) final;
+        void componentChildrenChanged(juce::Component& component) final;
 
         void updateTriggerEvent();
 
@@ -47,10 +41,6 @@ namespace jive
         Property<bool> focusable;
 
         Event onClick;
-
-#if JIVE_IS_PLUGIN_PROJECT
-        std::unique_ptr<juce::ButtonParameterAttachment> parameterAttachment;
-#endif
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Button)
     };

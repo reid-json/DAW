@@ -1,4 +1,4 @@
-#include "jive_Canvas.h"
+#include <jive_components/jive_components.h>
 
 namespace jive
 {

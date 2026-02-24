@@ -1,4 +1,4 @@
-#include "jive_ComponentInteractionState.h"
+#include <jive_core/jive_core.h>
 
 namespace jive
 {
@@ -82,9 +82,6 @@ namespace juce
 
     jive::ComponentInteractionState::Mouse VariantConverter<jive::ComponentInteractionState::Mouse>::fromVar(const var& value)
     {
-        if (value.isVoid())
-            return jive::ComponentInteractionState::Mouse::dissociate;
-
         return std::find_if(std::begin(map),
                             std::end(map),
                             [value](auto&& pair) {
@@ -100,9 +97,6 @@ namespace juce
 
     jive::ComponentInteractionState::Keyboard VariantConverter<jive::ComponentInteractionState::Keyboard>::fromVar(const var& value)
     {
-        if (value.isVoid())
-            return jive::ComponentInteractionState::Keyboard::dissociate;
-
         return std::find_if(std::begin(map),
                             std::end(map),
                             [value](auto&& pair) {

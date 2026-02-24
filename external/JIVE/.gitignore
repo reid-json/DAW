@@ -1,10 +1,6 @@
-.DS_Store
 .vscode/c_cpp_properties.json
 .vscode/settings.json
 build/
-Builds/
-JuceLibraryCode/
-vale-styles/
 
 # Prerequisites
 *.d

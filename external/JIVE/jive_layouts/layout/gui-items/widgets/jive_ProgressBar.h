@@ -1,9 +1,5 @@
 #pragma once
 
-#include <jive_layouts/layout/gui-items/jive_GuiItemDecorator.h>
-
-#include <jive_components/jive_components.h>
-
 namespace jive
 {
     class ProgressBar : public GuiItemDecorator

@@ -1,4 +1,4 @@
-#include "jive_XmlParser.h"
+#include <jive_core/jive_core.h>
 
 namespace jive
 {

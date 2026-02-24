@@ -44,9 +44,9 @@ namespace jive_demo
 
                 switch (page)
                 {
-                case Page::animations:
-                    icon = icons::large::motionBlur();
-                    name = "Animations";
+                case Page::architecture:
+                    icon = icons::large::build();
+                    name = "Architecture";
                     break;
                 case Page::development:
                     icon = icons::large::code();
@@ -94,8 +94,8 @@ namespace jive_demo
                                         {
                                             "stops",
                                             new jive::Object{
-                                                { "0.0", jive::toVar(colours::widgetStart.brighter(0.02f)) },
-                                                { "1.0", jive::toVar(colours::widgetStart.brighter(0.01f)) },
+                                                { "0.0", jive::toVar(colours::widgetStart.brighter(0.01f)) },
+                                                { "1.0", jive::toVar(colours::widgetStart) },
                                             },
                                         },
                                         { "gradient", "linear" },
@@ -146,11 +146,11 @@ namespace jive_demo
             return juce::ValueTree{
                 "Component",
                 {
-                    { "id", "main-nav" },
                     { "display", "grid" },
                     { "grid-template-rows", "1fr 1fr" },
                     { "grid-template-columns", "1fr 1fr" },
                     { "gap", 25 },
+                    // { "flex-direction", "row" },
                 },
                 {
                     PageButton{}
@@ -163,8 +163,8 @@ namespace jive_demo
                         .forPage(Page::development)()
                         .setProperty("id", "development", nullptr),
                     PageButton{}
-                        .forPage(Page::animations)()
-                        .setProperty("id", "animations", nullptr),
+                        .forPage(Page::architecture)()
+                        .setProperty("id", "architecture", nullptr),
                 },
             };
         }
@@ -209,9 +209,9 @@ namespace jive_demo
                 }),
                 "on-click",
             }
-            , onAnimationsButtonClicked{
+            , onArchitectureButtonClicked{
                 jive::find(view, [](const auto& element) {
-                    return element["id"].toString() == "animations";
+                    return element["id"].toString() == "architecture";
                 }),
                 "on-click",
             }
@@ -225,8 +225,8 @@ namespace jive_demo
             onDevelopmentButtonClicked.onTrigger = [windowState]() mutable {
                 windowState.setPage(Page::development);
             };
-            onAnimationsButtonClicked.onTrigger = [windowState]() mutable {
-                windowState.setPage(Page::animations);
+            onArchitectureButtonClicked.onTrigger = [windowState]() mutable {
+                windowState.setPage(Page::architecture);
             };
         }
 
@@ -241,6 +241,6 @@ namespace jive_demo
         jive::Event onLayoutsButtonClicked;
         jive::Event onStyleSheetsButtonClicked;
         jive::Event onDevelopmentButtonClicked;
-        jive::Event onAnimationsButtonClicked;
+        jive::Event onArchitectureButtonClicked;
     };
 } // namespace jive_demo

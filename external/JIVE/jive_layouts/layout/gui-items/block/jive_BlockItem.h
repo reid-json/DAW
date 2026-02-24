@@ -1,10 +1,8 @@
 #pragma once
 
-#include <jive_layouts/layout/gui-items/jive_ContainerItem.h>
-
 namespace jive
 {
-    class BlockItem : public ContainerItem::Child
+    class BlockItem : public GuiItemDecorator
     {
     public:
         explicit BlockItem(std::unique_ptr<GuiItem> itemToDecorate);
@@ -21,6 +19,8 @@ namespace jive
         Length centreY;
         Length width;
         Length height;
+
+        BoxModel& boxModel;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BlockItem)
     };

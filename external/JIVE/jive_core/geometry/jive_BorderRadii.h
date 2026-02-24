@@ -1,7 +1,5 @@
 #pragma once
 
-#include <juce_core/juce_core.h>
-
 namespace jive
 {
     template <typename Arithmetic>
@@ -126,17 +124,4 @@ namespace juce
             return {};
         }
     };
-
-    template <typename T>
-    String& operator<<(String& str, const jive::BorderRadii<T>& border)
-    {
-        return str << "jive::BorderRadii<"
-                   << typeid(T).name()
-                   << "> { "
-                   << border.topLeft << ", "
-                   << border.topRight << ", "
-                   << border.bottomRight << ", "
-                   << border.bottomLeft
-                   << " }";
-    }
 } // namespace juce

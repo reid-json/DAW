@@ -1,75 +1,54 @@
-#include "jive_BlockItem.h"
-
-#include <jive_layouts/layout/gui-items/jive_CommonGuiItem.h>
-#include <jive_layouts/layout/gui-items/jive_GuiItem.h>
+#include <jive_layouts/jive_layouts.h>
 
 namespace jive
 {
     BlockItem::BlockItem(std::unique_ptr<GuiItem> itemToDecorate)
-        : ContainerItem::Child{ std::move(itemToDecorate) }
+        : GuiItemDecorator{ std::move(itemToDecorate) }
         , x{ state, "x" }
         , y{ state, "y" }
         , centreX{ state, "centre-x" }
         , centreY{ state, "centre-y" }
         , width{ state, "width" }
         , height{ state, "height" }
+        , boxModel{ toType<CommonGuiItem>()->boxModel }
     {
         jassert(getParent() != nullptr);
 
-        const auto updateBounds = [this] {
-            getComponent()->setBounds(calculateBounds());
-        };
-
-        x.onValueChange = [this, updateBounds] {
+        x.onValueChange = [this]() {
             centreX.clear();
-            updateBounds();
+            getComponent()->setBounds(calculateBounds());
         };
-        x.onTransitionProgressed = updateBounds;
-
-        y.onValueChange = [this, updateBounds]() {
+        y.onValueChange = [this]() {
             centreY.clear();
-            updateBounds();
+            getComponent()->setBounds(calculateBounds());
         };
-        y.onTransitionProgressed = updateBounds;
-
-        centreX.onValueChange = [this, updateBounds]() {
+        centreX.onValueChange = [this]() {
             x.clear();
-            updateBounds();
+            getComponent()->setBounds(calculateBounds());
         };
-        centreX.onTransitionProgressed = updateBounds;
-
-        centreY.onValueChange = [this, updateBounds]() {
+        centreY.onValueChange = [this]() {
             y.clear();
-            updateBounds();
-        };
-        centreY.onTransitionProgressed = updateBounds;
-
-        width.onTransitionProgressed = [this] {
             getComponent()->setBounds(calculateBounds());
         };
-        height.onTransitionProgressed = [this] {
-            getComponent()->setBounds(calculateBounds());
-        };
-
-        updateBounds();
+        getComponent()->setBounds(calculateBounds());
     }
 
     int BlockItem::calculateX() const
     {
-        const auto parentContentBounds = boxModel(*getParent()).getContentBounds();
+        const auto parentContentBounds = BoxModel{ state.getParent() }.getContentBounds();
 
         if (centreX.exists())
-            return juce::roundToInt(centreX.toPixels(parentContentBounds) - boxModel(*this).getWidth() / 2.f);
+            return juce::roundToInt(centreX.toPixels(parentContentBounds) - boxModel.getWidth() / 2.f);
 
         return juce::roundToInt(x.toPixels(parentContentBounds));
     }
 
     int BlockItem::calculateY() const
     {
-        const auto parentContentBounds = boxModel(*getParent()).getContentBounds();
+        const auto parentContentBounds = BoxModel{ state.getParent() }.getContentBounds();
 
         if (centreY.exists())
-            return juce::roundToInt(centreY.toPixels(parentContentBounds) - boxModel(*this).getHeight() / 2.f);
+            return juce::roundToInt(centreY.toPixels(parentContentBounds) - boxModel.getHeight() / 2.f);
 
         return juce::roundToInt(y.toPixels(parentContentBounds));
     }
@@ -77,7 +56,7 @@ namespace jive
     juce::Rectangle<int> BlockItem::calculateBounds() const
     {
         juce::Rectangle<int> bounds;
-        const auto& parentBoxModel = boxModel(*getParent());
+        const auto& parentBoxModel = dynamic_cast<const GuiItemDecorator*>(getParent())->toType<CommonGuiItem>()->boxModel;
         const auto parentBounds = parentBoxModel.getContentBounds();
 
         if (!width.isAuto())
@@ -97,8 +76,6 @@ namespace jive
 } // namespace jive
 
 #if JIVE_UNIT_TESTS
-    #include <jive_layouts/layout/jive_Interpreter.h>
-
 class BlockItemTest : public juce::UnitTest
 {
 public:
