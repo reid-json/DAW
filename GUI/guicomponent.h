@@ -1,19 +1,14 @@
 #pragma once
-
 #include <juce_gui_basics/juce_gui_basics.h>
-#include <foleys_gui_magic/foleys_gui_magic.h>
+#include <jive_layouts/jive_layouts.h>
 
-class GuiComponent : public juce::Component
+class GUIComponent : public juce::Component
 {
 public:
-    GuiComponent();
-    ~GuiComponent() override = default;
-
+    GUIComponent();
     void resized() override;
 
 private:
-    std::unique_ptr<foleys::MagicGUIState> magicState;
-    std::unique_ptr<foleys::MagicGUIBuilder> magicBuilder;
-
-    juce::Label testLabel;
+    jive::Interpreter viewInterpreter;
+    std::unique_ptr<jive::GuiItem> root;
 };

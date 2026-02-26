@@ -1,10 +1,13 @@
-# TESTING PULL REQUEST 1
 cmake_minimum_required(VERSION 3.15)
 project(DAW VERSION 1.0)
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 
-# Fetching JUCE for the project
+# Fetching JUCE
+
 include(FetchContent)
 FetchContent_Declare(
     juce
@@ -13,24 +16,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(juce)
 
-# Fetching gui extension for the project
-FetchContent_Declare(
-    foleys_gui_magic
-    GIT_REPOSITORY https://github.com/ffAudio/foleys_gui_magic.git
-    GIT_TAG        main
 
-)
-#looked up how to turn off building all the examples, kinda speeding up the build process
-#still figuring out all the stuff regarding the build process
-set(FOLEYS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+# Add subdirectories
 
-FetchContent_MakeAvailable(foleys_gui_magic)
-
-
-
-# Adding modules here
-# within each module is where we can add libraries specific for each
-# This is where you have to add an "entry point" if you will so the root cmake will know to build it
+add_subdirectory(external/JIVE)
 add_subdirectory(Utilities)
 
 add_subdirectory(Audio_Engine)
@@ -39,13 +28,23 @@ add_subdirectory(Audio_Engine/Test)
 add_subdirectory(Piano_Roll)
 add_subdirectory(Piano_Roll/Test)
 
-add_subdirectory(GUI)
-add_subdirectory(GUI/Test)
-
 add_subdirectory(Plugin)
 add_subdirectory(Plugin/Test)
 
 add_subdirectory(Plugin_Hosting)
 add_subdirectory(Plugin_Hosting/Test)
+
+add_subdirectory(GUI)
+
+# copying resources to the build directory for both DAW and GUI_Test targets
+add_custom_target(CopyResources ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/Resources
+            $<TARGET_FILE_DIR:DAW>/Resources
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/Resources
+            $<TARGET_FILE_DIR:GUI_Test>/Resources
+    COMMENT "Synchronizing Resources for DAW and GUI_Test"
+)
 
 add_subdirectory(App)

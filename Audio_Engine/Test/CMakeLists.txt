@@ -1,17 +1,18 @@
-#This is wat is creating the test exe for the module so we can have an enviornemnt for each one
-juce_add_gui_app(Audio_Engine_Test
-    PRODUCT_NAME "Audio Engine Test"
+
+juce_add_gui_app(AudioEngineTest
+    PRODUCT_NAME "AudioEngine Test"
 )
 
-target_sources(Audio_Engine_Test PRIVATE
+target_sources(AudioEngineTest PRIVATE
     Main.cpp
     Test_Audio_Engine.cpp
+    Test_Audio_Engine.h
 )
 
-#adding Audio_Engine here is what allows the test section to use the code from the module
-#without this it would not be able to see any of the code in the module
-target_link_libraries(Audio_Engine_Test PRIVATE
-    juce::juce_gui_basics
-    juce::juce_gui_extra
-    Audio_Engine
+target_link_libraries(AudioEngineTest
+    PRIVATE
+        Audio_Engine
+        juce::juce_gui_basics
+        juce::juce_audio_devices
+        juce::juce_audio_basics
 )
