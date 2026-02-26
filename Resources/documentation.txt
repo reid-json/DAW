@@ -1,1 +1,0 @@
-this is have all the static files like images and stuff in one location

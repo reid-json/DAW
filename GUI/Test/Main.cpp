@@ -1,47 +1,42 @@
 #include <juce_gui_basics/juce_gui_basics.h>
-#include "Test_GUI.cpp" 
+#include "../guicomponent.h"
 
-
-class ModuleTestApplication : public juce::JUCEApplication
+class GUI_TestApplication : public juce::JUCEApplication
 {
 public:
-    ModuleTestApplication() {}
+    GUI_TestApplication() {}
 
-    const juce::String getApplicationName() override       { return "GUI Test"; }
-    const juce::String getApplicationVersion() override    { return "1.0"; }
-    bool moreThanOneInstanceAllowed() override             { return true; }
+    const juce::String getApplicationName() override { return "GUI Test"; }
+    const juce::String getApplicationVersion() override { return "1.0.0"; }
+    bool moreThanOneInstanceAllowed() override { return true; }
 
-    void initialise(const juce::String&) override
+    void initialise(const juce::String& commandLine) override
     {
         mainWindow.reset(new MainWindow(getApplicationName()));
     }
 
-    void shutdown() override
-    {
-        mainWindow = nullptr;
-    }
+    void shutdown() override { mainWindow.reset(); }
 
-    void systemRequestedQuit() override
-    {
-        quit();
-    }
+    void systemRequestedQuit() override { quit(); }
 
-  
+    void anotherInstanceStarted(const juce::String& commandLine) override {}
+
     class MainWindow : public juce::DocumentWindow
     {
     public:
-        MainWindow(const juce::String& name)
-            : DocumentWindow(name,
-                             juce::Colours::darkgrey,
-                             DocumentWindow::allButtons)
+        MainWindow(juce::String name) : DocumentWindow(name, 
+            juce::Colours::black, 
+            allButtons)
         {
             setUsingNativeTitleBar(true);
-
-      
-            setContentOwned(new Test_GUI(), true);
-
-            centreWithSize(800, 600);
             setResizable(true, true);
+            
+            auto* contentComp = new GUIComponent();
+            setContentOwned(contentComp, true);
+
+    
+            centreWithSize(1000, 700);
+
             setVisible(true);
         }
 
@@ -49,11 +44,13 @@ public:
         {
             juce::JUCEApplication::getInstance()->systemRequestedQuit();
         }
+
+    private:
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainWindow)
     };
 
 private:
     std::unique_ptr<MainWindow> mainWindow;
 };
 
-
-START_JUCE_APPLICATION(ModuleTestApplication)
+START_JUCE_APPLICATION(GUI_TestApplication)

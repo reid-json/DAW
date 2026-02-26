@@ -1,5 +1,5 @@
 #include <juce_gui_basics/juce_gui_basics.h>
-#include "Test_Plugin.cpp"   // Replace with your module's component or entry point
+#include "Test_Plugin.cpp"  
 
 
 class ModuleTestApplication : public juce::JUCEApplication

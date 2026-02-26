@@ -1,0 +1,29 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch (macOS)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${command:cmake.launchTargetPath}",
+            "cwd": "${workspaceFolder}",
+            "MIMode": "lldb",
+            "logging": {
+                "moduleLoad": false
+            },
+            "initCommands": [
+                "command script import ${workspaceFolder}/.vscode/lldb/juce_lldb_xcode.py"
+            ]
+        },
+        {
+            "name": "Launch (Windows)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${command:cmake.launchTargetPath}",
+            "cwd": "${workspaceFolder}",
+            "logging": {
+                "moduleLoad": false
+            }
+        }
+    ]
+}

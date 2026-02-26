@@ -1,14 +1,16 @@
-juce_add_gui_app(GUITest
+juce_add_gui_app(GUI_Test
     PRODUCT_NAME "GUI Test"
 )
 
-target_sources(GUITest PRIVATE
-    Main.cpp
-    Test_GUI.cpp
+target_link_libraries(GUI_Test
+    PRIVATE
+        GUI
+        juce::juce_gui_basics
 )
 
-target_link_libraries(GUITest PRIVATE
-    juce::juce_gui_basics
-    juce::juce_gui_extra
-    GUI
+target_sources(GUI_Test
+    PRIVATE
+        Main.cpp
 )
+
+add_dependencies(GUI_Test CopyResources)

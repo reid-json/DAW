@@ -1,59 +1,45 @@
-/*boiler plate code, very similar to the default JUCE code, just setup to see the structure working*/
 #include <juce_gui_basics/juce_gui_basics.h>
-#include "Test_Audio_Engine.cpp"  
+#include "Test_Audio_Engine.h"
 
-class ModuleTestApplication : public juce::JUCEApplication
+class TestWindow : public juce::DocumentWindow
 {
 public:
-    ModuleTestApplication() {}
+    TestWindow()
+        : DocumentWindow("Audio Engine Test",
+                         juce::Colours::black,
+                         DocumentWindow::allButtons)
+    {
+        setUsingNativeTitleBar(true);
+        setResizable(true, true);
+        setContentOwned(new Test_Audio_Engine(), true);
+        centreWithSize(600, 400);
+        setVisible(true);
+    }
 
-    const juce::String getApplicationName() override       { return "Audio Engine Test"; }
-    const juce::String getApplicationVersion() override    { return "1.0"; }
-    bool moreThanOneInstanceAllowed() override             { return true; }
+    void closeButtonPressed() override
+    {
+        juce::JUCEApplicationBase::quit();
+    }
+};
+
+class TestApp : public juce::JUCEApplication
+{
+public:
+    const juce::String getApplicationName() override { return "AudioEngine Test"; }
+    const juce::String getApplicationVersion() override { return "1.0"; }
 
     void initialise(const juce::String&) override
     {
-        mainWindow.reset(new MainWindow(getApplicationName()));
+        window.reset(new TestWindow());
     }
 
     void shutdown() override
     {
-        mainWindow = nullptr;
+        window = nullptr;
     }
-
-    void systemRequestedQuit() override
-    {
-        quit();
-    }
-
-   
-    class MainWindow : public juce::DocumentWindow
-    {
-    public:
-        MainWindow(const juce::String& name)
-            : DocumentWindow(name,
-                             juce::Colours::darkgrey,
-                             DocumentWindow::allButtons)
-        {
-            setUsingNativeTitleBar(true);
-
-            
-            setContentOwned(new Test_Audio_Engine(), true);
-
-            centreWithSize(800, 600);
-            setResizable(true, true);
-            setVisible(true);
-        }
-
-        void closeButtonPressed() override
-        {
-            juce::JUCEApplication::getInstance()->systemRequestedQuit();
-        }
-    };
 
 private:
-    std::unique_ptr<MainWindow> mainWindow;
+    std::unique_ptr<TestWindow> window;
 };
 
-
-START_JUCE_APPLICATION(ModuleTestApplication)
+START_JUCE_APPLICATION(TestApp)
