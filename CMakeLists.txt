@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 project(DAW VERSION 1.0)
 
-# This is downloading JUCE
+#This is downloading JUCE
 include(FetchContent)
 FetchContent_Declare(
     juce
