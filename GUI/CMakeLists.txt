@@ -1,6 +1,8 @@
 add_library(GUI STATIC
     guicomponent.cpp
     guicomponent.h
+    dawstate.h
+    test_dawstate.cpp
 )
 
 target_link_libraries(GUI

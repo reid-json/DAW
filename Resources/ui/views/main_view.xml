@@ -1,3 +1,186 @@
-<Component id="root" width="100%" height="100%" display="flex" flex-direction="column" justify-content="center" align-items="center">
-    <Text id="title" text="testing chud JIVE" />
+<Component id="root"
+          class="root"
+          display="flex"
+          flex-direction="column"
+          align-items="stretch"
+          width="1100"
+          height="720"
+          min-width="0"
+          min-height="0">
+
+  <Component id="headerContent"
+             class="header"
+             display="flex"
+             flex-direction="row"
+             align-items="center"
+             flex-grow="0"
+             flex-shrink="0"
+             min-width="0"
+             min-height="64"
+             padding="10"
+             row-gap="8"
+             column-gap="8">
+
+    <Button id="fileBtn"
+            class="btn"
+            width="72">
+      <Text id="fileBtnLabel" text="File"/>
+    </Button>
+
+    <Button id="undoBtn"
+            class="btn"
+            width="72">
+      <Text id="undoBtnLabel" text="Undo"/>
+    </Button>
+
+    <Button id="redoBtn"
+            class="btn"
+            width="72">
+      <Text id="redoBtnLabel" text="Redo"/>
+    </Button>
+
+    <Button id="restartBtn"
+            class="btn"
+            width="80">
+      <Text id="restartBtnLabel" text="Restart"/>
+    </Button>
+
+    <Button id="stopBtn"
+            class="btn"
+            width="72">
+      <Text id="stopBtnLabel" text="Stop"/>
+    </Button>
+
+    <Button id="playBtn"
+            class="btn btn-primary"
+            width="72">
+      <Text id="playBtnLabel" text="Play"/>
+    </Button>
+
+    <Button id="pauseBtn"
+            class="btn"
+            width="72">
+      <Text id="pauseBtnLabel" text="Pause"/>
+    </Button>
+
+    <Component flex-grow="1"/>
+
+    <Text id="dbLabel"
+          class="label"
+          text="-6.0 dB"
+          width="70"/>
+
+    <Slider id="timelineSlider"
+            width="220"
+            height="20"/>
+  </Component>
+
+  <Component id="bodyContent"
+             display="flex"
+             flex-direction="row"
+             flex-grow="1"
+             min-width="0"
+             min-height="0">
+
+    <Component id="sidebarContent"
+               class="sidebar"
+               display="flex"
+               flex-direction="column"
+               flex-grow="0"
+               flex-shrink="0"
+               width="240"
+               min-width="180"
+               max-width="420"
+               padding="10"
+               row-gap="10">
+
+      <Button id="newTrackBtn"
+              class="btn"
+              width="140"
+              height="32">
+        <Text id="newTrackBtnLabel" text="New Track (2)"/>
+      </Button>
+
+      <Component id="trackList"
+                 display="flex"
+                 flex-direction="column"
+                 row-gap="8"
+                 flex-grow="1"
+                 min-width="0"
+                 min-height="0">
+
+        <Component class="laneRow"
+                   height="54"
+                   padding="8"
+                   display="flex"
+                   flex-direction="row"
+                   align-items="center"
+                   column-gap="8">
+          <Component width="10"
+                     height="24"
+                     class="laneAccent"/>
+          <Text class="label" text="Track 1"/>
+        </Component>
+
+        <Component class="laneRow"
+                   height="54"
+                   padding="8"
+                   display="flex"
+                   flex-direction="row"
+                   align-items="center"
+                   column-gap="8">
+          <Component width="10"
+                     height="24"
+                     class="laneAccent"/>
+          <Text class="label" text="Track 2"/>
+        </Component>
+      </Component>
+    </Component>
+
+    <Component id="sidebarResizer"
+               class="sidebar-resizer"
+               width="10"
+               flex-grow="0"
+               flex-shrink="0"/>
+
+    <Component id="workspaceContent"
+               class="workspace"
+               display="flex"
+               flex-direction="column"
+               flex-grow="1"
+               min-width="0"
+               min-height="0"
+               padding="12"
+               row-gap="12">
+
+      <Component id="timelinePanel"
+                 class="panel"
+                 height="90"
+                 display="flex"
+                 flex-direction="row"
+                 align-items="center"
+                 padding="16">
+        <Text id="playheadLabel"
+              class="label"
+              text="Playhead: 0.00"/>
+      </Component>
+
+      <Component id="arrangementPanel"
+                 class="panel"
+                 flex-grow="1"
+                 min-width="0"
+                 min-height="0"
+                 padding="16"
+                 display="flex"
+                 flex-direction="column"
+                 row-gap="16">
+
+        <Component height="42"
+                   class="panelInset"/>
+
+        <Component height="42"
+                   class="panelInset"/>
+      </Component>
+    </Component>
+  </Component>
 </Component>

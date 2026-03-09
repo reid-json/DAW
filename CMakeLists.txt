@@ -5,20 +5,27 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-
 # Fetching JUCE
-
 include(FetchContent)
+
+# Make FetchContent less opaque + more reliable on unstable networks
+set(FETCHCONTENT_QUIET OFF)
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
+
 FetchContent_Declare(
     juce
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
     GIT_TAG        8.0.0
+    GIT_SHALLOW    TRUE
+    GIT_PROGRESS   TRUE
 )
 FetchContent_MakeAvailable(juce)
 
+# --- IMPORTANT ---
+# Ensure stylesheet support is compiled in for anything that needs it (including JIVE sources)
+add_compile_definitions(JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS=1)
 
 # Add subdirectories
-
 add_subdirectory(external/JIVE)
 add_subdirectory(Utilities)
 

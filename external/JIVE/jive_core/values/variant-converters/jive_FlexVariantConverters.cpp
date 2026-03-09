@@ -2,6 +2,15 @@
 
 namespace juce
 {
+    // Helper: normalize American spelling to the canonical spelling used by this JIVE build.
+    static var normalizeCentreAliases(const var& v)
+    {
+        if (v.isString() && v.toString() == "center")
+            return var("centre");
+
+        return v;
+    }
+
     const Array<var> VariantConverter<FlexBox::AlignContent>::options = {
         "stretch",
         "flex-start",
@@ -16,8 +25,10 @@ namespace juce
         if (v.isVoid())
             return FlexBox{}.alignContent;
 
-        jassert(options.contains(v));
-        return static_cast<FlexBox::AlignContent>(options.indexOf(v));
+        const auto normalized = normalizeCentreAliases(v);
+
+        jassert(options.contains(normalized));
+        return static_cast<FlexBox::AlignContent>(options.indexOf(normalized));
     }
 
     var VariantConverter<FlexBox::AlignContent>::toVar(FlexBox::AlignContent justification)
@@ -40,8 +51,10 @@ namespace juce
         if (v.isVoid())
             return FlexBox{}.alignItems;
 
-        jassert(options.contains(v));
-        return static_cast<FlexBox::AlignItems>(options.indexOf(v));
+        const auto normalized = normalizeCentreAliases(v);
+
+        jassert(options.contains(normalized));
+        return static_cast<FlexBox::AlignItems>(options.indexOf(normalized));
     }
 
     var VariantConverter<FlexBox::AlignItems>::toVar(FlexBox::AlignItems alignment)
@@ -89,8 +102,10 @@ namespace juce
         if (v.isVoid())
             return FlexBox{}.justifyContent;
 
-        jassert(options.contains(v));
-        return static_cast<FlexBox::JustifyContent>(options.indexOf(v));
+        const auto normalized = normalizeCentreAliases(v);
+
+        jassert(options.contains(normalized));
+        return static_cast<FlexBox::JustifyContent>(options.indexOf(normalized));
     }
 
     var VariantConverter<FlexBox::JustifyContent>::toVar(FlexBox::JustifyContent justification)
@@ -137,8 +152,10 @@ namespace juce
         if (v.isVoid())
             return FlexItem{}.alignSelf;
 
-        jassert(options.contains(v));
-        return static_cast<FlexItem::AlignSelf>(options.indexOf(v));
+        const auto normalized = normalizeCentreAliases(v);
+
+        jassert(options.contains(normalized));
+        return static_cast<FlexItem::AlignSelf>(options.indexOf(normalized));
     }
 
     var VariantConverter<FlexItem::AlignSelf>::toVar(FlexItem::AlignSelf alignSelf)
