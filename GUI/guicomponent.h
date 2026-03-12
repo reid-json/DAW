@@ -3,6 +3,9 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <jive_layouts/jive_layouts.h>
 #include "dawstate.h"
+#include "timelinecomponent.h"
+#include "arrangementcomponent.h"
+#include "pianoRoll.h"
 
 class GUIComponent : public juce::Component,
                      private juce::Timer
@@ -19,6 +22,9 @@ private:
     juce::ValueTree uiTree;
 
     DAWState state;
+    std::unique_ptr<TimelineComponent> timelineComponent;
+    std::unique_ptr<ArrangementComponent> arrangementComponent;
+    std::unique_ptr<PianoRollWindow> pianoRollWindow;
 
     bool draggingSidebar = false;
     int dragStartScreenX = 0;

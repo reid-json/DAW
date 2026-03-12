@@ -25,6 +25,12 @@ struct DAWState
     void tick (double dt)
     {
         if (transportState == TransportState::playing)
+        {
             playhead += dt;
+
+            constexpr double visibleLengthSeconds = 10.0;
+            if (playhead > visibleLengthSeconds)
+                playhead = 0.0;
+        }
     }
 };

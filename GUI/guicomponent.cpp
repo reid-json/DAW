@@ -2,6 +2,7 @@
 
 #include <juce_core/juce_core.h>
 #include <jive_core/algorithms/jive_Find.h>
+#include "timelinecomponent.h"
 
 namespace
 {
@@ -159,6 +160,12 @@ GUIComponent::GUIComponent()
         viewInterpreter.listenTo (*root);
         installCallbacks();
 
+        timelineComponent = std::make_unique<TimelineComponent> (state);
+        addAndMakeVisible (*timelineComponent);
+
+        arrangementComponent = std::make_unique<ArrangementComponent> (state);
+        addAndMakeVisible (*arrangementComponent);
+
         if (auto* resizerItem = findGuiItemById (*root, juce::Identifier ("sidebarResizer")))
         {
             if (auto resizerComp = resizerItem->getComponent())
@@ -208,6 +215,32 @@ void GUIComponent::resized()
         comp->setBounds (getLocalBounds());
 
     root->callLayoutChildrenWithRecursionLock();
+
+    if (timelineComponent != nullptr && root != nullptr)
+{
+    if (auto* timelineItem = findGuiItemById (*root, juce::Identifier ("timelinePanel")))
+    {
+        if (auto timelinePanel = timelineItem->getComponent())
+        {
+            auto screenBounds = timelinePanel->getScreenBounds();
+            auto localBounds = getLocalArea (nullptr, screenBounds);
+            timelineComponent->setBounds (localBounds.reduced (8));
+        }
+    }
+}
+
+    if (arrangementComponent != nullptr && root != nullptr)
+    {
+        if (auto* arrangementItem = findGuiItemById (*root, juce::Identifier ("arrangementPanel")))
+        {
+            if (auto arrangementPanel = arrangementItem->getComponent())
+            {
+                auto screenBounds = arrangementPanel->getScreenBounds();
+                auto localBounds = getLocalArea (nullptr, screenBounds);
+                arrangementComponent->setBounds (localBounds.reduced (16));
+            }
+        }
+    }
 }
 
 jive::GuiItem* GUIComponent::findGuiItemById (jive::GuiItem& node, const juce::Identifier& id)
@@ -315,6 +348,17 @@ void GUIComponent::installCallbacks()
         refreshFromState();
     });
 
+    bindButton ("pianoRollBtn", [this]
+    {
+        if (pianoRollWindow == nullptr)
+            pianoRollWindow = std::make_unique<PianoRollWindow>();
+
+        pianoRollWindow->setVisible (true);
+        pianoRollWindow->toFront (true);
+
+        DBG ("Piano Roll pressed");
+    });
+
     bindButton ("fileBtn", [] { DBG ("File pressed"); });
     bindButton ("undoBtn", [] { DBG ("Undo pressed"); });
     bindButton ("redoBtn", [] { DBG ("Redo pressed"); });
@@ -368,9 +412,6 @@ void GUIComponent::refreshFromState()
 
     setTextById ("newTrackBtnLabel",
                  "New Track (" + juce::String (state.trackCount) + ")");
-
-    setTextById ("playheadLabel",
-                 "Playhead: " + juce::String (state.playhead, 2));
 
     setTextById ("dbLabel",
                  juce::String (state.volumeDb, 1) + " dB");
@@ -426,6 +467,12 @@ void GUIComponent::timerCallback()
 {
     state.tick (1.0 / 60.0);
     refreshFromState();
+
+    if (timelineComponent != nullptr)
+        timelineComponent->repaint();
+
+    if (arrangementComponent != nullptr)
+        arrangementComponent->repaint();
 }
 
 void GUIComponent::SidebarResizerListener::mouseDown (const juce::MouseEvent& e)
