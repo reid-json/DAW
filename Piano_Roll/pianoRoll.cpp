@@ -100,14 +100,6 @@ void PianoKeyboardStrip::paint (juce::Graphics& g)
 PianoGridComponent::PianoGridComponent()
 {
     setOpaque (true);
-
-    notes =
-    {
-        { 1, 4, 77, "F5"  },
-        { 3, 3, 75, "D#5" },
-        { 6, 5, 70, "A#4" },
-        { 10, 2, 65, "F4" }
-    };
 }
 
 void PianoGridComponent::setNotes (std::vector<PianoRoll::Note> newNotes)
