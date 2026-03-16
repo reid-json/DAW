@@ -8,10 +8,18 @@ add_library(LowpassHighpassFilterPlugin
     Plugins/LowpassHighpassFilter/PluginEditor.cpp
     Plugins/LowpassHighpassFilter/LowpassHighpassFilter.cpp
 )
-
 target_include_directories(LowpassHighpassFilterPlugin PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/Plugins/LowpassHighpassFilter
 )
-#This probably needs to go into the top level cmakeLists file but I havent added it: target_link_libraries(DAW PRIVATE LowpassHighpassFilterPlugin)
+
+#added for GainPanFilter
+add_library(GainPanFilterPlugin
+    Plugins/GainPanFilter/PluginProcessor.cpp
+    Plugins/GainPanFilter/PluginEditor.cpp
+    Plugins/GainPanFilter/GainPanFilter.cpp
+)
+target_include_directories(GainPanFilterPlugin PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GainPanFilter
+)
 
 target_include_directories(Plugin PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
