@@ -1,17 +1,35 @@
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <juce_audio_processors/juce_audio_processors.h>
+#include "PluginProcessor.h"
+#include "PluginEditor.h"
 
-class Test_Plugin : public juce::Component
+class FilterTestComponent : public juce::Component
 {
 public:
-    Test_Plugin()
+    FilterTestComponent()
     {
-        // test stuff
+        processor = std::make_unique<LowpassHighpassFilterAudioProcessor>();
+        processor->prepareToPlay(44100.0, 512);
+
+        editor.reset(static_cast<LowpassHighpassFilterAudioProcessorEditor*>(processor->createEditor()));
+        addAndMakeVisible(editor.get());
+
+        setSize(editor->getWidth(), editor->getHeight());
     }
 
-    void paint(juce::Graphics& g) override
+    ~FilterTestComponent() override
     {
-        g.fillAll(juce::Colours::darkgrey);
-        g.setColour(juce::Colours::white);
-        g.drawText("Plugin Test", getLocalBounds(), juce::Justification::centred);
+        editor.reset();
+        processor->releaseResources();
     }
+
+    void resized() override
+    {
+        if (editor != nullptr)
+            editor->setBounds(getLocalBounds());
+    }
+
+private:
+    std::unique_ptr<LowpassHighpassFilterAudioProcessor> processor;
+    std::unique_ptr<LowpassHighpassFilterAudioProcessorEditor> editor;
 };

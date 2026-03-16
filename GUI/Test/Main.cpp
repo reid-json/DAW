@@ -10,7 +10,7 @@ public:
     const juce::String getApplicationVersion() override { return "1.0.0"; }
     bool moreThanOneInstanceAllowed() override { return true; }
 
-    void initialise(const juce::String& commandLine) override
+    void initialise(const juce::String&) override
     {
         mainWindow.reset(new MainWindow(getApplicationName()));
     }
@@ -19,24 +19,18 @@ public:
 
     void systemRequestedQuit() override { quit(); }
 
-    void anotherInstanceStarted(const juce::String& commandLine) override {}
+    void anotherInstanceStarted(const juce::String&) override {}
 
     class MainWindow : public juce::DocumentWindow
     {
     public:
-        MainWindow(juce::String name) : DocumentWindow(name, 
-            juce::Colours::black, 
-            allButtons)
+        MainWindow(juce::String name)
+            : DocumentWindow(name, juce::Colours::black, allButtons)
         {
             setUsingNativeTitleBar(true);
             setResizable(true, true);
-            
-            auto* contentComp = new GUIComponent();
-            setContentOwned(contentComp, true);
-
-    
+            setContentOwned(new GUIComponent(), true);
             centreWithSize(1000, 700);
-
             setVisible(true);
         }
 

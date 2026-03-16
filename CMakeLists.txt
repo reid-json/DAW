@@ -16,8 +16,6 @@ FetchContent_Declare(
     juce
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
     GIT_TAG        8.0.0
-    GIT_SHALLOW    TRUE
-    GIT_PROGRESS   TRUE
 )
 FetchContent_MakeAvailable(juce)
 
@@ -30,7 +28,6 @@ add_subdirectory(external/JIVE)
 add_subdirectory(Utilities)
 
 add_subdirectory(Audio_Engine)
-add_subdirectory(Audio_Engine/Test)
 
 add_subdirectory(Piano_Roll)
 add_subdirectory(Piano_Roll/Test)

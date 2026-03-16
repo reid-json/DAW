@@ -1,161 +1,109 @@
 #include "AudioEngine.h"
-#include <algorithm>
 
 AudioEngine::AudioEngine()
 {
-    
-    latestInput.setSize(2, 48000, false, false, true);
-    processedInput.setSize(2, 48000, false, false, true);
-
-    
-    deviceManager.initialise(2, 2, nullptr, true);
-    deviceManager.addAudioCallback(this);
 }
 
 AudioEngine::~AudioEngine()
 {
-    deviceManager.removeAudioCallback(this);
+    shutdown();
 }
 
-void AudioEngine::start()
+void AudioEngine::initialise(int inputChannels, int outputChannels)
 {
-    isRunning = true;
-}
-
-void AudioEngine::stop()
-{
-    isRunning = false;
-}
-
-void AudioEngine::startRecording()
-{
-    isRecording = true;
-}
-
-void AudioEngine::stopRecording()
-{
-    isRecording = false;
-}
-
-void AudioEngine::startPlayback()
-{
-    track.resetReadPosition();
-    isPlaying = true;
-}
-
-void AudioEngine::stopPlayback()
-{
-    isPlaying = false;
-}
-
-void AudioEngine::setInputGain(float newGain)
-{
-    inputGain = newGain;
-}
-
-void AudioEngine::setOutputGain(float newGain)
-{
-    outputGain = newGain;
-}
-
-void AudioEngine::setMonitoringEnabled(bool shouldMonitor)
-{
-    monitoringEnabled = shouldMonitor;
-}
-
-void AudioEngine::process(float* left, float* right, int numSamples)
-{
-    std::fill(left,  left  + numSamples, 0.0f);
-    std::fill(right, right + numSamples, 0.0f);
-
-    if (isPlaying)
-        track.playSamples(left, right, numSamples);
-}
-
-void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChannelData,
-                                                   int numInputChannels,
-                                                   float* const* outputChannelData,
-                                                   int numOutputChannels,
-                                                   int numSamples,
-                                                   const juce::AudioIODeviceCallbackContext& context)
-{
-    if (!isRunning || numOutputChannels < 2)
+    
+    juce::String error = deviceManager.initialise(inputChannels, outputChannels, nullptr, true, "ASIO", nullptr);
+    if (error.isNotEmpty())
     {
-        for (int ch = 0; ch < numOutputChannels; ++ch)
-            std::fill(outputChannelData[ch], outputChannelData[ch] + numSamples, 0.0f);
-        return;
+        
+        deviceManager.initialiseWithDefaultDevices(inputChannels, outputChannels);
     }
-
-    float* leftOut  = outputChannelData[0];
-    float* rightOut = outputChannelData[1];
-
-    const float* leftIn  = (numInputChannels > 0 ? inputChannelData[0] : nullptr);
-    const float* rightIn = (numInputChannels > 1 ? inputChannelData[1] : nullptr);
-
-    if (leftIn == nullptr)
-    {
-        std::fill(leftOut,  leftOut  + numSamples, 0.0f);
-        std::fill(rightOut, rightOut + numSamples, 0.0f);
-        return;
-    }
-
-    const int maxSamples = std::min(numSamples, processedInput.getNumSamples());
+    ioDeviceManager.initialise(deviceManager, inputChannels, outputChannels);
+    
+    std::cout << "[AUDIO] Device: " << deviceManager.getCurrentAudioDevice()->getName().toStdString() << std::endl;
 
     
-    processedInput.clear();
-    processedInput.copyFrom(0, 0, leftIn, maxSamples, inputGain);
+    startTime = juce::Time::getMillisecondCounter();
 
-    if (rightIn != nullptr)
-        processedInput.copyFrom(1, 0, rightIn, maxSamples, inputGain);
+    // midi input exposing
+    activeMidiInputs.clear();
+    const auto midiInputs = juce::MidiInput::getAvailableDevices();
+    std::cout << "[MIDI] Found " << midiInputs.size() << " inputs." << std::endl;
+    
+    for (const auto& devInfo : midiInputs)
+    {
+        std::cout << "  -> Opening Input: " << devInfo.name.toStdString() << std::endl;
+        if (auto input = juce::MidiInput::openDevice(devInfo.identifier, this))
+        {
+            input->start();
+            activeMidiInputs.push_back(std::move(input));
+        }
+    }
+
+    // midi output discovery
+    activeMidiOutputs.clear();
+    const auto midiOutputs = juce::MidiOutput::getAvailableDevices();
+    std::cout << "[MIDI] Found " << midiOutputs.size() << " outputs." << std::endl;
+
+    for (const auto& devInfo : midiOutputs)
+    {
+        std::cout << "  -> Opening Output: " << devInfo.name.toStdString() << std::endl;
+        if (auto output = juce::MidiOutput::openDevice(devInfo.identifier))
+        {
+            sendDiscoveryHandshake(output.get());
+            activeMidiOutputs.push_back(std::move(output));
+        }
+    }
+}
+
+void AudioEngine::shutdown()
+{
+    for (auto& input : activeMidiInputs)
+        input->stop();
+    
+    activeMidiInputs.clear();
+    activeMidiOutputs.clear();
+    
+    ioDeviceManager.shutdown();
+    deviceManager.closeAudioDevice();
+}
+
+void AudioEngine::sendDiscoveryHandshake(juce::MidiOutput* output)
+{
+    if (output == nullptr) return;
+
+    juce::String name = output->getName();
+    
+    if (name.containsIgnoreCase("Launchkey") || name.containsIgnoreCase("Novation"))
+    {
+        std::cout << "[HANDSHAKE] Sending DAW-Mode ON to " << name.toStdString() << std::endl;
+        juce::MidiMessage handshake = juce::MidiMessage::noteOn(16, 12, (juce::uint8)127);
+        output->sendMessageNow(handshake);
+    }
     else
-        processedInput.copyFrom(1, 0, leftIn, maxSamples, inputGain);
-
-    
-    latestInput.makeCopyOf(processedInput, true);
-
-    
-    inputBuffer.push(processedInput.getReadPointer(0), maxSamples);
-
-    
-    if (isRecording)
     {
-        const float* recInputs[2];
-        recInputs[0] = processedInput.getReadPointer(0);
-        recInputs[1] = processedInput.getReadPointer(1);
-        track.recordSamples(recInputs, 2, maxSamples);
+        std::cout << "[HANDSHAKE] Skipping generic device: " << name.toStdString() << std::endl;
+    }
+}
+
+void AudioEngine::handleIncomingMidiMessage(juce::MidiInput* source, const juce::MidiMessage& message)
+{
+    if (message.getChannel() == 16)
+        return;
+
+    if (!message.isNoteOn() && !message.isNoteOff() && !message.isController() && !message.isPitchWheel())
+        return;
+
+    bool isStillStarting = (juce::Time::getMillisecondCounter() - startTime < 1000);
+
+    auto msg = message;
+    
+    if (!isStillStarting)
+    {
+        const juce::String sourceName = (source != nullptr) ? source->getName() : "INTERNAL";
+        std::cout << "[MIDI EVENT] " << sourceName.toStdString() << ": " << msg.getDescription().toStdString() << std::endl;
     }
 
-  
-    std::fill(leftOut,  leftOut  + numSamples, 0.0f);
-    std::fill(rightOut, rightOut + numSamples, 0.0f);
-
-   
-    if (monitoringEnabled && !isRecording)
-    {
-        const float* monL = processedInput.getReadPointer(0);
-        const float* monR = processedInput.getReadPointer(1);
-
-        for (int i = 0; i < maxSamples; ++i)
-        {
-            leftOut[i]  += monL[i];
-            rightOut[i] += monR[i];
-        }
-    }
-
-    
-    if (isPlaying)
-        track.playSamples(leftOut, rightOut, numSamples);
-
-    
-    dspChain.process(leftOut, rightOut, numSamples);
-
-    
-    if (outputGain != 1.0f)
-    {
-        for (int i = 0; i < numSamples; ++i)
-        {
-            leftOut[i]  *= outputGain;
-            rightOut[i] *= outputGain;
-        }
-    }
+    msg.setTimeStamp(0);
+    ioDeviceManager.getMidiCollector().addMessageToQueue(msg);
 }
