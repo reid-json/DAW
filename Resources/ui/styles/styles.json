@@ -1,8 +1,72 @@
 {
-    "background": "#1A1A1A",
-    "foreground": "#FFFFFF",
-    "font-family": "Arial",
-    "#title": {
-        "foreground": "#00FF00"
-    }
+  ".root": {
+    "background": "#0f1116"
+  },
+
+  ".header": {
+    "background": "#161b22",
+    "border": "rgba(255,255,255,0.08)"
+  },
+
+  ".sidebar": {
+    "background": "#141821",
+    "border": "rgba(255,255,255,0.08)"
+  },
+
+  ".workspace": {
+    "background": "#0f1116"
+  },
+
+  ".panel": {
+    "background": "#161b26",
+    "border": "rgba(255,255,255,0.06)",
+    "border-radius": 10
+  },
+
+  ".panelInset": {
+    "background": "rgba(255,255,255,0.04)",
+    "border": "rgba(255,255,255,0.08)",
+    "border-radius": 8
+  },
+
+  ".btn": {
+    "background": "#242b3a",
+    "foreground": "#e0e6f0",
+    "border": "rgba(255,255,255,0.12)",
+    "border-radius": 8
+  },
+
+  ".btn-primary": {
+    "background": "#3a7afe",
+    "foreground": "#ffffff",
+    "border": "#3a7afe",
+    "border-radius": 8
+  },
+
+  ".laneRow": {
+    "background": "#1a1f2c",
+    "border": "rgba(255,255,255,0.08)",
+    "border-radius": 8
+  },
+
+  ".laneAccent": {
+    "background": "#3a7afe",
+    "border-radius": 5
+  },
+
+  ".sidebar-resizer": {
+    "background": "rgba(255,255,255,0.06)"
+  },
+
+  ".label": {
+    "foreground": "#e0e6f0"
+  },
+
+  ".secondary-label": {
+    "foreground": "#aab4c8"
+  },
+
+  "#timelineSlider": {
+    "foreground": "#3a7afe"
+  }
 }
