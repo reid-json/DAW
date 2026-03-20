@@ -62,6 +62,20 @@
     "border-radius": 8
   },
 
+  ".btn-monitor-off": {
+    "background": "#3a2f1f",
+    "foreground": "#f4d58d",
+    "border": "#8a6d3b",
+    "border-radius": 8
+  },
+
+  ".btn-monitor-on": {
+    "background": "#1f3a2c",
+    "foreground": "#b7f7c3",
+    "border": "#38c172",
+    "border-radius": 8
+  },
+
   ".btn-danger": {
     "background": "#2d1620",
     "foreground": "#ffb3c1",

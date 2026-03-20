@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <vector>
+#include <juce_core/juce_core.h>
 
 struct DAWState
 {
@@ -23,6 +24,7 @@ struct DAWState
 
     bool isRecording = false;
     bool clipSidebarCollapsed = false;
+    bool audioMonitoringEnabled = false;
 
     std::vector<juce::String> recordedClips;
     int nextRecordedClipNumber = 1;
@@ -64,6 +66,11 @@ struct DAWState
 
         if (transportState == TransportState::stopped)
             transportState = TransportState::playing;
+    }
+
+    void toggleAudioMonitoring()
+    {
+        audioMonitoringEnabled = ! audioMonitoringEnabled;
     }
 
     void addTrack() { ++trackCount; }
