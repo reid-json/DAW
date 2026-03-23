@@ -8,7 +8,10 @@ target_sources(PluginTest PRIVATE
 )
 
 target_link_libraries(PluginTest PRIVATE
+    Plugin
     juce::juce_gui_basics
     juce::juce_gui_extra
-    Plugin
+    juce::juce_audio_processors
+    juce::juce_audio_basics
+    juce::juce_audio_devices
 )

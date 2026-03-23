@@ -1,6 +1,5 @@
 #include <juce_gui_basics/juce_gui_basics.h>
-#include "Test_Plugin.cpp"  
-
+#include "Test_Plugin.cpp"
 
 class ModuleTestApplication : public juce::JUCEApplication
 {
@@ -35,12 +34,10 @@ public:
                              DocumentWindow::allButtons)
         {
             setUsingNativeTitleBar(true);
-
- 
-            setContentOwned(new Test_Plugin(), true);
-
-            centreWithSize(800, 600);
-            setResizable(true, true);
+            setContentOwned(new FilterTestComponent(), true);
+            centreWithSize(getContentComponent()->getWidth(),
+                           getContentComponent()->getHeight());
+            setResizable(false, false);
             setVisible(true);
         }
 
@@ -53,6 +50,5 @@ public:
 private:
     std::unique_ptr<MainWindow> mainWindow;
 };
-
 
 START_JUCE_APPLICATION(ModuleTestApplication)

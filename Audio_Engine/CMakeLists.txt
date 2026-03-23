@@ -1,25 +1,27 @@
-#This is the actual module's cmake file, and will add more files here later
-
 add_library(Audio_Engine STATIC
     Root/AudioEngine.cpp
-    Root/AudioEngine.h
-    IO/AudioInputHandler.cpp
-    IO/AudioInputHandler.h
-    IO/InputRingBuffer.cpp
-    IO/InputRingBuffer.h
-    Tracks/AudioTrack.cpp
-    Tracks/AudioTrack.h
-    DSP/DSPProcessor.h
-    DSP/GainProcessor.cpp
-    DSP/GainProcessor.h
-    Graph/DSPChain.cpp
-    Graph/DSPChain.h
+    IO/DeviceManager.cpp
+    IO/InputNode.cpp
+    IO/OutputNode.cpp
+    MIDI/MidiInputNode.cpp
+    MIDI/MidiSynth.cpp
+    Tracks/TrackInputRouter.cpp
 )
 
-target_link_libraries(Audio_Engine
-    PRIVATE
-        juce::juce_gui_basics
-        juce::juce_audio_devices
-        juce::juce_audio_basics
-        
+target_include_directories(Audio_Engine PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/IO
+    ${CMAKE_CURRENT_SOURCE_DIR}/MIDI
+    ${CMAKE_CURRENT_SOURCE_DIR}/Root
+    ${CMAKE_CURRENT_SOURCE_DIR}/Tracks
 )
+
+target_link_libraries(Audio_Engine PUBLIC
+    juce::juce_audio_basics
+    juce::juce_audio_devices
+    juce::juce_audio_formats
+    juce::juce_audio_processors
+    juce::juce_dsp
+)
+
+add_subdirectory(Test)

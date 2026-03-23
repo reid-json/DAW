@@ -1,6 +1,12 @@
 add_library(GUI STATIC
     guicomponent.cpp
     guicomponent.h
+    dawstate.h
+    test_dawstate.cpp
+    timelinecomponent.cpp
+    timelinecomponent.h
+    arrangementcomponent.cpp
+    arrangementcomponent.h
 )
 
 target_link_libraries(GUI
@@ -10,6 +16,7 @@ target_link_libraries(GUI
         jive::jive_components
         jive::jive_layouts
         jive::jive_style_sheets
+        Piano_Roll
 )
 
 target_include_directories(GUI PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
