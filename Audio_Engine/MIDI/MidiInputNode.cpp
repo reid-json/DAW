@@ -2,6 +2,7 @@
 
 void MidiInputNode::prepare(double sampleRate, int blockSize)
 {
+    juce::ignoreUnused(sampleRate, blockSize);
     midiBuffer.clear();
 }
 

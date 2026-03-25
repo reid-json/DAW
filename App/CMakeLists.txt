@@ -16,8 +16,6 @@ target_link_libraries(DAW PRIVATE
     GUI
     Audio_Engine
     Piano_Roll
-    Utilities
-    Plugin
     Plugin_Hosting
 
     juce::juce_gui_basics

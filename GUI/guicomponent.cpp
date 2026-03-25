@@ -109,10 +109,60 @@ namespace
     }
 }
 
-GUIComponent::GUIComponent()
+void GUIComponent::registerCustomComponentTypes()
 {
-    deviceManager.initialise (0, 2, nullptr, true);
+    viewInterpreter.getComponentFactory().set ("TimelineView", [this]
+    {
+        auto component = std::make_unique<TimelineComponent> (state);
+        timelineComponent = component.get();
+        return component;
+    });
 
+    viewInterpreter.getComponentFactory().set ("ArrangementView", [this]
+    {
+        auto component = std::make_unique<ArrangementComponent> (state);
+
+        component->onRecentClipDropped = [this] (int assetId, int trackIndex, double startSeconds)
+        {
+            if (onRecentClipDropped)
+                onRecentClipDropped (assetId, trackIndex, startSeconds);
+        };
+
+        component->onTimelineClipMoved = [this] (int placementId, int trackIndex, double startSeconds)
+        {
+            if (onTimelineClipMoved)
+                onTimelineClipMoved (placementId, trackIndex, startSeconds);
+        };
+
+        component->onTimelineClipDeleteRequested = [this] (int placementId)
+        {
+            if (onTimelineClipDeleteRequested)
+            {
+                onTimelineClipDeleteRequested (placementId);
+                return;
+            }
+
+            auto it = std::remove_if (state.timelineClips.begin(), state.timelineClips.end(),
+                                      [placementId] (const TimelineClipItem& clip) { return clip.placementId == placementId; });
+            state.timelineClips.erase (it, state.timelineClips.end());
+            repaintDynamicViews();
+        };
+
+        arrangementComponent = component.get();
+        return component;
+    });
+
+    viewInterpreter.getComponentFactory().set ("RecentClipsView", [this]
+    {
+        auto component = std::make_unique<RecentClipsComponent> (state);
+        recentClipsComponent = component.get();
+        return component;
+    });
+}
+
+GUIComponent::GUIComponent(juce::AudioDeviceManager& sharedDeviceManager)
+    : deviceManager(sharedDeviceManager)
+{
     const auto resourcesDir = findResourcesDir();
 
     const auto xmlFile = resourcesDir.getChildFile ("ui")
@@ -122,11 +172,6 @@ GUIComponent::GUIComponent()
     const auto jsonStyleFile = resourcesDir.getChildFile ("ui")
                                            .getChildFile ("styles")
                                            .getChildFile ("styles.json");
-
-    DBG ("=== UI LOAD DEBUG ===");
-    DBG ("Resources Dir: " << resourcesDir.getFullPathName());
-    DBG ("XML path: " << xmlFile.getFullPathName());
-    DBG ("Style path: " << jsonStyleFile.getFullPathName());
 
     if (xmlFile.existsAsFile())
     {
@@ -138,8 +183,6 @@ GUIComponent::GUIComponent()
         }
         else
         {
-            DBG ("XML parse failed: " << doc.getLastParseError());
-
             uiTree = juce::ValueTree ("Component");
             uiTree.setProperty ("id", "root", nullptr);
 
@@ -160,15 +203,9 @@ GUIComponent::GUIComponent()
 
     stylesheet = parseJsonFile (jsonStyleFile);
     if (stylesheet.isObject())
-    {
         applyStylesRecursively (uiTree, stylesheet);
-        DBG ("Applied external stylesheet.");
-    }
-    else
-    {
-        DBG ("Failed to load external stylesheet. Inline styles only.");
-    }
 
+    registerCustomComponentTypes();
     root = viewInterpreter.interpret (uiTree);
 
     if (root != nullptr)
@@ -178,12 +215,6 @@ GUIComponent::GUIComponent()
 
         viewInterpreter.listenTo (*root);
         installCallbacks();
-
-        timelineComponent = std::make_unique<TimelineComponent> (state);
-        addAndMakeVisible (*timelineComponent);
-
-        arrangementComponent = std::make_unique<ArrangementComponent> (state);
-        addAndMakeVisible (*arrangementComponent);
 
         if (auto* resizerItem = findGuiItemById (*root, juce::Identifier ("sidebarResizer")))
         {
@@ -199,9 +230,7 @@ GUIComponent::GUIComponent()
     }
 
     rebuildTrackList();
-    rebuildClipList();
     refreshFromState();
-    startTimerHz (60);
 
     setSize (1280, 720);
     resized();
@@ -209,8 +238,6 @@ GUIComponent::GUIComponent()
 
 GUIComponent::~GUIComponent()
 {
-    stopTimer();
-
     if (root == nullptr || resizerListener == nullptr)
         return;
 
@@ -236,32 +263,6 @@ void GUIComponent::resized()
         comp->setBounds (getLocalBounds());
 
     root->callLayoutChildrenWithRecursionLock();
-
-    if (timelineComponent != nullptr)
-    {
-        if (auto* timelineItem = findGuiItemById (*root, juce::Identifier ("timelinePanel")))
-        {
-            if (auto timelinePanel = timelineItem->getComponent())
-            {
-                auto screenBounds = timelinePanel->getScreenBounds();
-                auto localBounds = getLocalArea (nullptr, screenBounds);
-                timelineComponent->setBounds (localBounds.reduced (8));
-            }
-        }
-    }
-
-    if (arrangementComponent != nullptr)
-    {
-        if (auto* arrangementItem = findGuiItemById (*root, juce::Identifier ("arrangementPanel")))
-        {
-            if (auto arrangementPanel = arrangementItem->getComponent())
-            {
-                auto screenBounds = arrangementPanel->getScreenBounds();
-                auto localBounds = getLocalArea (nullptr, screenBounds);
-                arrangementComponent->setBounds (localBounds.reduced (16));
-            }
-        }
-    }
 }
 
 jive::GuiItem* GUIComponent::findGuiItemById (jive::GuiItem& node, const juce::Identifier& id)
@@ -331,45 +332,32 @@ void GUIComponent::installCallbacks()
 
     bindButton ("playBtn", [this]
     {
-        state.play();
-        refreshFromState();
+        if (onPlayRequested)
+            onPlayRequested();
     });
 
     bindButton ("stopBtn", [this]
     {
-        state.stop();
-
-        juce::MessageManager::callAsync ([this]
-        {
-            rebuildClipList();
-            refreshFromState();
-        });
+        if (onStopRequested)
+            onStopRequested();
     });
 
     bindButton ("pauseBtn", [this]
     {
-        state.pause();
-        refreshFromState();
+        if (onPauseRequested)
+            onPauseRequested();
     });
 
     bindButton ("restartBtn", [this]
     {
-        state.restart();
-        refreshFromState();
+        if (onRestartRequested)
+            onRestartRequested();
     });
 
     bindButton ("recordBtn", [this]
     {
-        const auto clipCountBefore = state.recordedClips.size();
-        state.toggleRecord();
-
-        juce::MessageManager::callAsync ([this, clipCountBefore]
-        {
-            if (state.recordedClips.size() != clipCountBefore)
-                rebuildClipList();
-
-            refreshFromState();
-        });
+        if (onRecordToggleRequested)
+            onRecordToggleRequested();
     });
 
     bindButton ("settingsBtn", [this]
@@ -403,31 +391,11 @@ void GUIComponent::installCallbacks()
         pianoRollWindow->toFront (true);
     });
 
-    bindButton ("fileBtn", [] {});
-    bindButton ("undoBtn", [] {});
-    bindButton ("redoBtn", [] {});
-
-    if (root == nullptr)
-        return;
-
-    if (auto* sliderItem = findGuiItemById (*root, juce::Identifier ("timelineSlider")))
+    bindButton ("fileBtn", [this]
     {
-        if (auto comp = sliderItem->getComponent())
-        {
-            if (auto* slider = dynamic_cast<juce::Slider*> (comp.get()))
-            {
-                slider->setRange (-60.0, 6.0, 0.1);
-                slider->setValue (state.volumeDb, juce::dontSendNotification);
-
-                slider->onValueChange = [this, slider]
-                {
-                    state.volumeDb = slider->getValue();
-                    refreshFromState();
-                };
-            }
-        }
-    }
-
+        if (onImportAudioRequested)
+            onImportAudioRequested();
+    });
     bindDynamicTrackButtons();
 }
 
@@ -486,13 +454,6 @@ void GUIComponent::refreshFromState()
             node.setProperty ("text", text, nullptr);
     };
 
-    auto setValueById = [this] (const juce::String& id, double value)
-    {
-        auto node = jive::findElementWithID (uiTree, juce::Identifier (id));
-        if (node.isValid())
-            node.setProperty ("value", value, nullptr);
-    };
-
     auto setClassById = [this] (const juce::String& id, const juce::String& className)
     {
         auto node = jive::findElementWithID (uiTree, juce::Identifier (id));
@@ -514,10 +475,10 @@ void GUIComponent::refreshFromState()
                  state.transportState == DAWState::TransportState::playing ? "Playing" : "Play");
 
     setTextById ("stopBtnLabel",
-                 state.transportState == DAWState::TransportState::stopped ? "Stopped" : "Stop");
+                 "Stop");
 
     setTextById ("pauseBtnLabel",
-                 state.transportState == DAWState::TransportState::paused ? "Paused" : "Pause");
+                 state.transportState == DAWState::TransportState::paused ? "Resume" : "Pause");
 
     setTextById ("recordBtnLabel",
                  state.isRecording ? "Recording" : "Record");
@@ -527,11 +488,6 @@ void GUIComponent::refreshFromState()
 
     setTextById ("newTrackBtnLabel",
                  "New Track (" + juce::String (state.trackCount) + ")");
-
-    setTextById ("dbLabel",
-                 juce::String (state.volumeDb, 1) + " dB");
-
-    setValueById ("timelineSlider", state.volumeDb);
 
     setTextById ("toggleClipSidebarBtnLabel",
              state.clipSidebarCollapsed ? ">" : "<");
@@ -625,74 +581,27 @@ void GUIComponent::rebuildTrackList()
     bindDynamicTrackButtons();
 }
 
-void GUIComponent::rebuildClipList()
+void GUIComponent::refreshExternalState(bool shouldRefreshControls, bool shouldRebuildTrackList)
 {
-    auto clipListNode = jive::findElementWithID (uiTree, juce::Identifier ("clipList"));
-    if (! clipListNode.isValid())
-        return;
+    if (shouldRebuildTrackList)
+        rebuildTrackList();
 
-    while (clipListNode.getNumChildren() > 0)
-        clipListNode.removeChild (0, nullptr);
+    if (shouldRefreshControls)
+        refreshFromState();
 
-    const auto clipItemStyle = makeStyleStringForClasses ("clipItem", stylesheet);
-    const auto clipNameStyle = makeStyleStringForClasses ("label", stylesheet);
-    const auto secondaryStyle = makeStyleStringForClasses ("secondary-label", stylesheet);
-
-    if (state.recordedClips.empty())
-    {
-        auto emptyText = juce::ValueTree ("Text");
-        emptyText.setProperty ("id", "emptyClipListLabel", nullptr);
-        emptyText.setProperty ("class", "secondary-label", nullptr);
-        emptyText.setProperty ("style", secondaryStyle, nullptr);
-        emptyText.setProperty ("text", "No recorded clips yet", nullptr);
-        clipListNode.appendChild (emptyText, nullptr);
-
-        root->callLayoutChildrenWithRecursionLock();
-        return;
-    }
-
-    for (int i = 0; i < (int) state.recordedClips.size(); ++i)
-    {
-        auto clipItem = juce::ValueTree ("Component");
-        clipItem.setProperty ("id", "clipItem" + juce::String (i + 1), nullptr);
-        clipItem.setProperty ("class", "clipItem", nullptr);
-        clipItem.setProperty ("style", clipItemStyle, nullptr);
-        clipItem.setProperty ("display", "flex", nullptr);
-        clipItem.setProperty ("flex-direction", "column", nullptr);
-        clipItem.setProperty ("padding", 8, nullptr);
-        clipItem.setProperty ("row-gap", 3, nullptr);
-        clipItem.setProperty ("min-height", 52, nullptr);
-
-        auto nameText = juce::ValueTree ("Text");
-        nameText.setProperty ("id", "clipName" + juce::String (i + 1), nullptr);
-        nameText.setProperty ("class", "label", nullptr);
-        nameText.setProperty ("style", clipNameStyle, nullptr);
-        nameText.setProperty ("text", state.recordedClips[(size_t) i], nullptr);
-
-        auto metaText = juce::ValueTree ("Text");
-        metaText.setProperty ("id", "clipMeta" + juce::String (i + 1), nullptr);
-        metaText.setProperty ("class", "secondary-label", nullptr);
-        metaText.setProperty ("style", secondaryStyle, nullptr);
-        metaText.setProperty ("text", "Recorded audio clip", nullptr);
-
-        clipItem.appendChild (nameText, nullptr);
-        clipItem.appendChild (metaText, nullptr);
-        clipListNode.appendChild (clipItem, nullptr);
-    }
-
-    root->callLayoutChildrenWithRecursionLock();
+    repaintDynamicViews();
 }
 
-void GUIComponent::timerCallback()
+void GUIComponent::repaintDynamicViews()
 {
-    state.tick (1.0 / 60.0);
-    refreshFromState();
-
     if (timelineComponent != nullptr)
         timelineComponent->repaint();
 
     if (arrangementComponent != nullptr)
         arrangementComponent->repaint();
+
+    if (recentClipsComponent != nullptr)
+        recentClipsComponent->repaint();
 }
 
 void GUIComponent::SidebarResizerListener::mouseDown (const juce::MouseEvent& e)

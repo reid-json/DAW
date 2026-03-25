@@ -7,6 +7,8 @@ add_library(GUI STATIC
     timelinecomponent.h
     arrangementcomponent.cpp
     arrangementcomponent.h
+    recentclipscomponent.cpp
+    recentclipscomponent.h
     settingswindow.h
 )
 

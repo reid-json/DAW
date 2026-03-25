@@ -1,86 +1,76 @@
-#include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_utils/juce_audio_utils.h>
+#include <juce_gui_basics/juce_gui_basics.h>
 #include "../Root/AudioEngine.h"
 
-
-class MainComponent;
-
-class TrackComponent : public juce::Component
+class RecentAssetsModel : public juce::ListBoxModel
 {
 public:
-    TrackComponent(TrackInputRouter* router, int idx, MainComponent& parent) 
-        : trackRouter(router), mainComp(parent)
+    explicit RecentAssetsModel(AudioEngine& engineRef) : engine(engineRef) {}
+
+    int getNumRows() override
     {
-        trackName.setText("Track " + juce::String(idx + 1), juce::dontSendNotification);
-        trackName.setJustificationType(juce::Justification::centred);
-        addAndMakeVisible(trackName);
-        
-        enableAudioBtn.setButtonText("Audio In (Mic/Guitar)");
-        enableAudioBtn.setToggleState(true, juce::dontSendNotification);
-        enableAudioBtn.onClick = [this] { trackRouter->setAudioInputEnabled(enableAudioBtn.getToggleState()); };
-        addAndMakeVisible(enableAudioBtn);
-        
-        enableMidiBtn.setButtonText("MIDI Synth");
-        enableMidiBtn.setToggleState(true, juce::dontSendNotification);
-        enableMidiBtn.onClick = [this] { trackRouter->setMidiEnabled(enableMidiBtn.getToggleState()); };
-        addAndMakeVisible(enableMidiBtn);
-        
-        removeBtn.setButtonText("Remove Track");
-        removeBtn.setColour(juce::TextButton::buttonColourId, juce::Colours::darkred);
-        removeBtn.onClick = [this] { requestRemoval(); };
-        addAndMakeVisible(removeBtn);
+        return static_cast<int>(engine.getArrangementState().getRecentAssetIds().size());
     }
-    
-    void paint(juce::Graphics& g) override
+
+    void paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height, bool rowIsSelected) override
     {
-        g.fillAll(juce::Colours::black.withAlpha(0.2f));
-        g.setColour(juce::Colours::white.withAlpha(0.5f));
-        g.drawRect(getLocalBounds(), 1);
+        if (rowIsSelected)
+            g.fillAll(juce::Colour(0xff2b4955));
+
+        const auto& arrangement = engine.getArrangementState();
+        const auto& recentIds = arrangement.getRecentAssetIds();
+        if (rowNumber < 0 || rowNumber >= static_cast<int>(recentIds.size()))
+            return;
+
+        if (const auto* asset = arrangement.findAsset(recentIds[static_cast<size_t>(rowNumber)]))
+        {
+            g.setColour(juce::Colours::white);
+            g.drawText(asset->name, 8, 4, width - 16, 22, juce::Justification::centredLeft, true);
+            g.setColour(juce::Colours::white.withAlpha(0.6f));
+            g.drawText(juce::String(asset->clip.getLengthSeconds(), 2) + " s", 8, 24, width - 16, 18, juce::Justification::centredLeft, false);
+        }
     }
-    
-    void resized() override
-    {
-        auto area = getLocalBounds().reduced(10);
-        trackName.setBounds(area.removeFromTop(30));
-        area.removeFromTop(10);
-        enableAudioBtn.setBounds(area.removeFromTop(30));
-        area.removeFromTop(10);
-        enableMidiBtn.setBounds(area.removeFromTop(30));
-        
-        area.removeFromTop(15);
-        removeBtn.setBounds(area.removeFromTop(30));
-    }
-    
-    TrackInputRouter* getRouter() const { return trackRouter; }
-    
+
 private:
-    TrackInputRouter* trackRouter;
-    MainComponent& mainComp;
-    juce::Label trackName;
-    juce::ToggleButton enableAudioBtn;
-    juce::ToggleButton enableMidiBtn;
-    juce::TextButton removeBtn;
-    
-    void requestRemoval();
+    AudioEngine& engine;
 };
 
-class MainComponent : public juce::Component
+class MainComponent : public juce::Component, private juce::Timer
 {
 public:
     MainComponent()
+        : recentAssetsModel(engine)
     {
-        // Initializing with default system devices
-        // need to have a settings page to let users decide which devices to use but rn itll recognize the default ones 
         engine.initialise(2, 2);
 
-        addAndMakeVisible(addTrackButton);
-        addTrackButton.setButtonText("Add Track");
-        addTrackButton.onClick = [this] { addTrack(); };
+        recordButton.setButtonText("Start Recording");
+        recordButton.onClick = [this]
+        {
+            if (engine.isRecording())
+                engine.stopRecording();
+            else
+                engine.startRecording();
 
-        setSize(600, 300);
-        
-        // so it doesn't start with 0 tracks
-        addTrack();
+            refreshUi();
+        };
+        addAndMakeVisible(recordButton);
+
+        uploadButton.setButtonText("Upload Audio");
+        uploadButton.onClick = [this] { importAudio(); };
+        addAndMakeVisible(uploadButton);
+
+        statusLabel.setJustificationType(juce::Justification::centredLeft);
+        addAndMakeVisible(statusLabel);
+
+        recentLabel.setText("Recent Recordings / Uploaded Files", juce::dontSendNotification);
+        addAndMakeVisible(recentLabel);
+
+        recentList.setModel(&recentAssetsModel);
+        addAndMakeVisible(recentList);
+
+        setSize(520, 420);
+        startTimerHz(8);
+        refreshUi();
     }
 
     ~MainComponent() override
@@ -90,65 +80,77 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(juce::Colour(0xff323e44)); 
+        g.fillAll(juce::Colour(0xff10181d));
     }
 
     void resized() override
     {
-        auto area = getLocalBounds().reduced(10);
-        
-        addTrackButton.setBounds(area.removeFromTop(30));
+        auto area = getLocalBounds().reduced(16);
+        auto buttons = area.removeFromTop(30);
+        recordButton.setBounds(buttons.removeFromLeft(160));
+        buttons.removeFromLeft(10);
+        uploadButton.setBounds(buttons.removeFromLeft(140));
         area.removeFromTop(10);
-        
-        if (!trackComps.isEmpty())
-        {
-            int w = area.getWidth() / trackComps.size();
-            for (auto* tc : trackComps)
-                tc->setBounds(area.removeFromLeft(w).reduced(5));
-        }
-    }
-    
-    void removeTrackUI(TrackComponent* comp)
-    {
-        engine.removeTrack(comp->getRouter());
-        trackComps.removeObject(comp);
-        
-        
-        for (int i = 0; i < trackComps.size(); ++i)
-        {
-            
-        }
-        
-        resized();
-        repaint();
+        statusLabel.setBounds(area.removeFromTop(24));
+        area.removeFromTop(12);
+        recentLabel.setBounds(area.removeFromTop(20));
+        area.removeFromTop(8);
+        recentList.setBounds(area);
     }
 
 private:
-    AudioEngine engine;
-    juce::TextButton addTrackButton;
-    juce::OwnedArray<TrackComponent> trackComps;
-
-    void addTrack()
+    void timerCallback() override
     {
-        if (trackComps.size() >= 4) return; // up to 4 tracks 
-        auto* newTrack = engine.addTrack();
-        auto* trackComp = new TrackComponent(newTrack, trackComps.size(), *this);
-        trackComps.add(trackComp);
-        addAndMakeVisible(trackComp);
-        resized();
+        refreshUi();
     }
-};
 
-void TrackComponent::requestRemoval()
-{
-    mainComp.removeTrackUI(this);
-}
+    void refreshUi()
+    {
+        recentList.updateContent();
+        recentList.repaint();
+
+        if (engine.isRecording())
+        {
+            recordButton.setButtonText("Stop Recording");
+            statusLabel.setText("Recording: " + juce::String(engine.getCurrentRecordingLengthSeconds(), 2) + " s",
+                                juce::dontSendNotification);
+        }
+        else
+        {
+            recordButton.setButtonText("Start Recording");
+            statusLabel.setText("Idle", juce::dontSendNotification);
+        }
+    }
+
+    void importAudio()
+    {
+        chooser = std::make_unique<juce::FileChooser>("Choose an audio file", juce::File(), "*.wav;*.mp3;*.aif;*.aiff;*.flac");
+        chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+            [this](const juce::FileChooser& fileChooser)
+            {
+                const auto file = fileChooser.getResult();
+                if (file.existsAsFile())
+                    engine.importAudioFileAsRecentAsset(file);
+
+                chooser.reset();
+                refreshUi();
+            });
+    }
+
+    AudioEngine engine;
+    RecentAssetsModel recentAssetsModel;
+    juce::TextButton recordButton;
+    juce::TextButton uploadButton;
+    juce::Label statusLabel;
+    juce::Label recentLabel;
+    juce::ListBox recentList;
+    std::unique_ptr<juce::FileChooser> chooser;
+};
 
 class AudioEngineTestApp : public juce::JUCEApplication
 {
 public:
-    AudioEngineTestApp() {}
-    const juce::String getApplicationName() override { return "Audio_Engine Simple UI Test"; }
+    const juce::String getApplicationName() override { return "Audio Engine Test"; }
     const juce::String getApplicationVersion() override { return "1.0.0"; }
     bool moreThanOneInstanceAllowed() override { return true; }
 
@@ -167,10 +169,12 @@ public:
         quit();
     }
 
+private:
     class MainWindow : public juce::DocumentWindow
     {
     public:
-        MainWindow(juce::String name) : DocumentWindow(name, juce::Colours::darkgrey, DocumentWindow::allButtons)
+        explicit MainWindow(juce::String name)
+            : DocumentWindow(name, juce::Colours::darkgrey, DocumentWindow::allButtons)
         {
             setUsingNativeTitleBar(true);
             setContentOwned(new MainComponent(), true);
@@ -185,7 +189,6 @@ public:
         }
     };
 
-private:
     std::unique_ptr<MainWindow> mainWindow;
 };
 

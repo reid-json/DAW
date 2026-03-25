@@ -27,18 +27,6 @@
       <Text id="fileBtnLabel" text="File"/>
     </Button>
 
-    <Button id="undoBtn"
-            class="btn"
-            width="72">
-      <Text id="undoBtnLabel" text="Undo"/>
-    </Button>
-
-    <Button id="redoBtn"
-            class="btn"
-            width="72">
-      <Text id="redoBtnLabel" text="Redo"/>
-    </Button>
-
     <Button id="restartBtn"
             class="btn"
             width="80">
@@ -82,15 +70,6 @@
     </Button>
 
     <Component flex-grow="1"/>
-
-    <Text id="dbLabel"
-          class="label"
-          text="-6.0 dB"
-          width="70"/>
-
-    <Slider id="timelineSlider"
-            width="220"
-            height="20"/>
   </Component>
 
   <Component id="bodyContent"
@@ -116,7 +95,7 @@
               class="btn"
               width="140"
               height="32">
-        <Text id="newTrackBtnLabel" text="New Track (1)"/>
+        <Text id="newTrackBtnLabel" text="New Track (5)"/>
       </Button>
 
       <Component id="trackList"
@@ -152,7 +131,7 @@
         class="btn clipToggleBtn"
         width="28"
         height="32">
-        <Text id="toggleClipSidebarBtnLabel" text="<"/>
+        <Text id="toggleClipSidebarBtnLabel" text="&lt;"/>
       </Button>
 
       <Component id="clipBrowserHeader"
@@ -171,15 +150,11 @@
       <Component id="clipSidebarSpacer"
                  height="4"/>
 
-      <Component id="clipList"
-           display="flex"
-           flex-direction="column"
+      <RecentClipsView id="clipList"
            align-self="stretch"
-           row-gap="8"
            flex-grow="1"
            min-width="0"
-           min-height="0">
-      </Component>
+           min-height="0"/>
     </Component>
 
     <Component id="workspaceContent"
@@ -194,14 +169,29 @@
 
       <Component id="timelinePanel"
                  class="panel"
-                 height="90"/>
+                 display="flex"
+                 flex-direction="column"
+                 height="90"
+                 padding="8">
+        <TimelineView id="timelineView"
+                      flex-grow="1"
+                      min-width="0"
+                      min-height="0"/>
+      </Component>
 
       <Component id="arrangementPanel"
                  class="panel"
+                 display="flex"
+                 flex-direction="column"
                  flex-grow="1"
                  min-width="0"
                  min-height="0"
-                 padding="16"/>
+                 padding="16">
+        <ArrangementView id="arrangementView"
+                         flex-grow="1"
+                         min-width="0"
+                         min-height="0"/>
+      </Component>
     </Component>
   </Component>
 </Component>

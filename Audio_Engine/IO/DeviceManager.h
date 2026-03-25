@@ -3,7 +3,10 @@
 #include <juce_audio_devices/juce_audio_devices.h>
 #include "InputNode.h"
 #include "OutputNode.h"
+#include "../Arrangement/ArrangementState.h"
 #include "../MIDI/MidiInputNode.h"
+#include "../Recording/PlaybackManager.h"
+#include "../Recording/RecordingManager.h"
 #include "../Tracks/TrackInputRouter.h"
 #include <vector>
 
@@ -28,21 +31,17 @@ public:
     void audioDeviceStopped() override;
     
     void setTracks(std::vector<std::unique_ptr<TrackInputRouter>>* t) { tracks = t; }
+    void setArrangementState(const ArrangementState* state) { arrangementState = state; }
+    void setRecordingManager(RecordingManager* manager) { recordingManager = manager; }
+    void setPlaybackManager(PlaybackManager* manager) { playbackManager = manager; }
+    void setInputMonitoringEnabled(bool shouldMonitor) { inputMonitoringEnabled = shouldMonitor; }
     InputNode& getInputNode() { return inputNode; }
     
     juce::MidiMessageCollector& getMidiCollector() { return midiCollector; }
 
-    void processMidiMessages(const juce::MidiBuffer& midiMessages) 
-    { 
-        midiInputNode.processMidiInput(midiMessages);
-        if (tracks)
-        {
-            for (auto& track : *tracks)
-                track->handleMidi(midiMessages);
-        }
-    }
-
 private:
+    void prepareForDevice(juce::AudioIODevice& device);
+
     InputNode inputNode;
     OutputNode outputNode;
     MidiInputNode midiInputNode;
@@ -56,4 +55,8 @@ private:
     juce::MidiMessageCollector midiCollector;
     double sampleRate = 44100.0;
     juce::AudioDeviceManager* deviceManagerPtr = nullptr;
+    const ArrangementState* arrangementState = nullptr;
+    PlaybackManager* playbackManager = nullptr;
+    RecordingManager* recordingManager = nullptr;
+    bool inputMonitoringEnabled = true;
 };

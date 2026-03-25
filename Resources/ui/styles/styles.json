@@ -103,9 +103,5 @@
 
   ".secondary-label": {
     "foreground": "#aab4c8"
-  },
-
-  "#timelineSlider": {
-    "foreground": "#3a7afe"
   }
 }

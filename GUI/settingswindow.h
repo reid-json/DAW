@@ -20,9 +20,9 @@ public:
             deviceManager,
             0, 256,
             0, 256,
-            true, true, true, false);
+            false, false, true, false);
 
-        selector->setSize (600, 400);   // important
+        selector->setSize (600, 400);
 
         setContentOwned (selector, true);
         centreWithSize (600, 400);

@@ -7,25 +7,38 @@
 #include "dawstate.h"
 #include "timelinecomponent.h"
 #include "arrangementcomponent.h"
+#include "recentclipscomponent.h"
 #include "pianoRoll.h"
 #include "settingswindow.h"
 
 class GUIComponent : public juce::Component,
-                     private juce::Timer
+                     public juce::DragAndDropContainer
 {
 public:
-    GUIComponent();
+    explicit GUIComponent(juce::AudioDeviceManager& sharedDeviceManager);
     ~GUIComponent() override;
 
     void resized() override;
 
     DAWState& getState() noexcept                     { return state; }
     const DAWState& getState() const noexcept         { return state; }
+    void refreshExternalState(bool shouldRefreshControls, bool shouldRebuildTrackList);
+    void repaintDynamicViews();
     juce::ValueTree getUITree() const                 { return uiTree; }
     juce::Component* getRenderedRootComponent() const noexcept
     {
         return root != nullptr ? root->getComponent().get() : nullptr;
     }
+
+    std::function<void()> onRecordToggleRequested;
+    std::function<void()> onImportAudioRequested;
+    std::function<void()> onPlayRequested;
+    std::function<void()> onStopRequested;
+    std::function<void()> onPauseRequested;
+    std::function<void()> onRestartRequested;
+    std::function<void(int assetId, int trackIndex, double startSeconds)> onRecentClipDropped;
+    std::function<void(int placementId, int trackIndex, double startSeconds)> onTimelineClipMoved;
+    std::function<void(int placementId)> onTimelineClipDeleteRequested;
 
 private:
     jive::Interpreter viewInterpreter;
@@ -34,12 +47,13 @@ private:
     juce::var stylesheet;
 
     DAWState state;
-    std::unique_ptr<TimelineComponent> timelineComponent;
-    std::unique_ptr<ArrangementComponent> arrangementComponent;
+    TimelineComponent* timelineComponent = nullptr;
+    ArrangementComponent* arrangementComponent = nullptr;
+    RecentClipsComponent* recentClipsComponent = nullptr;
     std::unique_ptr<PianoRollWindow> pianoRollWindow;
     std::unique_ptr<SettingsWindow> settingsWindow;
 
-    juce::AudioDeviceManager deviceManager;
+    juce::AudioDeviceManager& deviceManager;
 
     bool draggingSidebar = false;
     int dragStartScreenX = 0;
@@ -63,14 +77,13 @@ private:
     static jive::GuiItem* findGuiItemById (jive::GuiItem& node, const juce::Identifier& id);
     static int getIntProperty (const juce::ValueTree& v, const juce::Identifier& key, int fallback);
 
+    void registerCustomComponentTypes();
     void setSidebarWidth (int newWidth);
     void installCallbacks();
     void bindDynamicTrackButtons();
     void refreshFromState();
     void rebuildTrackList();
-    void rebuildClipList();
     void openSettingsWindow();
-    void timerCallback() override;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GUIComponent)
 };

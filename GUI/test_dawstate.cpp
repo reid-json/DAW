@@ -25,23 +25,14 @@ public:
 
         beginTest ("Track count increments");
 
+        expectEquals (state.trackCount, 1);
+
+        state.addTrack();
         expectEquals (state.trackCount, 2);
 
         state.addTrack();
         expectEquals (state.trackCount, 3);
 
-        state.addTrack();
-        expectEquals (state.trackCount, 4);
-
-        beginTest ("Volume dB value can be updated");
-
-        expectWithinAbsoluteError (state.volumeDb, -6.0, 0.0001);
-
-        state.volumeDb = -12.5;
-        expectWithinAbsoluteError (state.volumeDb, -12.5, 0.0001);
-
-        state.volumeDb = 0.0;
-        expectWithinAbsoluteError (state.volumeDb, 0.0, 0.0001);
     }
 };
 

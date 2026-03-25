@@ -27,9 +27,10 @@ public:
         MainWindow(juce::String name)
             : DocumentWindow(name, juce::Colours::black, allButtons)
         {
+            deviceManager.initialise(0, 2, nullptr, true);
             setUsingNativeTitleBar(true);
             setResizable(true, true);
-            setContentOwned(new GUIComponent(), true);
+            setContentOwned(new GUIComponent(deviceManager), true);
             centreWithSize(1000, 700);
             setVisible(true);
         }
@@ -40,6 +41,7 @@ public:
         }
 
     private:
+        juce::AudioDeviceManager deviceManager;
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainWindow)
     };
 

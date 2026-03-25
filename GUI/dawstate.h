@@ -3,6 +3,50 @@
 #include <algorithm>
 #include <vector>
 
+struct RecentClipItem
+{
+    int assetId = 0;
+    juce::String name;
+    double lengthSeconds = 0.0;
+
+    bool operator==(const RecentClipItem& other) const
+    {
+        return assetId == other.assetId
+            && name == other.name
+            && lengthSeconds == other.lengthSeconds;
+    }
+
+    bool operator!=(const RecentClipItem& other) const
+    {
+        return !(*this == other);
+    }
+};
+
+struct TimelineClipItem
+{
+    int placementId = 0;
+    int assetId = 0;
+    juce::String name;
+    int trackIndex = 0;
+    double startSeconds = 0.0;
+    double lengthSeconds = 0.0;
+
+    bool operator==(const TimelineClipItem& other) const
+    {
+        return placementId == other.placementId
+            && assetId == other.assetId
+            && name == other.name
+            && trackIndex == other.trackIndex
+            && startSeconds == other.startSeconds
+            && lengthSeconds == other.lengthSeconds;
+    }
+
+    bool operator!=(const TimelineClipItem& other) const
+    {
+        return !(*this == other);
+    }
+};
+
 struct DAWState
 {
     enum class TransportState
@@ -14,34 +58,27 @@ struct DAWState
 
     TransportState transportState = TransportState::stopped;
 
-    int trackCount = 1;
+    int trackCount = 5;
     int sidebarWidth = 240;
     int clipSidebarWidth = 220;
 
     double playhead = 0.0;
-    double volumeDb = -6.0;
 
     bool isRecording = false;
     bool clipSidebarCollapsed = false;
 
-    std::vector<juce::String> recordedClips;
-    int nextRecordedClipNumber = 1;
+    std::vector<RecentClipItem> recentClips;
+    std::vector<TimelineClipItem> timelineClips;
 
     void play()    { transportState = TransportState::playing; }
+    void pause()   { transportState = TransportState::paused; }
 
     void stop()
     {
-        const bool wasRecording = isRecording;
-
         transportState = TransportState::stopped;
         playhead = 0.0;
         isRecording = false;
-
-        if (wasRecording)
-            addRecordedClip();
     }
-
-    void pause()   { transportState = TransportState::paused; }
 
     void restart()
     {
@@ -49,21 +86,12 @@ struct DAWState
         playhead = 0.0;
     }
 
-    void toggleRecord()
+    void setRecording(bool shouldRecord)
     {
-        if (isRecording)
-        {
-            isRecording = false;
-            addRecordedClip();
-            transportState = TransportState::stopped;
+        isRecording = shouldRecord;
+        transportState = shouldRecord ? TransportState::playing : TransportState::stopped;
+        if (!shouldRecord)
             playhead = 0.0;
-            return;
-        }
-
-        isRecording = true;
-
-        if (transportState == TransportState::stopped)
-            transportState = TransportState::playing;
     }
 
     void addTrack() { ++trackCount; }
@@ -83,9 +111,17 @@ struct DAWState
         clipSidebarCollapsed = ! clipSidebarCollapsed;
     }
 
-    void addRecordedClip()
+    int findNextEmptyTrackIndex() const
     {
-        recordedClips.push_back ("Recorded Clip " + juce::String (nextRecordedClipNumber++) + ".wav");
+        for (int track = 0; track < trackCount; ++track)
+        {
+            const bool hasClip = std::any_of (timelineClips.begin(), timelineClips.end(),
+                                              [track] (const TimelineClipItem& clip) { return clip.trackIndex == track; });
+            if (! hasClip)
+                return track;
+        }
+
+        return trackCount;
     }
 
     void tick (double dt)

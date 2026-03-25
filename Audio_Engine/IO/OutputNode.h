@@ -11,7 +11,4 @@ public:
     void prepare(double sampleRate, int blockSize);
     
     void processOutput(float* const* outputChannels, int numOutputChannels, const float* left, const float* right, int numSamples);
-
-private:
-    double sampleRate = 44100.0;
 };
