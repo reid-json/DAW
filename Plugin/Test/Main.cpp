@@ -1,5 +1,5 @@
 #include <juce_gui_basics/juce_gui_basics.h>
-#include "Test_Plugin.cpp"
+#include "Test_Plugin.h"
 
 class ModuleTestApplication : public juce::JUCEApplication
 {

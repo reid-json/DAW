@@ -1,55 +1,26 @@
 #include "TrackInputRouter.h"
 #include <cmath>
 
-TrackInputRouter::TrackInputRouter()
+TrackInputRouter::TrackInputRouter(int id)
     : synth(std::make_unique<MidiSynth>())
+    , trackName("Track " + juce::String(id + 1))
+    , trackId(id)
 {
-    gain = 1.0f;
     startTime = juce::Time::getMillisecondCounter();
 }
 
 void TrackInputRouter::prepare(double sr, int bs)
 {
-    sampleRate = sr;
-    blockSize = bs;
-    synthLeft.resize(bs);
-    synthRight.resize(bs);
     synth->prepare(sr, bs);
 }
 
-void TrackInputRouter::processAudio(float* left, float* right, int numSamples)
-{
-    // applying gain to audio input
-    if (inputEnabled && audioEnabled)
-    {
-        juce::FloatVectorOperations::multiply(left, gain, numSamples);
-        juce::FloatVectorOperations::multiply(right, gain, numSamples);
-    }
-    else
-    {
-        juce::FloatVectorOperations::clear(left, numSamples);
-        juce::FloatVectorOperations::clear(right, numSamples);
-    }
-    
-    // Mix in midi synth output
-    if (midiEnabled)
-    {
-        if (static_cast<int>(synthLeft.size()) < numSamples)
-        {
-            synthLeft.resize(numSamples);
-            synthRight.resize(numSamples);
-        }
-        
-        synth->processAudio(synthLeft.data(), synthRight.data(), numSamples);
-        juce::FloatVectorOperations::add(left, synthLeft.data(), numSamples);
-        juce::FloatVectorOperations::add(right, synthRight.data(), numSamples);
-    }
-}
-
-void TrackInputRouter::processBlock(juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midi)
+void TrackInputRouter::processBlock(juce::AudioBuffer<float>& buffer,
+                                    const juce::MidiBuffer& midi,
+                                    bool shouldRenderRecordedAudio,
+                                    juce::int64 playbackStartSample)
 {
     const int numSamples = buffer.getNumSamples();
-    
+
     if (juce::Time::getMillisecondCounter() - startTime < 1000)
     {
         buffer.clear();
@@ -65,20 +36,46 @@ void TrackInputRouter::processBlock(juce::AudioBuffer<float>& buffer, const juce
         for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
             buffer.applyGain(ch, 0, numSamples, gain);
     }
-    
-    if (midiEnabled && synth)
-    {
-        synth->renderNextBlock(buffer, midi, 0, numSamples);
-    }
-}
 
-void TrackInputRouter::handleMidi(const juce::MidiBuffer& midiMessages)
-{
-    if (midiEnabled)
-        synth->processMidi(midiMessages, blockSize);
+    if (midiEnabled && synth)
+        synth->renderNextBlock(buffer, midi, 0, numSamples);
+
+    if (shouldRenderRecordedAudio)
+        renderRecordedClips(buffer, playbackStartSample);
 }
 
 void TrackInputRouter::setGain(float gainDb)
 {
     gain = std::pow(10.0f, gainDb / 20.0f);
+}
+
+void TrackInputRouter::addRecordedClip(RecordedClip clip)
+{
+    recordedClips.push_back(std::move(clip));
+}
+
+void TrackInputRouter::renderRecordedClips(juce::AudioBuffer<float>& buffer, juce::int64 playbackStartSample) const
+{
+    const auto blockEndSample = playbackStartSample + buffer.getNumSamples();
+
+    for (const auto& clip : recordedClips)
+    {
+        const auto clipStart = clip.startSample;
+        const auto clipEnd = clip.startSample + clip.getNumSamples();
+
+        if (clipEnd <= playbackStartSample || clipStart >= blockEndSample)
+            continue;
+
+        const auto overlapStart = juce::jmax(playbackStartSample, clipStart);
+        const auto overlapEnd = juce::jmin(blockEndSample, clipEnd);
+        const auto overlapLength = static_cast<int>(overlapEnd - overlapStart);
+        const auto bufferOffset = static_cast<int>(overlapStart - playbackStartSample);
+        const auto clipOffset = static_cast<int>(overlapStart - clipStart);
+
+        if (overlapLength <= 0)
+            continue;
+
+        buffer.addFrom(0, bufferOffset, clip.leftChannel.data() + clipOffset, overlapLength);
+        buffer.addFrom(1, bufferOffset, clip.rightChannel.data() + clipOffset, overlapLength);
+    }
 }

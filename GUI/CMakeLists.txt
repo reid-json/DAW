@@ -7,11 +7,16 @@ add_library(GUI STATIC
     timelinecomponent.h
     arrangementcomponent.cpp
     arrangementcomponent.h
+    recentclipscomponent.cpp
+    recentclipscomponent.h
+    settingswindow.h
 )
 
 target_link_libraries(GUI
     PUBLIC
         juce::juce_gui_basics
+        juce::juce_audio_devices
+        juce::juce_audio_utils
         jive::jive_core
         jive::jive_components
         jive::jive_layouts

@@ -25,18 +25,14 @@ add_compile_definitions(JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS=1)
 
 # Add subdirectories
 add_subdirectory(external/JIVE)
-add_subdirectory(Utilities)
 
 add_subdirectory(Audio_Engine)
 
 add_subdirectory(Piano_Roll)
-add_subdirectory(Piano_Roll/Test)
 
 add_subdirectory(Plugin)
-add_subdirectory(Plugin/Test)
 
 add_subdirectory(Plugin_Hosting)
-add_subdirectory(Plugin_Hosting/Test)
 
 add_subdirectory(GUI)
 

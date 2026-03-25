@@ -1,10 +1,9 @@
 #include "OutputNode.h"
 #include <cstring>
-#include <algorithm>
 
 void OutputNode::prepare(double sr, int blockSize)
 {
-    sampleRate = sr;
+    juce::ignoreUnused(sr, blockSize);
 }
 
 void OutputNode::processOutput(float* const* outputChannels, int numOutputChannels, const float* left, const float* right, int numSamples)

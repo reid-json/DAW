@@ -13,6 +13,11 @@
     "border": "rgba(255,255,255,0.08)"
   },
 
+  ".clipSidebar": {
+    "background": "#111723",
+    "border": "rgba(255,255,255,0.08)"
+  },
+
   ".workspace": {
     "background": "#0f1116"
   },
@@ -43,6 +48,34 @@
     "border-radius": 8
   },
 
+  ".btn-record": {
+    "background": "#b42318",
+    "foreground": "#ffffff",
+    "border": "#d92d20",
+    "border-radius": 8
+  },
+
+  ".btn-record-active": {
+    "background": "#ff4d4f",
+    "foreground": "#ffffff",
+    "border": "#ff7875",
+    "border-radius": 8
+  },
+
+  ".btn-danger": {
+    "background": "#2d1620",
+    "foreground": "#ffb3c1",
+    "border": "rgba(255,120,120,0.28)",
+    "border-radius": 8
+  },
+
+  ".clipToggleBtn": {
+  "background": "#202838",
+  "foreground": "#e0e6f0",
+  "border": "rgba(255,255,255,0.12)",
+  "border-radius": 8
+  },
+
   ".laneRow": {
     "background": "#1a1f2c",
     "border": "rgba(255,255,255,0.08)",
@@ -52,6 +85,12 @@
   ".laneAccent": {
     "background": "#3a7afe",
     "border-radius": 5
+  },
+
+  ".clipItem": {
+    "background": "#1a2230",
+    "border": "rgba(255,255,255,0.08)",
+    "border-radius": 8
   },
 
   ".sidebar-resizer": {
@@ -64,9 +103,5 @@
 
   ".secondary-label": {
     "foreground": "#aab4c8"
-  },
-
-  "#timelineSlider": {
-    "foreground": "#3a7afe"
   }
 }

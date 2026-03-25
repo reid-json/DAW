@@ -1,17 +1,8 @@
-/*
-  ==============================================================================
-
-    This file contains the basic framework code for a JUCE plugin editor.
-
-  ==============================================================================
-*/
-
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-//==============================================================================
 LowpassHighpassFilterAudioProcessorEditor::LowpassHighpassFilterAudioProcessorEditor (LowpassHighpassFilterAudioProcessor& p, juce::AudioProcessorValueTreeState& vts)
-    : AudioProcessorEditor (&p), audioProcessor (p)
+    : AudioProcessorEditor (&p)
 {
     addAndMakeVisible(cutoffFrequencySlider);
     cutoffFrequencySlider.setSliderStyle(juce::Slider::SliderStyle::LinearVertical);
@@ -22,8 +13,6 @@ LowpassHighpassFilterAudioProcessorEditor::LowpassHighpassFilterAudioProcessorEd
     highpassAttachment.reset(new juce::AudioProcessorValueTreeState::ButtonAttachment(vts, "highpass", highpassButton));
     addAndMakeVisible(highpassButtonLabel);
     highpassButtonLabel.setText("Highpass", juce::dontSendNotification);
-    // Make sure that before the constructor has finished, you've set the
-    // editor's size to whatever you need it to be.
     setSize (200, 450);
 }
 
@@ -31,14 +20,12 @@ LowpassHighpassFilterAudioProcessorEditor::~LowpassHighpassFilterAudioProcessorE
 {
 }
 
-//==============================================================================
 void LowpassHighpassFilterAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    // (Our component is opaque, so we must completely fill the background with a solid colour)
     g.fillAll(juce::Colour(0xffFF8C42));
     g.setFont (juce::FontOptions (15.0f));
-    
 }
+
 void LowpassHighpassFilterAudioProcessorEditor::resized()
 {
     cutoffFrequencySlider.setBounds({ 15, 35, 100, 300 });

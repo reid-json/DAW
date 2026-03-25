@@ -3,6 +3,7 @@
 
 void InputNode::prepare(double sampleRate, int blockSize)
 {
+    juce::ignoreUnused(sampleRate);
     leftBuffer.resize(blockSize);
     rightBuffer.resize(blockSize);
 }

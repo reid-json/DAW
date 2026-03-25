@@ -3,7 +3,7 @@
           display="flex"
           flex-direction="column"
           align-items="stretch"
-          width="1100"
+          width="1280"
           height="720"
           min-width="0"
           min-height="0">
@@ -25,18 +25,6 @@
             class="btn"
             width="72">
       <Text id="fileBtnLabel" text="File"/>
-    </Button>
-
-    <Button id="undoBtn"
-            class="btn"
-            width="72">
-      <Text id="undoBtnLabel" text="Undo"/>
-    </Button>
-
-    <Button id="redoBtn"
-            class="btn"
-            width="72">
-      <Text id="redoBtnLabel" text="Redo"/>
     </Button>
 
     <Button id="restartBtn"
@@ -63,22 +51,25 @@
       <Text id="pauseBtnLabel" text="Pause"/>
     </Button>
 
+    <Button id="recordBtn"
+            class="btn btn-record"
+            width="90">
+      <Text id="recordBtnLabel" text="Record"/>
+    </Button>
+
     <Button id="pianoRollBtn"
-              class="btn"
-              width="72">
-        <Text id="pianoRollBtnLabel" text="Piano Roll"/>
-      </Button>
+            class="btn"
+            width="96">
+      <Text id="pianoRollBtnLabel" text="Piano Roll"/>
+    </Button>
+
+    <Button id="settingsBtn"
+            class="btn"
+            width="88">
+      <Text id="settingsBtnLabel" text="Settings"/>
+    </Button>
 
     <Component flex-grow="1"/>
-
-    <Text id="dbLabel"
-          class="label"
-          text="-6.0 dB"
-          width="70"/>
-
-    <Slider id="timelineSlider"
-            width="220"
-            height="20"/>
   </Component>
 
   <Component id="bodyContent"
@@ -104,7 +95,7 @@
               class="btn"
               width="140"
               height="32">
-        <Text id="newTrackBtnLabel" text="New Track (2)"/>
+        <Text id="newTrackBtnLabel" text="New Track (5)"/>
       </Button>
 
       <Component id="trackList"
@@ -114,32 +105,6 @@
                  flex-grow="1"
                  min-width="0"
                  min-height="0">
-
-        <Component class="laneRow"
-                   height="54"
-                   padding="8"
-                   display="flex"
-                   flex-direction="row"
-                   align-items="center"
-                   column-gap="8">
-          <Component width="10"
-                     height="24"
-                     class="laneAccent"/>
-          <Text class="label" text="Track 1"/>
-        </Component>
-
-        <Component class="laneRow"
-                   height="54"
-                   padding="8"
-                   display="flex"
-                   flex-direction="row"
-                   align-items="center"
-                   column-gap="8">
-          <Component width="10"
-                     height="24"
-                     class="laneAccent"/>
-          <Text class="label" text="Track 2"/>
-        </Component>
       </Component>
     </Component>
 
@@ -148,6 +113,49 @@
                width="10"
                flex-grow="0"
                flex-shrink="0"/>
+
+    <Component id="clipSidebarContent"
+           class="sidebar clipSidebar"
+           display="flex"
+           flex-direction="column"
+           align-items="center"
+           flex-grow="0"
+           flex-shrink="0"
+           width="220"
+           min-width="160"
+           max-width="320"
+           padding="10"
+           row-gap="10">
+
+      <Button id="toggleClipSidebarBtn"
+        class="btn clipToggleBtn"
+        width="28"
+        height="32">
+        <Text id="toggleClipSidebarBtnLabel" text="&lt;"/>
+      </Button>
+
+      <Component id="clipBrowserHeader"
+           display="flex"
+           flex-direction="column"
+           align-self="stretch"
+           row-gap="4">
+        <Text id="clipBrowserTitle"
+              class="label"
+              text="Recorded Clips"/>
+        <Text id="clipBrowserSubTitle"
+              class="secondary-label"
+              text="Recent recordings"/>
+      </Component>
+
+      <Component id="clipSidebarSpacer"
+                 height="4"/>
+
+      <RecentClipsView id="clipList"
+           align-self="stretch"
+           flex-grow="1"
+           min-width="0"
+           min-height="0"/>
+    </Component>
 
     <Component id="workspaceContent"
                class="workspace"
@@ -161,14 +169,29 @@
 
       <Component id="timelinePanel"
                  class="panel"
-                 height="90"/>
+                 display="flex"
+                 flex-direction="column"
+                 height="90"
+                 padding="8">
+        <TimelineView id="timelineView"
+                      flex-grow="1"
+                      min-width="0"
+                      min-height="0"/>
+      </Component>
 
       <Component id="arrangementPanel"
                  class="panel"
+                 display="flex"
+                 flex-direction="column"
                  flex-grow="1"
                  min-width="0"
                  min-height="0"
-                 padding="16"/>
+                 padding="16">
+        <ArrangementView id="arrangementView"
+                         flex-grow="1"
+                         min-width="0"
+                         min-height="0"/>
+      </Component>
     </Component>
   </Component>
 </Component>

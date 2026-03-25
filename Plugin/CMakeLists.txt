@@ -1,13 +1,14 @@
 add_library(Plugin STATIC
-    plugin.cpp
-    Plugins/LowpassHighpassFilter/LowpassHighpassFilter.cpp
-    Plugins/LowpassHighpassFilter/PluginProcessor.cpp
-    Plugins/LowpassHighpassFilter/PluginEditor.cpp
+    LowpassHighpassFilter.cpp
+    LowpassHighpassFilter.h
+    PluginProcessor.cpp
+    PluginProcessor.h
+    PluginEditor.cpp
+    PluginEditor.h
 )
 
 target_include_directories(Plugin PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/Plugins/LowpassHighpassFilter
 )
 
 target_link_libraries(Plugin
@@ -15,6 +16,7 @@ target_link_libraries(Plugin
         juce::juce_audio_processors
         juce::juce_audio_basics
         juce::juce_gui_basics
+    PRIVATE
         juce::juce_gui_extra
         juce::juce_dsp
 )
@@ -34,5 +36,7 @@ target_compile_definitions(Plugin PUBLIC
     JucePlugin_Version=1.0.0
     JucePlugin_VersionCode=0x10000
     JucePlugin_VersionString="1.0.0"
-    JucePlugin_PreferredChannelConfigurations={(1,1),(2,2)}
+    "JucePlugin_PreferredChannelConfigurations={(1,1),(2,2)}"
 )
+
+add_subdirectory(Test)

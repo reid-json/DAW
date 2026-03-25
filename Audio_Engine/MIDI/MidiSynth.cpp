@@ -81,14 +81,11 @@ MidiSynth::MidiSynth()
 
 void MidiSynth::prepare(double sr, int bs)
 {
-    sampleRate = sr;
     synth.setCurrentPlaybackSampleRate(sr);
     synth.allNotesOff(0, false);
-    internalBuffer.setSize(2, bs);
-
 
     spec.sampleRate = sr;
-    spec.maximumBlockSize = (juce::uint32)bs;
+    spec.maximumBlockSize = static_cast<juce::uint32>(bs);
     spec.numChannels = 2;
     
     limiter.prepare(spec);
@@ -97,26 +94,6 @@ void MidiSynth::prepare(double sr, int bs)
 
     *lowPassFilter.state = *juce::dsp::IIR::Coefficients<float>::makeLowPass(sr, 2000.0);
     lowPassFilter.prepare(spec);
-}
-
-void MidiSynth::processMidi(const juce::MidiBuffer&, int) {}
-
-void MidiSynth::processAudio(float* left, float* right, int numSamples)
-{
-    internalBuffer.clear();
-    juce::MidiBuffer emptyMidi;
-    synth.renderNextBlock(internalBuffer, emptyMidi, 0, numSamples);
-    
-    if (internalBuffer.getNumChannels() > 0)
-        juce::FloatVectorOperations::multiply(internalBuffer.getWritePointer(0), volume, numSamples);
-    if (internalBuffer.getNumChannels() > 1)
-        juce::FloatVectorOperations::multiply(internalBuffer.getWritePointer(1), volume, numSamples);
-
-    std::copy(internalBuffer.getReadPointer(0), internalBuffer.getReadPointer(0) + numSamples, left);
-    if (internalBuffer.getNumChannels() > 1)
-        std::copy(internalBuffer.getReadPointer(1), internalBuffer.getReadPointer(1) + numSamples, right);
-    else
-        std::copy(internalBuffer.getReadPointer(0), internalBuffer.getReadPointer(0) + numSamples, right);
 }
 
 void MidiSynth::renderNextBlock(juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midi, int startSample, int numSamples)
