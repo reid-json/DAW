@@ -11,15 +11,39 @@
   <Component id="headerContent"
              class="header"
              display="flex"
-             flex-direction="row"
-             align-items="center"
+             flex-direction="column"
              flex-grow="0"
              flex-shrink="0"
              min-width="0"
-             min-height="64"
+             min-height="96"
              padding="10"
-             row-gap="8"
-             column-gap="8">
+             row-gap="8">
+
+    <Component id="headerTopRow"
+               display="flex"
+               flex-direction="row"
+               align-items="center"
+               min-width="0"
+               min-height="28">
+
+      <Component flex-grow="1"/>
+
+      <Button id="monitorBtn"
+              class="btn btn-monitor-off"
+              width="124"
+              height="28">
+        <Text id="monitorBtnLabel" text="Monitor Off"/>
+      </Button>
+    </Component>
+
+    <Component id="headerMainRow"
+               display="flex"
+               flex-direction="row"
+               align-items="center"
+               min-width="0"
+               min-height="40"
+               row-gap="8"
+               column-gap="8">
 
     <Button id="fileBtn"
             class="btn"
@@ -27,49 +51,70 @@
       <Text id="fileBtnLabel" text="File"/>
     </Button>
 
-    <Button id="restartBtn"
-            class="btn"
-            width="80">
-      <Text id="restartBtnLabel" text="Restart"/>
-    </Button>
-
-    <Button id="stopBtn"
+    <Button id="undoBtn"
             class="btn"
             width="72">
-      <Text id="stopBtnLabel" text="Stop"/>
+      <Text id="undoBtnLabel" text="Undo"/>
     </Button>
 
-    <Button id="playBtn"
-            class="btn btn-primary"
-            width="72">
-      <Text id="playBtnLabel" text="Play"/>
-    </Button>
-
-    <Button id="pauseBtn"
+    <Button id="redoBtn"
             class="btn"
             width="72">
-      <Text id="pauseBtnLabel" text="Pause"/>
+      <Text id="redoBtnLabel" text="Redo"/>
     </Button>
 
-    <Button id="recordBtn"
-            class="btn btn-record"
-            width="90">
-      <Text id="recordBtnLabel" text="Record"/>
-    </Button>
+      <Button id="restartBtn"
+              class="btn"
+              width="80">
+        <Text id="restartBtnLabel" text="Restart"/>
+      </Button>
 
-    <Button id="pianoRollBtn"
-            class="btn"
-            width="96">
-      <Text id="pianoRollBtnLabel" text="Piano Roll"/>
-    </Button>
+      <Button id="stopBtn"
+              class="btn"
+              width="72">
+        <Text id="stopBtnLabel" text="Stop"/>
+      </Button>
 
-    <Button id="settingsBtn"
-            class="btn"
-            width="88">
-      <Text id="settingsBtnLabel" text="Settings"/>
-    </Button>
+      <Button id="playBtn"
+              class="btn btn-primary"
+              width="72">
+        <Text id="playBtnLabel" text="Play"/>
+      </Button>
+
+      <Button id="pauseBtn"
+              class="btn"
+              width="72">
+        <Text id="pauseBtnLabel" text="Pause"/>
+      </Button>
+
+      <Button id="recordBtn"
+              class="btn btn-record"
+              width="90">
+        <Text id="recordBtnLabel" text="Record"/>
+      </Button>
+
+      <Button id="pianoRollBtn"
+              class="btn"
+              width="96">
+        <Text id="pianoRollBtnLabel" text="Piano Roll"/>
+      </Button>
+
+      <Button id="settingsBtn"
+              class="btn"
+              width="88">
+        <Text id="settingsBtnLabel" text="Settings"/>
+      </Button>
 
     <Component flex-grow="1"/>
+
+    <Text id="dbLabel"
+          class="label"
+          text="-6.0 dB"
+          width="70"/>
+
+    <Slider id="timelineSlider"
+            width="220"
+            height="20"/>
   </Component>
 
   <Component id="bodyContent"
@@ -115,30 +160,30 @@
                flex-shrink="0"/>
 
     <Component id="clipSidebarContent"
-           class="sidebar clipSidebar"
-           display="flex"
-           flex-direction="column"
-           align-items="center"
-           flex-grow="0"
-           flex-shrink="0"
-           width="220"
-           min-width="160"
-           max-width="320"
-           padding="10"
-           row-gap="10">
+               class="sidebar clipSidebar"
+               display="flex"
+               flex-direction="column"
+               align-items="center"
+               flex-grow="0"
+               flex-shrink="0"
+               width="220"
+               min-width="160"
+               max-width="320"
+               padding="10"
+               row-gap="10">
 
       <Button id="toggleClipSidebarBtn"
         class="btn clipToggleBtn"
         width="28"
         height="32">
-        <Text id="toggleClipSidebarBtnLabel" text="&lt;"/>
+        <Text id="toggleClipSidebarBtnLabel" text="<"/>
       </Button>
 
       <Component id="clipBrowserHeader"
-           display="flex"
-           flex-direction="column"
-           align-self="stretch"
-           row-gap="4">
+                 display="flex"
+                 flex-direction="column"
+                 align-self="stretch"
+                 row-gap="4">
         <Text id="clipBrowserTitle"
               class="label"
               text="Recorded Clips"/>
@@ -150,11 +195,15 @@
       <Component id="clipSidebarSpacer"
                  height="4"/>
 
-      <RecentClipsView id="clipList"
+      <Component id="clipList"
+           display="flex"
+           flex-direction="column"
            align-self="stretch"
+           row-gap="8"
            flex-grow="1"
            min-width="0"
-           min-height="0"/>
+           min-height="0">
+      </Component>
     </Component>
 
     <Component id="workspaceContent"
