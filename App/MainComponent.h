@@ -20,6 +20,7 @@ private:
     void syncStateFromEngine();
     void placeNewestRecentAssetOnNextEmptyTrack();
     void handleRecordToggle();
+    void handleMonitoringToggle();
     void handleImportAudio();
     void handlePlay();
     void handleStop();

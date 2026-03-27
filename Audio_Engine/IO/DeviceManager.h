@@ -58,5 +58,5 @@ private:
     const ArrangementState* arrangementState = nullptr;
     PlaybackManager* playbackManager = nullptr;
     RecordingManager* recordingManager = nullptr;
-    bool inputMonitoringEnabled = true;
+    bool inputMonitoringEnabled = false;
 };

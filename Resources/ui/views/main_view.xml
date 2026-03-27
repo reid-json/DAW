@@ -45,23 +45,11 @@
                row-gap="8"
                column-gap="8">
 
-    <Button id="fileBtn"
-            class="btn"
-            width="72">
-      <Text id="fileBtnLabel" text="File"/>
-    </Button>
-
-    <Button id="undoBtn"
-            class="btn"
-            width="72">
-      <Text id="undoBtnLabel" text="Undo"/>
-    </Button>
-
-    <Button id="redoBtn"
-            class="btn"
-            width="72">
-      <Text id="redoBtnLabel" text="Redo"/>
-    </Button>
+      <Button id="fileBtn"
+              class="btn"
+              width="72">
+        <Text id="fileBtnLabel" text="File"/>
+      </Button>
 
       <Button id="restartBtn"
               class="btn"
@@ -105,16 +93,8 @@
         <Text id="settingsBtnLabel" text="Settings"/>
       </Button>
 
-    <Component flex-grow="1"/>
-
-    <Text id="dbLabel"
-          class="label"
-          text="-6.0 dB"
-          width="70"/>
-
-    <Slider id="timelineSlider"
-            width="220"
-            height="20"/>
+      <Component flex-grow="1"/>
+    </Component>
   </Component>
 
   <Component id="bodyContent"
@@ -173,10 +153,10 @@
                row-gap="10">
 
       <Button id="toggleClipSidebarBtn"
-        class="btn clipToggleBtn"
-        width="28"
-        height="32">
-        <Text id="toggleClipSidebarBtnLabel" text="<"/>
+              class="btn clipToggleBtn"
+              width="28"
+              height="32">
+        <Text id="toggleClipSidebarBtnLabel" text="&lt;"/>
       </Button>
 
       <Component id="clipBrowserHeader"
@@ -195,15 +175,11 @@
       <Component id="clipSidebarSpacer"
                  height="4"/>
 
-      <Component id="clipList"
-           display="flex"
-           flex-direction="column"
-           align-self="stretch"
-           row-gap="8"
-           flex-grow="1"
-           min-width="0"
-           min-height="0">
-      </Component>
+      <RecentClipsView id="clipList"
+                       align-self="stretch"
+                       flex-grow="1"
+                       min-width="0"
+                       min-height="0"/>
     </Component>
 
     <Component id="workspaceContent"

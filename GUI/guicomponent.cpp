@@ -362,6 +362,12 @@ void GUIComponent::installCallbacks()
 
     bindButton ("monitorBtn", [this]
     {
+        if (onMonitoringToggleRequested)
+        {
+            onMonitoringToggleRequested();
+            return;
+        }
+
         state.toggleAudioMonitoring();
         refreshFromState();
     });
