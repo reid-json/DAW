@@ -76,6 +76,51 @@
     "border-radius": 8
   },
 
+  ".btn-arm": {
+  "background": "#242b3a",
+  "foreground": "#e0e6f0",
+  "border": "rgba(255,255,255,0.12)",
+  "border-radius": 8
+  },
+
+  ".btn-arm-active": {
+  "background": "#cc3333",
+  "foreground": "#ffffff",
+  "border": "#ff6666",
+  "border-radius": 8
+  },
+
+  ".btn-mute": {
+  "background": "#242b3a",
+  "foreground": "#e0e6f0",
+  "border": "rgba(255,255,255,0.12)",
+  "border-radius": 8
+  },
+
+  ".btn-mute-active": {
+  "background": "#cc7a00",
+  "foreground": "#ffffff",
+  "border": "#ffb84d",
+  "border-radius": 8
+  },
+
+  ".section-header": {
+  "foreground": "#ffffff",
+  "font-size": 14,
+  "font-weight": "bold"
+  },
+
+  ".subtle-label": {
+  "foreground": "#7f8aa3",
+  "font-size": 12
+  },
+
+  ".laneRow-selected": {
+  "background": "#24324a",
+  "border": "#3a7afe",
+  "border-radius": 8
+  },
+
   ".btn-danger": {
     "background": "#2d1620",
     "foreground": "#ffb3c1",

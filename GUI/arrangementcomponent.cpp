@@ -21,7 +21,7 @@ void ArrangementComponent::paint (juce::Graphics& g)
     for (int x = 0; x < getWidth(); x += 40)
         g.drawVerticalLine (x, 0.0f, (float) getHeight());
 
-    for (int i = 0; i < state.trackCount; ++i)
+    for (int i = 0; i < state.getNumTracks(); ++i)
     {
         const float y = (float) (i * (rowHeight + rowGap));
 

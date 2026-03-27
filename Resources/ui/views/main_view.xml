@@ -167,7 +167,7 @@
                align-items="center"
                flex-grow="0"
                flex-shrink="0"
-               width="220"
+               width="260"
                min-width="160"
                max-width="320"
                padding="10"
@@ -186,11 +186,12 @@
                  align-self="stretch"
                  row-gap="4">
         <Text id="clipBrowserTitle"
-              class="label"
-              text="Recorded Clips"/>
-        <Text id="clipBrowserSubTitle"
-              class="secondary-label"
-              text="Recent recordings"/>
+      class="label"
+      text="Inspector"/>
+
+      <Text id="clipBrowserSubTitle"
+      class="secondary-label"
+      text="Track &amp; Clips"/>
       </Component>
 
       <Component id="clipSidebarSpacer"

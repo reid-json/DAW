@@ -62,6 +62,8 @@ private:
 
     static jive::GuiItem* findGuiItemById (jive::GuiItem& node, const juce::Identifier& id);
     static int getIntProperty (const juce::ValueTree& v, const juce::Identifier& key, int fallback);
+    juce::ValueTree createMixerStrip (int trackIndex);
+    juce::ValueTree createMasterStrip();
 
     void setSidebarWidth (int newWidth);
     void installCallbacks();
@@ -71,6 +73,8 @@ private:
     void rebuildClipList();
     void openSettingsWindow();
     void timerCallback() override;
+    void mouseUp (const juce::MouseEvent& e) override;
+    void rebuildPluginPanel();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GUIComponent)
 };
