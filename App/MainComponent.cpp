@@ -7,6 +7,7 @@ MainComponent::MainComponent()
 
     gui = std::make_unique<GUIComponent>(engine.getDeviceManager());
     gui->onRecordToggleRequested = [this] { handleRecordToggle(); };
+    gui->onMonitoringToggleRequested = [this] { handleMonitoringToggle(); };
     gui->onImportAudioRequested = [this] { handleImportAudio(); };
     gui->onPlayRequested = [this] { handlePlay(); };
     gui->onStopRequested = [this] { handleStop(); };
@@ -100,11 +101,13 @@ void MainComponent::syncStateFromEngine()
     auto& state = gui->getState();
     const auto previousTransportState = state.transportState;
     const auto previousRecordingState = state.isRecording;
+    const auto previousMonitoringState = state.audioMonitoringEnabled;
     const auto previousTrackCount = state.trackCount;
     const bool recentClipsChanged = state.recentClips != recentClips;
     const bool timelineClipsChanged = state.timelineClips != timelineClips;
 
     state.isRecording = engine.isRecording();
+    state.audioMonitoringEnabled = engine.isInputMonitoringEnabled();
     state.transportState = transportState;
     state.playhead = playhead;
     state.recentClips = std::move(recentClips);
@@ -112,7 +115,8 @@ void MainComponent::syncStateFromEngine()
     state.trackCount = juce::jmax(state.trackCount, maxTrackIndex + 1, 1);
 
     const bool controlsChanged = previousTransportState != state.transportState
-        || previousRecordingState != state.isRecording;
+        || previousRecordingState != state.isRecording
+        || previousMonitoringState != state.audioMonitoringEnabled;
     const bool trackCountChanged = previousTrackCount != state.trackCount;
 
     gui->refreshExternalState(controlsChanged, trackCountChanged);
@@ -140,6 +144,12 @@ void MainComponent::handleRecordToggle()
     if (!engine.isRecording())
         engine.startRecording();
 
+    syncStateFromEngine();
+}
+
+void MainComponent::handleMonitoringToggle()
+{
+    engine.setInputMonitoringEnabled(!engine.isInputMonitoringEnabled());
     syncStateFromEngine();
 }
 

@@ -68,7 +68,7 @@ private:
     ArrangementState arrangementState;
     PlaybackManager playbackManager;
     RecordingManager recordingManager;
-    bool inputMonitoringEnabled = true;
+    bool inputMonitoringEnabled = false;
 
     std::vector<std::unique_ptr<juce::MidiInput>> activeMidiInputs;
     std::vector<std::unique_ptr<juce::MidiOutput>> activeMidiOutputs;

@@ -360,6 +360,18 @@ void GUIComponent::installCallbacks()
             onRecordToggleRequested();
     });
 
+    bindButton ("monitorBtn", [this]
+    {
+        if (onMonitoringToggleRequested)
+        {
+            onMonitoringToggleRequested();
+            return;
+        }
+
+        state.toggleAudioMonitoring();
+        refreshFromState();
+    });
+
     bindButton ("settingsBtn", [this]
     {
         openSettingsWindow();
@@ -485,6 +497,13 @@ void GUIComponent::refreshFromState()
 
     setClassById ("recordBtn",
                   state.isRecording ? "btn btn-record-active" : "btn btn-record");
+    
+    setTextById ("monitorBtnLabel",
+             state.audioMonitoringEnabled ? "Monitor On" : "Monitor Off");
+
+    setClassById ("monitorBtn",
+              state.audioMonitoringEnabled ? "btn btn-monitor-on"
+                                           : "btn btn-monitor-off");
 
     setTextById ("newTrackBtnLabel",
                  "New Track (" + juce::String (state.trackCount) + ")");

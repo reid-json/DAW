@@ -31,6 +31,7 @@ public:
     }
 
     std::function<void()> onRecordToggleRequested;
+    std::function<void()> onMonitoringToggleRequested;
     std::function<void()> onImportAudioRequested;
     std::function<void()> onPlayRequested;
     std::function<void()> onStopRequested;
