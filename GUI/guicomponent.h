@@ -7,9 +7,12 @@
 #include "dawstate.h"
 #include "timelinecomponent.h"
 #include "arrangementcomponent.h"
+#include "mixermastercomponent.h"
+#include "tracklistcomponent.h"
 #include "recentclipscomponent.h"
 #include "pianoRoll.h"
 #include "settingswindow.h"
+#include "../Plugin_Hosting/pluginhostmanager.h"
 
 class GUIComponent : public juce::Component,
                      public juce::DragAndDropContainer
@@ -42,44 +45,82 @@ public:
     std::function<void(int placementId)> onTimelineClipDeleteRequested;
 
 private:
+    static constexpr int sidebarEdgeGripWidth = 12;
+
     jive::Interpreter viewInterpreter;
+    jive::LookAndFeel lookAndFeel;
     std::unique_ptr<jive::GuiItem> root;
     juce::ValueTree uiTree;
     juce::var stylesheet;
 
     DAWState state;
+    PluginHostManager pluginHostManager;
     TimelineComponent* timelineComponent = nullptr;
     ArrangementComponent* arrangementComponent = nullptr;
+    MixerMasterComponent* mixerMasterComponent = nullptr;
+    TrackListComponent* trackListComponent = nullptr;
     RecentClipsComponent* recentClipsComponent = nullptr;
     std::unique_ptr<PianoRollWindow> pianoRollWindow;
     std::unique_ptr<SettingsWindow> settingsWindow;
 
     juce::AudioDeviceManager& deviceManager;
 
+    enum class WorkspaceResizeEdge
+    {
+        none,
+        left,
+        right
+    };
+
     bool draggingSidebar = false;
+    bool draggingClipSidebar = false;
     int dragStartScreenX = 0;
-    int sidebarStartWidth = 240;
+    int sidebarStartWidth = 340;
+    int clipSidebarStartWidth = 220;
+    WorkspaceResizeEdge activeWorkspaceResizeEdge = WorkspaceResizeEdge::none;
 
     class SidebarResizerListener : public juce::MouseListener
     {
     public:
         explicit SidebarResizerListener (GUIComponent& ownerIn) : owner (ownerIn) {}
 
+        void mouseMove (const juce::MouseEvent& e) override;
         void mouseDown (const juce::MouseEvent& e) override;
         void mouseDrag (const juce::MouseEvent& e) override;
         void mouseUp   (const juce::MouseEvent& e) override;
+        void mouseExit (const juce::MouseEvent& e) override;
 
     private:
         GUIComponent& owner;
     };
 
-    std::unique_ptr<SidebarResizerListener> resizerListener;
+    class WorkspaceResizeListener : public juce::MouseListener
+    {
+    public:
+        explicit WorkspaceResizeListener (GUIComponent& ownerIn) : owner (ownerIn) {}
+
+        void mouseMove (const juce::MouseEvent& e) override;
+        void mouseDown (const juce::MouseEvent& e) override;
+        void mouseDrag (const juce::MouseEvent& e) override;
+        void mouseUp   (const juce::MouseEvent& e) override;
+        void mouseExit (const juce::MouseEvent& e) override;
+
+    private:
+        GUIComponent& owner;
+    };
+
+    std::unique_ptr<WorkspaceResizeListener> workspaceResizeListener;
 
     static jive::GuiItem* findGuiItemById (jive::GuiItem& node, const juce::Identifier& id);
     static int getIntProperty (const juce::ValueTree& v, const juce::Identifier& key, int fallback);
+    static bool isNearRightEdge (const juce::MouseEvent& e, juce::Component& target, int gripWidth = 8);
+    static bool isNearLeftEdge (const juce::MouseEvent& e, juce::Component& target, int gripWidth = 8);
 
     void registerCustomComponentTypes();
+    void applyManualBodyLayout();
     void setSidebarWidth (int newWidth);
+    void setClipSidebarWidth (int newWidth);
+    void followTimelinePlayhead();
     void installCallbacks();
     void bindDynamicTrackButtons();
     void refreshFromState();

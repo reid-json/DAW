@@ -27,7 +27,7 @@ MainComponent::MainComponent()
     };
 
     addAndMakeVisible(gui.get());
-    setSize(1000, 700);
+    setSize(1440, 700);
     startTimerHz(30);
     syncStateFromEngine();
 }

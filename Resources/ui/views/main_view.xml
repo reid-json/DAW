@@ -110,34 +110,85 @@
                flex-direction="column"
                flex-grow="0"
                flex-shrink="0"
-               width="240"
-               min-width="180"
-               max-width="420"
+               width="340"
+               min-width="260"
+               max-width="440"
                padding="10"
                row-gap="10">
 
-      <Button id="newTrackBtn"
-              class="btn"
-              width="140"
-              height="32">
-        <Text id="newTrackBtnLabel" text="New Track (5)"/>
-      </Button>
+      <Component id="masterSection"
+                 class="mixer-shell"
+                 align-self="stretch"
+                 height="258"
+                 min-width="0"
+                 min-height="258">
+        <MixerMasterView id="masterView"
+                         flex-grow="1"
+                         min-width="0"
+                         min-height="0"/>
+      </Component>
 
-      <Component id="trackList"
-                 display="flex"
-                 flex-direction="column"
-                 row-gap="8"
+      <Component id="mixerPanel"
+                 class="mixer-shell"
+                 align-self="stretch"
                  flex-grow="1"
                  min-width="0"
                  min-height="0">
+
+        <TrackListView id="trackList"
+                       align-self="stretch"
+                       flex-grow="1"
+                       min-width="0"
+                       min-height="0"/>
       </Component>
+
+      <Button id="newTrackBtn"
+              class="btn btn-mixer-add"
+              width="170"
+              height="44">
+        <Text id="newTrackBtnLabel" text="Add Track +"/>
+      </Button>
     </Component>
 
-    <Component id="sidebarResizer"
-               class="sidebar-resizer"
-               width="10"
-               flex-grow="0"
-               flex-shrink="0"/>
+    <Component id="workspaceContent"
+               class="workspace"
+               display="flex"
+               flex-direction="column"
+               align-items="stretch"
+               flex-grow="1"
+               min-width="0"
+               min-height="0"
+               padding="0"
+               row-gap="12">
+
+      <Component id="timelinePanel"
+                 class="panel"
+                 display="flex"
+                 flex-direction="column"
+                 align-self="stretch"
+                 height="90"
+                 padding="8">
+        <TimelineView id="timelineView"
+                      flex-grow="1"
+                      min-width="0"
+                      min-height="0"/>
+      </Component>
+
+      <Component id="arrangementPanel"
+                 class="panel"
+                 display="flex"
+                 flex-direction="column"
+                 align-self="stretch"
+                 flex-grow="1"
+                 min-width="0"
+                 min-height="0"
+                 padding="16">
+        <ArrangementView id="arrangementView"
+                         flex-grow="1"
+                         min-width="0"
+                         min-height="0"/>
+      </Component>
+    </Component>
 
     <Component id="clipSidebarContent"
                class="sidebar clipSidebar"
@@ -151,13 +202,6 @@
                max-width="320"
                padding="10"
                row-gap="10">
-
-      <Button id="toggleClipSidebarBtn"
-              class="btn clipToggleBtn"
-              width="28"
-              height="32">
-        <Text id="toggleClipSidebarBtnLabel" text="&lt;"/>
-      </Button>
 
       <Component id="clipBrowserHeader"
                  display="flex"
@@ -180,43 +224,6 @@
                        flex-grow="1"
                        min-width="0"
                        min-height="0"/>
-    </Component>
-
-    <Component id="workspaceContent"
-               class="workspace"
-               display="flex"
-               flex-direction="column"
-               flex-grow="1"
-               min-width="0"
-               min-height="0"
-               padding="12"
-               row-gap="12">
-
-      <Component id="timelinePanel"
-                 class="panel"
-                 display="flex"
-                 flex-direction="column"
-                 height="90"
-                 padding="8">
-        <TimelineView id="timelineView"
-                      flex-grow="1"
-                      min-width="0"
-                      min-height="0"/>
-      </Component>
-
-      <Component id="arrangementPanel"
-                 class="panel"
-                 display="flex"
-                 flex-direction="column"
-                 flex-grow="1"
-                 min-width="0"
-                 min-height="0"
-                 padding="16">
-        <ArrangementView id="arrangementView"
-                         flex-grow="1"
-                         min-width="0"
-                         min-height="0"/>
-      </Component>
     </Component>
   </Component>
 </Component>

@@ -111,6 +111,74 @@ namespace
 
 void GUIComponent::registerCustomComponentTypes()
 {
+    viewInterpreter.getComponentFactory().set ("MixerMasterView", [this]
+    {
+        auto component = std::make_unique<MixerMasterComponent>(state);
+        component->getAvailableMasterPlugins = [this]
+        {
+            return pluginHostManager.getAvailableMasterPlugins();
+        };
+        component->onMasterPluginLoadRequested = [this] (int slotIndex, const juce::String& pluginName)
+        {
+            return pluginHostManager.loadMasterPlugin(pluginName, slotIndex);
+        };
+        component->onMasterPluginBypassRequested = [this] (int slotIndex, bool shouldBeBypassed)
+        {
+            pluginHostManager.setMasterPluginBypassed(slotIndex, shouldBeBypassed);
+        };
+        component->onMasterPluginRemoveRequested = [this] (int slotIndex)
+        {
+            pluginHostManager.removeMasterPlugin(slotIndex);
+        };
+        component->onMasterPluginEditorRequested = [this] (int slotIndex)
+        {
+            pluginHostManager.showMasterPluginEditor(slotIndex);
+        };
+        component->onMasterPluginSlotRemoveRequested = [this] (int slotIndex)
+        {
+            pluginHostManager.removeMasterPluginSlot(slotIndex);
+        };
+        mixerMasterComponent = component.get();
+        return component;
+    });
+
+    viewInterpreter.getComponentFactory().set ("TrackListView", [this]
+    {
+        auto component = std::make_unique<TrackListComponent> (state);
+        component->onRemoveTrackRequested = [this] (int trackIndex)
+        {
+            pluginHostManager.removeTrack(trackIndex);
+            state.removeTrackAt (trackIndex);
+            refreshFromState();
+        };
+        component->getAvailableTrackPlugins = [this]
+        {
+            return pluginHostManager.getAvailableTrackPlugins();
+        };
+        component->onTrackPluginLoadRequested = [this] (int trackIndex, int slotIndex, const juce::String& pluginName)
+        {
+            return pluginHostManager.loadTrackPlugin(pluginName, trackIndex, slotIndex);
+        };
+        component->onTrackPluginBypassRequested = [this] (int trackIndex, int slotIndex, bool shouldBeBypassed)
+        {
+            pluginHostManager.setTrackPluginBypassed(trackIndex, slotIndex, shouldBeBypassed);
+        };
+        component->onTrackPluginRemoveRequested = [this] (int trackIndex, int slotIndex)
+        {
+            pluginHostManager.removeTrackPlugin(trackIndex, slotIndex);
+        };
+        component->onTrackPluginEditorRequested = [this] (int trackIndex, int slotIndex)
+        {
+            pluginHostManager.showTrackPluginEditor(trackIndex, slotIndex);
+        };
+        component->onTrackPluginSlotRemoveRequested = [this] (int trackIndex, int slotIndex)
+        {
+            pluginHostManager.removeTrackPluginSlot(trackIndex, slotIndex);
+        };
+        trackListComponent = component.get();
+        return component;
+    });
+
     viewInterpreter.getComponentFactory().set ("TimelineView", [this]
     {
         auto component = std::make_unique<TimelineComponent> (state);
@@ -163,6 +231,8 @@ void GUIComponent::registerCustomComponentTypes()
 GUIComponent::GUIComponent(juce::AudioDeviceManager& sharedDeviceManager)
     : deviceManager(sharedDeviceManager)
 {
+    setLookAndFeel (&lookAndFeel);
+
     const auto resourcesDir = findResourcesDir();
 
     const auto xmlFile = resourcesDir.getChildFile ("ui")
@@ -216,35 +286,33 @@ GUIComponent::GUIComponent(juce::AudioDeviceManager& sharedDeviceManager)
         viewInterpreter.listenTo (*root);
         installCallbacks();
 
-        if (auto* resizerItem = findGuiItemById (*root, juce::Identifier ("sidebarResizer")))
+        if (auto comp = root->getComponent())
         {
-            if (auto resizerComp = resizerItem->getComponent())
-            {
-                resizerComp->setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
-                resizerComp->setInterceptsMouseClicks (true, false);
-
-                resizerListener = std::make_unique<SidebarResizerListener> (*this);
-                resizerComp->addMouseListener (resizerListener.get(), false);
-            }
+            workspaceResizeListener = std::make_unique<WorkspaceResizeListener> (*this);
+            comp->addMouseListener (workspaceResizeListener.get(), true);
         }
     }
 
     rebuildTrackList();
     refreshFromState();
 
-    setSize (1280, 720);
+    setSize (1440, 700);
     resized();
 }
 
 GUIComponent::~GUIComponent()
 {
-    if (root == nullptr || resizerListener == nullptr)
+    setLookAndFeel (nullptr);
+
+    if (root == nullptr)
         return;
 
-    if (auto* resizerItem = findGuiItemById (*root, juce::Identifier ("sidebarResizer")))
+    if (workspaceResizeListener != nullptr)
     {
-        if (auto resizerComp = resizerItem->getComponent())
-            resizerComp->removeMouseListener (resizerListener.get());
+        if (auto comp = root->getComponent())
+        {
+            comp->removeMouseListener (workspaceResizeListener.get());
+        }
     }
 }
 
@@ -263,6 +331,7 @@ void GUIComponent::resized()
         comp->setBounds (getLocalBounds());
 
     root->callLayoutChildrenWithRecursionLock();
+    applyManualBodyLayout();
 }
 
 jive::GuiItem* GUIComponent::findGuiItemById (jive::GuiItem& node, const juce::Identifier& id)
@@ -296,6 +365,132 @@ int GUIComponent::getIntProperty (const juce::ValueTree& v,
     return value.toString().trim().getIntValue();
 }
 
+bool GUIComponent::isNearRightEdge (const juce::MouseEvent& e, juce::Component& target, int gripWidth)
+{
+    auto relative = e.getEventRelativeTo (&target);
+    return relative.x >= 0
+        && relative.y >= 0
+        && relative.x < target.getWidth()
+        && relative.y < target.getHeight()
+        && relative.x >= target.getWidth() - gripWidth;
+}
+
+bool GUIComponent::isNearLeftEdge (const juce::MouseEvent& e, juce::Component& target, int gripWidth)
+{
+    auto relative = e.getEventRelativeTo (&target);
+    return relative.x >= 0
+        && relative.y >= 0
+        && relative.x < target.getWidth()
+        && relative.y < target.getHeight()
+        && relative.x <= gripWidth;
+}
+
+void GUIComponent::applyManualBodyLayout()
+{
+    if (root == nullptr)
+        return;
+
+    auto* headerItem = findGuiItemById (*root, juce::Identifier ("headerContent"));
+    auto* bodyItem = findGuiItemById (*root, juce::Identifier ("bodyContent"));
+    auto* sidebarItem = findGuiItemById (*root, juce::Identifier ("sidebarContent"));
+    auto* workspaceItem = findGuiItemById (*root, juce::Identifier ("workspaceContent"));
+    auto* clipSidebarItem = findGuiItemById (*root, juce::Identifier ("clipSidebarContent"));
+    if (headerItem == nullptr || bodyItem == nullptr || sidebarItem == nullptr || workspaceItem == nullptr || clipSidebarItem == nullptr)
+        return;
+
+    auto headerComp = headerItem->getComponent();
+    auto bodyComp = bodyItem->getComponent();
+    auto sidebarComp = sidebarItem->getComponent();
+    auto workspaceComp = workspaceItem->getComponent();
+    auto clipSidebarComp = clipSidebarItem->getComponent();
+    if (headerComp == nullptr || bodyComp == nullptr || sidebarComp == nullptr || workspaceComp == nullptr || clipSidebarComp == nullptr)
+        return;
+
+    auto fullArea = getLocalBounds();
+    auto headerBounds = fullArea.removeFromTop (86);
+    auto bodyBounds = fullArea;
+    const int clipSidebarWidth = state.clipSidebarCollapsed ? 44 : state.clipSidebarWidth;
+    const int workspaceWidth = juce::jmax (0, bodyBounds.getWidth() - state.sidebarWidth - clipSidebarWidth);
+
+    headerComp->setBounds (headerBounds);
+    bodyComp->setBounds (bodyBounds);
+
+    auto bodyLocalBounds = bodyComp->getLocalBounds();
+    sidebarComp->setBounds (bodyLocalBounds.removeFromLeft (state.sidebarWidth));
+    workspaceComp->setBounds (bodyLocalBounds.removeFromLeft (workspaceWidth));
+    clipSidebarComp->setBounds (bodyLocalBounds.removeFromLeft (clipSidebarWidth));
+
+    if (auto* headerTopRowItem = findGuiItemById (*root, juce::Identifier ("headerTopRow")))
+    {
+        if (auto headerTopRowComp = headerTopRowItem->getComponent())
+            headerTopRowComp->setBounds (headerComp->getLocalBounds().reduced (10).removeFromTop (28));
+    }
+
+    if (auto* headerMainRowItem = findGuiItemById (*root, juce::Identifier ("headerMainRow")))
+    {
+        if (auto headerMainRowComp = headerMainRowItem->getComponent())
+        {
+            auto headerInner = headerComp->getLocalBounds().reduced (10);
+            headerInner.removeFromTop (30);
+            headerMainRowComp->setBounds (headerInner.removeFromTop (40));
+        }
+    }
+
+    auto sidebarArea = sidebarComp->getLocalBounds().reduced (10);
+
+    if (auto* masterItem = findGuiItemById (*root, juce::Identifier ("masterSection")))
+        if (auto masterComp = masterItem->getComponent())
+        {
+            masterComp->setBounds (sidebarArea.removeFromTop (298));
+            sidebarArea.removeFromTop (12);
+        }
+
+    auto footerArea = sidebarArea.removeFromBottom (78);
+
+    juce::Component::SafePointer<juce::Component> mixerPanelComp;
+    if (auto* mixerPanelItem = findGuiItemById (*root, juce::Identifier ("mixerPanel")))
+        mixerPanelComp = mixerPanelItem->getComponent().get();
+
+    if (mixerPanelComp != nullptr)
+        mixerPanelComp->setBounds (sidebarArea);
+
+    if (auto* newTrackItem = findGuiItemById (*root, juce::Identifier ("newTrackBtn")))
+        if (auto newTrackComp = newTrackItem->getComponent())
+            newTrackComp->setBounds (footerArea.withSizeKeepingCentre (170, 44));
+
+    if (auto* trackListItem = findGuiItemById (*root, juce::Identifier ("trackList")))
+        if (auto trackListComp = trackListItem->getComponent())
+            if (mixerPanelComp != nullptr)
+                trackListComp->setBounds (mixerPanelComp->getLocalBounds().reduced (6).withTrimmedRight (10));
+
+    auto workspaceArea = workspaceComp->getLocalBounds();
+    if (auto* timelinePanelItem = findGuiItemById (*root, juce::Identifier ("timelinePanel")))
+    {
+        if (auto timelinePanelComp = timelinePanelItem->getComponent())
+            timelinePanelComp->setBounds (workspaceArea.removeFromTop (90));
+    }
+
+    workspaceArea.removeFromTop (12);
+
+    if (auto* arrangementPanelItem = findGuiItemById (*root, juce::Identifier ("arrangementPanel")))
+        if (auto arrangementPanelComp = arrangementPanelItem->getComponent())
+            arrangementPanelComp->setBounds (workspaceArea);
+
+    auto clipArea = clipSidebarComp->getLocalBounds().reduced (10);
+    if (auto* headerNode = findGuiItemById (*root, juce::Identifier ("clipBrowserHeader")))
+    {
+        if (auto clipHeaderComp = headerNode->getComponent())
+        {
+            clipHeaderComp->setBounds (clipArea.removeFromTop (52));
+            clipArea.removeFromTop (4);
+        }
+    }
+
+    if (auto* clipListItem = findGuiItemById (*root, juce::Identifier ("clipList")))
+        if (auto clipListComp = clipListItem->getComponent())
+            clipListComp->setBounds (clipArea);
+}
+
 void GUIComponent::setSidebarWidth (int newWidth)
 {
     auto sidebarNode = jive::findElementWithID (uiTree, juce::Identifier ("sidebarContent"));
@@ -311,6 +506,29 @@ void GUIComponent::setSidebarWidth (int newWidth)
 
     root->callLayoutChildrenWithRecursionLock();
     resized();
+}
+
+void GUIComponent::setClipSidebarWidth (int newWidth)
+{
+    auto clipSidebarNode = jive::findElementWithID (uiTree, juce::Identifier ("clipSidebarContent"));
+    if (! clipSidebarNode.isValid())
+        return;
+
+    const int minW = getIntProperty (clipSidebarNode, juce::Identifier ("min-width"), 160);
+    const int maxW = getIntProperty (clipSidebarNode, juce::Identifier ("max-width"), 320);
+    const int collapsedWidth = 44;
+
+    if (newWidth <= collapsedWidth)
+    {
+        state.clipSidebarCollapsed = true;
+    }
+    else
+    {
+        state.clipSidebarCollapsed = false;
+        state.clipSidebarWidth = juce::jlimit (minW, maxW, newWidth);
+    }
+
+    refreshFromState();
 }
 
 void GUIComponent::installCallbacks()
@@ -506,10 +724,7 @@ void GUIComponent::refreshFromState()
                                            : "btn btn-monitor-off");
 
     setTextById ("newTrackBtnLabel",
-                 "New Track (" + juce::String (state.trackCount) + ")");
-
-    setTextById ("toggleClipSidebarBtnLabel",
-             state.clipSidebarCollapsed ? ">" : "<");
+                 "Add Track +");
 
     auto sidebarNode = jive::findElementWithID (uiTree, juce::Identifier ("sidebarContent"));
     if (sidebarNode.isValid())
@@ -539,65 +754,8 @@ void GUIComponent::refreshFromState()
 
 void GUIComponent::rebuildTrackList()
 {
-    auto trackListNode = jive::findElementWithID (uiTree, juce::Identifier ("trackList"));
-    if (! trackListNode.isValid())
-        return;
-
-    while (trackListNode.getNumChildren() > 0)
-        trackListNode.removeChild (0, nullptr);
-
-    const auto laneRowStyle = makeStyleStringForClasses ("laneRow", stylesheet);
-    const auto laneAccentStyle = makeStyleStringForClasses ("laneAccent", stylesheet);
-    const auto labelStyle = makeStyleStringForClasses ("label", stylesheet);
-    const auto removeButtonStyle = makeStyleStringForClasses ("btn btn-danger", stylesheet);
-
-    for (int i = 0; i < state.trackCount; ++i)
-    {
-        auto laneRow = juce::ValueTree ("Component");
-        laneRow.setProperty ("id", "trackRow" + juce::String (i + 1), nullptr);
-        laneRow.setProperty ("class", "laneRow", nullptr);
-        laneRow.setProperty ("style", laneRowStyle, nullptr);
-        laneRow.setProperty ("height", 54, nullptr);
-        laneRow.setProperty ("padding", 8, nullptr);
-        laneRow.setProperty ("display", "flex", nullptr);
-        laneRow.setProperty ("flex-direction", "row", nullptr);
-        laneRow.setProperty ("align-items", "center", nullptr);
-        laneRow.setProperty ("column-gap", 8, nullptr);
-
-        auto laneAccent = juce::ValueTree ("Component");
-        laneAccent.setProperty ("width", 10, nullptr);
-        laneAccent.setProperty ("height", 24, nullptr);
-        laneAccent.setProperty ("class", "laneAccent", nullptr);
-        laneAccent.setProperty ("style", laneAccentStyle, nullptr);
-
-        auto label = juce::ValueTree ("Text");
-        label.setProperty ("id", "trackLabel" + juce::String (i + 1), nullptr);
-        label.setProperty ("class", "label", nullptr);
-        label.setProperty ("style", labelStyle, nullptr);
-        label.setProperty ("text", "Track " + juce::String (i + 1), nullptr);
-        label.setProperty ("flex-grow", 1, nullptr);
-
-        auto removeButton = juce::ValueTree ("Button");
-        removeButton.setProperty ("id", "removeTrackBtn" + juce::String (i + 1), nullptr);
-        removeButton.setProperty ("class", "btn btn-danger", nullptr);
-        removeButton.setProperty ("style", removeButtonStyle, nullptr);
-        removeButton.setProperty ("width", 32, nullptr);
-        removeButton.setProperty ("height", 28, nullptr);
-
-        auto removeText = juce::ValueTree ("Text");
-        removeText.setProperty ("id", "removeTrackBtnLabel" + juce::String (i + 1), nullptr);
-        removeText.setProperty ("text", "-", nullptr);
-
-        removeButton.appendChild (removeText, nullptr);
-
-        laneRow.appendChild (laneAccent, nullptr);
-        laneRow.appendChild (label, nullptr);
-        laneRow.appendChild (removeButton, nullptr);
-        trackListNode.appendChild (laneRow, nullptr);
-    }
-
-    root->callLayoutChildrenWithRecursionLock();
-    bindDynamicTrackButtons();
+    if (trackListComponent != nullptr)
+        trackListComponent->repaint();
 }
 
 void GUIComponent::refreshExternalState(bool shouldRefreshControls, bool shouldRebuildTrackList)
@@ -608,6 +766,7 @@ void GUIComponent::refreshExternalState(bool shouldRefreshControls, bool shouldR
     if (shouldRefreshControls)
         refreshFromState();
 
+    followTimelinePlayhead();
     repaintDynamicViews();
 }
 
@@ -621,27 +780,128 @@ void GUIComponent::repaintDynamicViews()
 
     if (recentClipsComponent != nullptr)
         recentClipsComponent->repaint();
+
+    if (trackListComponent != nullptr)
+        trackListComponent->repaint();
 }
 
-void GUIComponent::SidebarResizerListener::mouseDown (const juce::MouseEvent& e)
+void GUIComponent::followTimelinePlayhead()
 {
-    owner.draggingSidebar = true;
-    owner.dragStartScreenX = e.getScreenX();
-
-    auto sidebarNode = jive::findElementWithID (owner.uiTree, juce::Identifier ("sidebarContent"));
-    owner.sidebarStartWidth = GUIComponent::getIntProperty (sidebarNode, juce::Identifier ("width"), 240);
-}
-
-void GUIComponent::SidebarResizerListener::mouseDrag (const juce::MouseEvent& e)
-{
-    if (! owner.draggingSidebar)
+    if (timelineComponent == nullptr && arrangementComponent == nullptr)
         return;
 
-    const int delta = e.getScreenX() - owner.dragStartScreenX;
-    owner.setSidebarWidth (owner.sidebarStartWidth + delta);
+    if (state.isDraggingHorizontalScrollbar)
+        return;
+
+    if (state.transportState != DAWState::TransportState::playing)
+        return;
+
+    int viewportWidth = 0;
+    if (arrangementComponent != nullptr)
+        viewportWidth = arrangementComponent->getWidth() - 10;
+    else if (timelineComponent != nullptr)
+        viewportWidth = timelineComponent->getWidth();
+
+    if (viewportWidth <= 0)
+        return;
+
+    constexpr float pixelsPerSecond = 100.0f;
+    constexpr float leftInset = 40.0f;
+    constexpr int followPadding = 120;
+    const int playheadX = static_cast<int>(std::round(leftInset + state.playhead * pixelsPerSecond));
+    const int visibleLeft = state.horizontalScrollOffset;
+    const int visibleRight = state.horizontalScrollOffset + viewportWidth;
+
+    if (playheadX > visibleRight - followPadding)
+        state.horizontalScrollOffset = juce::jmax(0, playheadX - viewportWidth + followPadding);
+    else if (playheadX < visibleLeft + 40)
+        state.horizontalScrollOffset = juce::jmax(0, playheadX - 40);
 }
 
-void GUIComponent::SidebarResizerListener::mouseUp (const juce::MouseEvent&)
+void GUIComponent::WorkspaceResizeListener::mouseDown (const juce::MouseEvent& e)
+{
+    auto* sidebarItem = GUIComponent::findGuiItemById (*owner.root, juce::Identifier ("sidebarContent"));
+    auto* workspaceItem = GUIComponent::findGuiItemById (*owner.root, juce::Identifier ("workspaceContent"));
+    if (sidebarItem == nullptr || workspaceItem == nullptr)
+        return;
+
+    auto sidebarComp = sidebarItem->getComponent();
+    auto workspaceComp = workspaceItem->getComponent();
+    if (sidebarComp == nullptr || workspaceComp == nullptr)
+        return;
+
+    const bool nearSidebarRight = GUIComponent::isNearRightEdge (e, *sidebarComp, GUIComponent::sidebarEdgeGripWidth);
+    const bool nearWorkspaceLeft = GUIComponent::isNearLeftEdge (e, *workspaceComp, GUIComponent::sidebarEdgeGripWidth);
+
+    if (nearSidebarRight || nearWorkspaceLeft)
+    {
+        owner.activeWorkspaceResizeEdge = GUIComponent::WorkspaceResizeEdge::left;
+        auto sidebarNode = jive::findElementWithID (owner.uiTree, juce::Identifier ("sidebarContent"));
+        owner.sidebarStartWidth = GUIComponent::getIntProperty (sidebarNode, juce::Identifier ("width"), 340);
+    }
+    else if (GUIComponent::isNearRightEdge (e, *workspaceComp, GUIComponent::sidebarEdgeGripWidth))
+    {
+        owner.activeWorkspaceResizeEdge = GUIComponent::WorkspaceResizeEdge::none;
+        return;
+    }
+    else
+    {
+        owner.activeWorkspaceResizeEdge = GUIComponent::WorkspaceResizeEdge::none;
+        return;
+    }
+
+    owner.draggingSidebar = owner.activeWorkspaceResizeEdge == GUIComponent::WorkspaceResizeEdge::left;
+    owner.draggingClipSidebar = false;
+    owner.dragStartScreenX = e.getScreenX();
+}
+
+void GUIComponent::WorkspaceResizeListener::mouseDrag (const juce::MouseEvent& e)
+{
+    const int delta = e.getScreenX() - owner.dragStartScreenX;
+    if (owner.activeWorkspaceResizeEdge == GUIComponent::WorkspaceResizeEdge::left)
+    {
+        owner.setSidebarWidth (owner.sidebarStartWidth + delta);
+    }
+}
+
+void GUIComponent::WorkspaceResizeListener::mouseUp (const juce::MouseEvent&)
 {
     owner.draggingSidebar = false;
+    owner.draggingClipSidebar = false;
+    owner.activeWorkspaceResizeEdge = GUIComponent::WorkspaceResizeEdge::none;
+}
+
+void GUIComponent::WorkspaceResizeListener::mouseMove (const juce::MouseEvent& e)
+{
+    auto* sidebarItem = GUIComponent::findGuiItemById (*owner.root, juce::Identifier ("sidebarContent"));
+    auto* workspaceItem = GUIComponent::findGuiItemById (*owner.root, juce::Identifier ("workspaceContent"));
+    if (sidebarItem == nullptr || workspaceItem == nullptr)
+        return;
+
+    auto sidebarComp = sidebarItem->getComponent();
+    auto workspaceComp = workspaceItem->getComponent();
+    if (sidebarComp == nullptr || workspaceComp == nullptr)
+        return;
+
+    const bool nearDivider = GUIComponent::isNearRightEdge (e, *sidebarComp, GUIComponent::sidebarEdgeGripWidth)
+                          || GUIComponent::isNearLeftEdge (e, *workspaceComp, GUIComponent::sidebarEdgeGripWidth);
+    const auto cursor = nearDivider ? juce::MouseCursor::LeftRightResizeCursor
+                                    : juce::MouseCursor::NormalCursor;
+
+    if (auto rootComp = owner.root->getComponent())
+        rootComp->setMouseCursor (cursor);
+
+    sidebarComp->setMouseCursor (cursor);
+    workspaceComp->setMouseCursor (cursor);
+    e.eventComponent->setMouseCursor (cursor);
+}
+
+void GUIComponent::WorkspaceResizeListener::mouseExit (const juce::MouseEvent& e)
+{
+    if (auto rootComp = owner.root->getComponent())
+        rootComp->setMouseCursor (juce::MouseCursor::NormalCursor);
+
+    if (auto* workspaceItem = GUIComponent::findGuiItemById (*owner.root, juce::Identifier ("workspaceContent")))
+        if (auto workspaceComp = workspaceItem->getComponent())
+            workspaceComp->setMouseCursor (juce::MouseCursor::NormalCursor);
 }
