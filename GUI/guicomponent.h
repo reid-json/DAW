@@ -10,6 +10,7 @@
 #include "mixermastercomponent.h"
 #include "tracklistcomponent.h"
 #include "recentclipscomponent.h"
+#include "tempocontrolcomponent.h"
 #include "pianoRoll.h"
 #include "settingswindow.h"
 #include "../Plugin_Hosting/pluginhostmanager.h"
@@ -60,6 +61,7 @@ private:
     MixerMasterComponent* mixerMasterComponent = nullptr;
     TrackListComponent* trackListComponent = nullptr;
     RecentClipsComponent* recentClipsComponent = nullptr;
+    TempoControlComponent* tempoControlComponent = nullptr;
     std::unique_ptr<PianoRollWindow> pianoRollWindow;
     std::unique_ptr<SettingsWindow> settingsWindow;
 

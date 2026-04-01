@@ -226,6 +226,13 @@ void GUIComponent::registerCustomComponentTypes()
         recentClipsComponent = component.get();
         return component;
     });
+
+    viewInterpreter.getComponentFactory().set ("TempoControlView", [this]
+    {
+        auto component = std::make_unique<TempoControlComponent> (state);
+        tempoControlComponent = component.get();
+        return component;
+    });
 }
 
 GUIComponent::GUIComponent(juce::AudioDeviceManager& sharedDeviceManager)

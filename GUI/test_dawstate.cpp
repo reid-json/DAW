@@ -48,6 +48,16 @@ public:
         state.setTrackName (2, "   ");
         expectEquals (state.getTrackName (2), juce::String ("Track 3"));
 
+        beginTest ("Tempo clamps to supported range");
+
+        expectWithinAbsoluteError (state.tempoBpm, 120.0, 0.001);
+        state.setTempoBpm (180.0);
+        expectWithinAbsoluteError (state.tempoBpm, 180.0, 0.001);
+        state.setTempoBpm (20.0);
+        expectWithinAbsoluteError (state.tempoBpm, 40.0, 0.001);
+        state.setTempoBpm (300.0);
+        expectWithinAbsoluteError (state.tempoBpm, 240.0, 0.001);
+
         beginTest ("Track mixer state toggles");
 
         expect (! state.getTrackMixerState (0).muted);

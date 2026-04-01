@@ -93,6 +93,10 @@
         <Text id="settingsBtnLabel" text="Settings"/>
       </Button>
 
+      <TempoControlView id="tempoControl"
+                        width="220"
+                        height="36"/>
+
       <Component flex-grow="1"/>
     </Component>
   </Component>

@@ -18,6 +18,15 @@ namespace
     {
         return juce::Colour(0xff9db7ff).withAlpha(0.24f);
     }
+
+    juce::String getPanLabelText(float pan)
+    {
+        if (std::abs(pan) < 0.04f)
+            return "C";
+
+        const int amount = static_cast<int>(std::round(std::abs(pan) * 100.0f));
+        return (pan < 0.0f ? "L" : "R") + juce::String(amount);
+    }
 }
 
 MixerMasterComponent::MixerMasterComponent(DAWState& stateIn)
@@ -275,6 +284,14 @@ void MixerMasterComponent::drawPanKnob(juce::Graphics& g, juce::Rectangle<float>
     const auto endPoint = juce::Point<float>(bounds.getCentreX() + std::sin(angle) * 13.0f,
                                              bounds.getCentreY() - std::cos(angle) * 13.0f);
     g.drawLine(bounds.getCentreX(), bounds.getCentreY(), endPoint.x, endPoint.y, 2.1f);
+
+    auto labelBounds = bounds.withY(bounds.getY() - 14.0f).withHeight(12.0f);
+    g.setColour(juce::Colours::white.withAlpha(0.52f));
+    g.setFont(juce::Font(10.0f, juce::Font::plain));
+    g.drawText(getPanLabelText(state.masterMixerState.pan),
+               labelBounds.toNearestInt(),
+               juce::Justification::centred,
+               false);
 }
 
 void MixerMasterComponent::drawMeter(juce::Graphics& g, juce::Rectangle<float> bounds) const

@@ -91,6 +91,7 @@ struct DAWState
     int clipSidebarWidth = 220;
     int horizontalScrollOffset = 0;
     int selectedTrackIndex = 0;
+    double tempoBpm = 120.0;
 
     double playhead = 0.0;
 
@@ -136,6 +137,11 @@ struct DAWState
     void toggleAudioMonitoring()
     {
         audioMonitoringEnabled = ! audioMonitoringEnabled;
+    }
+
+    void setTempoBpm (double newTempoBpm)
+    {
+        tempoBpm = juce::jlimit (40.0, 240.0, newTempoBpm);
     }
 
     void addTrack()

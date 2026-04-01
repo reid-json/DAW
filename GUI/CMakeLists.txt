@@ -13,6 +13,8 @@ add_library(GUI STATIC
     tracklistcomponent.h
     recentclipscomponent.cpp
     recentclipscomponent.h
+    tempocontrolcomponent.cpp
+    tempocontrolcomponent.h
     settingswindow.h
 )
 
