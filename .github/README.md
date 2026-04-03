@@ -10,3 +10,7 @@ Chroma is a Digital Audio Workstation. Currently in development by Tyler Martin,
 - Third Party Plugin Hosting
 - Piano Roll Integration
 
+## Download Latest Update
+
+-https://github.com/reid-json/DAW/releases/download/v1.0.0/DAW.exe
+
