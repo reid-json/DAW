@@ -74,6 +74,8 @@ public:
 
     SourceAsset* addAsset(const juce::String& name, AssetKind kind, const RecordedClip& clip = {});
     SourceAsset* addRecentRecording(const RecordedClip& clip);
+    bool renameAsset(int assetId, const juce::String& newName);
+    bool updateAssetClip(int assetId, const RecordedClip& clip);
 
     CentralTrackSlot* createCentralTrackSlot();
     bool assignAssetToCentralTrack(int assetId, int slotId);

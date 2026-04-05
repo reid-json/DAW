@@ -362,6 +362,45 @@ int AudioEngine::createMidiPatternAsset()
     return asset != nullptr ? asset->assetId : -1;
 }
 
+int AudioEngine::createPatternAsset(const juce::String& name, double lengthSeconds)
+{
+    RecordedClip clip;
+    clip.name = name;
+    clip.sampleRate = 44100.0;
+
+    const auto clampedLengthSeconds = juce::jmax(0.1, lengthSeconds);
+    const int samples = static_cast<int>(std::round(clip.sampleRate * clampedLengthSeconds));
+    clip.leftChannel.resize(static_cast<size_t>(samples), 0.0f);
+    clip.rightChannel.resize(static_cast<size_t>(samples), 0.0f);
+
+    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
+    auto* asset = arrangementState.addAsset(name, AssetKind::pianoRollPattern, clip);
+    return asset != nullptr ? asset->assetId : -1;
+}
+
+bool AudioEngine::updatePatternAsset(int assetId, const juce::String& name, double lengthSeconds)
+{
+    RecordedClip clip;
+    clip.name = name;
+    clip.sampleRate = 44100.0;
+
+    const auto clampedLengthSeconds = juce::jmax(0.1, lengthSeconds);
+    const int samples = static_cast<int>(std::round(clip.sampleRate * clampedLengthSeconds));
+    clip.leftChannel.resize(static_cast<size_t>(samples), 0.0f);
+    clip.rightChannel.resize(static_cast<size_t>(samples), 0.0f);
+
+    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
+    const bool renamed = arrangementState.renameAsset(assetId, name);
+    const bool updated = arrangementState.updateAssetClip(assetId, clip);
+    return renamed && updated;
+}
+
+bool AudioEngine::renameAsset(int assetId, const juce::String& newName)
+{
+    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
+    return arrangementState.renameAsset(assetId, newName);
+}
+
 int AudioEngine::createLiveInputAsset(const juce::String& name)
 {
     juce::ScopedLock sl(deviceManager.getAudioCallbackLock());

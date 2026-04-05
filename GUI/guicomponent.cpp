@@ -1,11 +1,53 @@
 #include "guicomponent.h"
 
+#include <map>
+
 #include <juce_core/juce_core.h>
 #include <jive_core/algorithms/jive_Find.h>
 #include "timelinecomponent.h"
 
 namespace
 {
+    std::vector<PianoRoll::Note> toPianoRollNotes (const TrackPatternState& pattern)
+    {
+        std::vector<PianoRoll::Note> notes;
+        notes.reserve (pattern.notes.size());
+
+        for (const auto& note : pattern.notes)
+            notes.push_back ({ note.id, note.startBeat, note.lengthBeats, note.midiNote, note.label });
+
+        return notes;
+    }
+
+    std::vector<TrackPatternNote> toTrackPatternNotes (const std::vector<PianoRoll::Note>& notes)
+    {
+        std::vector<TrackPatternNote> patternNotes;
+        patternNotes.reserve (notes.size());
+
+        for (const auto& note : notes)
+            patternNotes.push_back ({ note.id, note.startBeat, note.lengthBeats, note.midiNote, note.label });
+
+        return patternNotes;
+    }
+
+    bool samePatternNotes (const std::vector<TrackPatternNote>& lhs, const std::vector<PianoRoll::Note>& rhs)
+    {
+        if (lhs.size() != rhs.size())
+            return false;
+
+        for (size_t i = 0; i < lhs.size(); ++i)
+        {
+            if (lhs[i].id != rhs[i].id
+                || lhs[i].startBeat != rhs[i].startBeat
+                || lhs[i].lengthBeats != rhs[i].lengthBeats
+                || lhs[i].midiNote != rhs[i].midiNote
+                || lhs[i].label != rhs[i].label)
+                return false;
+        }
+
+        return true;
+    }
+
     juce::File findResourcesDir()
     {
         auto exeFile = juce::File::getSpecialLocation (juce::File::currentExecutableFile);
@@ -107,6 +149,177 @@ namespace
         for (int i = 0; i < node.getNumChildren(); ++i)
             applyStylesRecursively (node.getChild (i), stylesheet);
     }
+
+    using SpriteAssetMap = std::map<juce::String, juce::var>;
+
+    juce::String normaliseSpriteKey (juce::String text)
+    {
+        text = text.toLowerCase().trim();
+        juce::String result;
+
+        for (const auto character : text)
+        {
+            if (juce::CharacterFunctions::isLetterOrDigit (character))
+                result << character;
+        }
+
+        return result;
+    }
+
+    SpriteAssetMap loadSpriteAssets (const juce::File& spritesDirectory)
+    {
+        SpriteAssetMap sprites;
+
+        if (! spritesDirectory.isDirectory())
+            return sprites;
+
+        for (const auto& spriteFile : spritesDirectory.findChildFiles (juce::File::findFiles, false, "*"))
+        {
+            const auto key = normaliseSpriteKey (spriteFile.getFileNameWithoutExtension());
+            if (key.isEmpty())
+                continue;
+
+            const auto extension = spriteFile.getFileExtension().toLowerCase();
+
+            if (extension == ".svg")
+            {
+                const auto svgSource = spriteFile.loadFileAsString();
+                if (svgSource.isNotEmpty())
+                    sprites[key] = svgSource;
+
+                continue;
+            }
+
+            if (extension == ".png" || extension == ".jpg" || extension == ".jpeg")
+            {
+                if (auto image = juce::ImageFileFormat::loadFrom (spriteFile); image.isValid())
+                    sprites[key] = juce::VariantConverter<juce::Image>::toVar (image);
+            }
+        }
+
+        return sprites;
+    }
+
+    juce::StringArray buildSpriteLookupKeys (const juce::ValueTree& button)
+    {
+        juce::StringArray keys;
+        keys.addIfNotAlreadyThere (normaliseSpriteKey (button.getProperty ("id").toString()));
+
+        auto buttonId = button.getProperty ("id").toString();
+        if (buttonId.endsWithIgnoreCase ("Btn"))
+            keys.addIfNotAlreadyThere (normaliseSpriteKey (buttonId.dropLastCharacters (3)));
+
+        for (int i = 0; i < button.getNumChildren(); ++i)
+        {
+            const auto child = button.getChild (i);
+            if (child.getType().toString().compareIgnoreCase ("Text") != 0)
+                continue;
+
+            const auto label = child.getProperty ("text").toString();
+            keys.addIfNotAlreadyThere (normaliseSpriteKey (label));
+        }
+
+        return keys;
+    }
+
+    const juce::var* findMatchingSprite (const juce::StringArray& keys, const SpriteAssetMap& sprites)
+    {
+        for (const auto& key : keys)
+        {
+            if (const auto it = sprites.find (key); it != sprites.end())
+                return &it->second;
+        }
+
+        for (const auto& key : keys)
+        {
+            for (const auto& [spriteKey, spriteValue] : sprites)
+            {
+                if (spriteKey.startsWith (key) || key.startsWith (spriteKey))
+                    return &spriteValue;
+            }
+        }
+
+        return nullptr;
+    }
+
+    void replaceButtonLabelsWithSprites (juce::ValueTree node, const SpriteAssetMap& sprites)
+    {
+        if (! node.isValid())
+            return;
+
+        if (node.getType().toString().compareIgnoreCase ("Button") == 0)
+        {
+            juce::var matchedSprite;
+            if (const auto* sprite = findMatchingSprite (buildSpriteLookupKeys (node), sprites))
+                matchedSprite = *sprite;
+
+            if (! matchedSprite.isVoid())
+            {
+                juce::String label;
+
+                for (int i = node.getNumChildren(); --i >= 0;)
+                {
+                    const auto child = node.getChild (i);
+                    if (child.getType().toString().compareIgnoreCase ("Text") != 0)
+                        continue;
+
+                    if (label.isEmpty())
+                        label = child.getProperty ("text").toString();
+
+                    node.removeChild (i, nullptr);
+                }
+
+                if (label.isNotEmpty())
+                {
+                    if (node.getProperty ("title").toString().isEmpty())
+                        node.setProperty ("title", label, nullptr);
+
+                    if (node.getProperty ("tooltip").toString().isEmpty())
+                        node.setProperty ("tooltip", label, nullptr);
+                }
+
+                auto classNames = node.getProperty ("class").toString().trim();
+                if (! classNames.containsWholeWord ("btn-icon"))
+                {
+                    if (classNames.isNotEmpty())
+                        classNames << " ";
+
+                    classNames << "btn-icon";
+                    node.setProperty ("class", classNames, nullptr);
+                }
+
+                node.setProperty ("width", 48, nullptr);
+                node.setProperty ("height", 48, nullptr);
+                node.setProperty ("padding", 0, nullptr);
+                node.setProperty ("justify-content", "center", nullptr);
+                node.setProperty ("align-items", "center", nullptr);
+
+                juce::ValueTree spriteNode ("Image");
+                spriteNode.setProperty ("id", node.getProperty ("id").toString() + "Sprite", nullptr);
+                spriteNode.setProperty ("source", matchedSprite, nullptr);
+                spriteNode.setProperty ("width", 40, nullptr);
+                spriteNode.setProperty ("height", 40, nullptr);
+                spriteNode.setProperty ("placement", "centred", nullptr);
+                spriteNode.setProperty ("intercepts-mouse-clicks", false, nullptr);
+                node.appendChild (spriteNode, nullptr);
+            }
+        }
+
+        for (int i = 0; i < node.getNumChildren(); ++i)
+            replaceButtonLabelsWithSprites (node.getChild (i), sprites);
+    }
+
+    void allowClicksToPassThroughChildren (juce::Component& component)
+    {
+        for (int i = 0; i < component.getNumChildComponents(); ++i)
+        {
+            if (auto* child = component.getChildComponent (i))
+            {
+                child->setInterceptsMouseClicks (false, false);
+                allowClicksToPassThroughChildren (*child);
+            }
+        }
+    }
 }
 
 void GUIComponent::registerCustomComponentTypes()
@@ -117,6 +330,34 @@ void GUIComponent::registerCustomComponentTypes()
         component->getAvailableMasterPlugins = [this]
         {
             return pluginHostManager.getAvailableMasterPlugins();
+        };
+        component->getAvailableMasterOutputs = [this]
+        {
+            return getAvailableMasterOutputs();
+        };
+        component->getMasterOutputDeviceName = [this]
+        {
+            return getMasterOutputDeviceName();
+        };
+        component->getAvailableTrackPlugins = [this]
+        {
+            return pluginHostManager.getAvailableTrackPlugins();
+        };
+        component->getAvailableTrackInputs = [this]
+        {
+            return getAvailableTrackInputs();
+        };
+        component->getAvailableTrackOutputs = [this]
+        {
+            return getAvailableTrackOutputs();
+        };
+        component->getTrackInputDeviceName = [this]
+        {
+            return getTrackInputDeviceName();
+        };
+        component->getTrackOutputDeviceName = [this]
+        {
+            return getTrackOutputDeviceName();
         };
         component->onMasterPluginLoadRequested = [this] (int slotIndex, const juce::String& pluginName)
         {
@@ -138,6 +379,26 @@ void GUIComponent::registerCustomComponentTypes()
         {
             pluginHostManager.removeMasterPluginSlot(slotIndex);
         };
+        component->onTrackPluginLoadRequested = [this] (int trackIndex, int slotIndex, const juce::String& pluginName)
+        {
+            return pluginHostManager.loadTrackPlugin(pluginName, trackIndex, slotIndex);
+        };
+        component->onTrackPluginBypassRequested = [this] (int trackIndex, int slotIndex, bool shouldBeBypassed)
+        {
+            pluginHostManager.setTrackPluginBypassed(trackIndex, slotIndex, shouldBeBypassed);
+        };
+        component->onTrackPluginRemoveRequested = [this] (int trackIndex, int slotIndex)
+        {
+            pluginHostManager.removeTrackPlugin(trackIndex, slotIndex);
+        };
+        component->onTrackPluginEditorRequested = [this] (int trackIndex, int slotIndex)
+        {
+            pluginHostManager.showTrackPluginEditor(trackIndex, slotIndex);
+        };
+        component->onTrackPluginSlotRemoveRequested = [this] (int trackIndex, int slotIndex)
+        {
+            pluginHostManager.removeTrackPluginSlot(trackIndex, slotIndex);
+        };
         mixerMasterComponent = component.get();
         return component;
     });
@@ -145,6 +406,15 @@ void GUIComponent::registerCustomComponentTypes()
     viewInterpreter.getComponentFactory().set ("TrackListView", [this]
     {
         auto component = std::make_unique<TrackListComponent> (state);
+        component->onTrackSelected = [this] (int)
+        {
+            syncPianoRollWithSelectedTrack();
+        };
+        component->onMixerFocusChanged = [this]
+        {
+            if (mixerMasterComponent != nullptr)
+                mixerMasterComponent->repaint();
+        };
         component->onRemoveTrackRequested = [this] (int trackIndex)
         {
             pluginHostManager.removeTrack(trackIndex);
@@ -154,6 +424,22 @@ void GUIComponent::registerCustomComponentTypes()
         component->getAvailableTrackPlugins = [this]
         {
             return pluginHostManager.getAvailableTrackPlugins();
+        };
+        component->getAvailableTrackInputs = [this]
+        {
+            return getAvailableTrackInputs();
+        };
+        component->getAvailableTrackOutputs = [this]
+        {
+            return getAvailableTrackOutputs();
+        };
+        component->getTrackInputDeviceName = [this]
+        {
+            return getTrackInputDeviceName();
+        };
+        component->getTrackOutputDeviceName = [this]
+        {
+            return getTrackOutputDeviceName();
         };
         component->onTrackPluginLoadRequested = [this] (int trackIndex, int slotIndex, const juce::String& pluginName)
         {
@@ -223,6 +509,11 @@ void GUIComponent::registerCustomComponentTypes()
     viewInterpreter.getComponentFactory().set ("RecentClipsView", [this]
     {
         auto component = std::make_unique<RecentClipsComponent> (state);
+        component->onAssetRenameRequested = [this] (int assetId, const juce::String& newName)
+        {
+            if (onAssetRenameRequested)
+                onAssetRenameRequested (assetId, newName);
+        };
         recentClipsComponent = component.get();
         return component;
     });
@@ -241,6 +532,8 @@ GUIComponent::GUIComponent(juce::AudioDeviceManager& sharedDeviceManager)
     setLookAndFeel (&lookAndFeel);
 
     const auto resourcesDir = findResourcesDir();
+    const auto spriteDir = resourcesDir.getChildFile ("ui")
+                                       .getChildFile ("sprites");
 
     const auto xmlFile = resourcesDir.getChildFile ("ui")
                                      .getChildFile ("views")
@@ -277,6 +570,9 @@ GUIComponent::GUIComponent(juce::AudioDeviceManager& sharedDeviceManager)
         label.setProperty ("text", "Missing XML: " + xmlFile.getFullPathName(), nullptr);
         uiTree.appendChild (label, nullptr);
     }
+
+    spriteAssets = loadSpriteAssets (spriteDir);
+    replaceButtonLabelsWithSprites (uiTree, spriteAssets);
 
     stylesheet = parseJsonFile (jsonStyleFile);
     if (stylesheet.isObject())
@@ -414,7 +710,7 @@ void GUIComponent::applyManualBodyLayout()
         return;
 
     auto fullArea = getLocalBounds();
-    auto headerBounds = fullArea.removeFromTop (86);
+    auto headerBounds = fullArea.removeFromTop (98);
     auto bodyBounds = fullArea;
     const int clipSidebarWidth = state.clipSidebarCollapsed ? 44 : state.clipSidebarWidth;
     const int workspaceWidth = juce::jmax (0, bodyBounds.getWidth() - state.sidebarWidth - clipSidebarWidth);
@@ -427,19 +723,12 @@ void GUIComponent::applyManualBodyLayout()
     workspaceComp->setBounds (bodyLocalBounds.removeFromLeft (workspaceWidth));
     clipSidebarComp->setBounds (bodyLocalBounds.removeFromLeft (clipSidebarWidth));
 
-    if (auto* headerTopRowItem = findGuiItemById (*root, juce::Identifier ("headerTopRow")))
-    {
-        if (auto headerTopRowComp = headerTopRowItem->getComponent())
-            headerTopRowComp->setBounds (headerComp->getLocalBounds().reduced (10).removeFromTop (28));
-    }
-
     if (auto* headerMainRowItem = findGuiItemById (*root, juce::Identifier ("headerMainRow")))
     {
         if (auto headerMainRowComp = headerMainRowItem->getComponent())
         {
             auto headerInner = headerComp->getLocalBounds().reduced (10);
-            headerInner.removeFromTop (30);
-            headerMainRowComp->setBounds (headerInner.removeFromTop (40));
+            headerMainRowComp->setBounds (headerInner.removeFromTop (52));
         }
     }
 
@@ -550,7 +839,10 @@ void GUIComponent::installCallbacks()
             if (auto comp = item->getComponent())
             {
                 if (auto* button = dynamic_cast<juce::Button*> (comp.get()))
+                {
+                    allowClicksToPassThroughChildren (*button);
                     button->onClick = std::move (fn);
+                }
             }
         }
     };
@@ -559,12 +851,6 @@ void GUIComponent::installCallbacks()
     {
         if (onPlayRequested)
             onPlayRequested();
-    });
-
-    bindButton ("stopBtn", [this]
-    {
-        if (onStopRequested)
-            onStopRequested();
     });
 
     bindButton ("pauseBtn", [this]
@@ -581,6 +867,14 @@ void GUIComponent::installCallbacks()
 
     bindButton ("recordBtn", [this]
     {
+        if (state.isRecording)
+        {
+            if (onStopRequested)
+                onStopRequested();
+
+            return;
+        }
+
         if (onRecordToggleRequested)
             onRecordToggleRequested();
     });
@@ -622,8 +916,18 @@ void GUIComponent::installCallbacks()
     bindButton ("pianoRollBtn", [this]
     {
         if (pianoRollWindow == nullptr)
+        {
             pianoRollWindow = std::make_unique<PianoRollWindow>();
+            pianoRollWindow->setNotesChangedCallback ([this] (const std::vector<PianoRoll::Note>& notes)
+            {
+                auto& pattern = state.getSelectedTrackPatternState();
 
+                if (! samePatternNotes (pattern.notes, notes))
+                    pattern.notes = toTrackPatternNotes (notes);
+            });
+        }
+
+        syncPianoRollWithSelectedTrack();
         pianoRollWindow->setVisible (true);
         pianoRollWindow->toFront (true);
     });
@@ -676,6 +980,85 @@ void GUIComponent::openSettingsWindow()
     settingsWindow->toFront (true);
 }
 
+void GUIComponent::syncPianoRollWithSelectedTrack()
+{
+    if (pianoRollWindow == nullptr)
+        return;
+
+    const auto selectedTrackIndex = juce::jlimit (0, state.trackCount - 1, state.selectedTrackIndex);
+    const auto& pattern = state.getTrackPatternState (selectedTrackIndex);
+
+    pianoRollWindow->setTrackContext (state.getTrackName (selectedTrackIndex),
+                                      state.getTrackPatternName (selectedTrackIndex));
+    pianoRollWindow->setNotes (toPianoRollNotes (pattern));
+}
+
+juce::StringArray GUIComponent::getAvailableTrackInputs() const
+{
+    juce::AudioDeviceManager::AudioDeviceSetup setup;
+    deviceManager.getAudioDeviceSetup(setup);
+    juce::StringArray inputs;
+
+    if (auto* device = deviceManager.getCurrentAudioDevice())
+    {
+        const auto inputNames = device->getInputChannelNames();
+        for (int i = 0; i < inputNames.size(); ++i)
+            if (setup.inputChannels[i])
+                inputs.add(inputNames[i]);
+
+        if (inputs.isEmpty())
+            inputs = inputNames;
+    }
+
+    inputs.removeDuplicates(false);
+    return inputs;
+}
+
+juce::StringArray GUIComponent::getAvailableTrackOutputs() const
+{
+    juce::AudioDeviceManager::AudioDeviceSetup setup;
+    deviceManager.getAudioDeviceSetup(setup);
+    juce::StringArray outputs;
+
+    if (auto* device = deviceManager.getCurrentAudioDevice())
+    {
+        const auto outputNames = device->getOutputChannelNames();
+        for (int i = 0; i < outputNames.size(); ++i)
+            if (setup.outputChannels[i])
+                outputs.add(outputNames[i]);
+
+        if (outputs.isEmpty())
+            outputs = outputNames;
+    }
+
+    outputs.removeDuplicates(false);
+    return outputs;
+}
+
+juce::String GUIComponent::getTrackInputDeviceName() const
+{
+    juce::AudioDeviceManager::AudioDeviceSetup setup;
+    deviceManager.getAudioDeviceSetup(setup);
+    return setup.inputDeviceName.isNotEmpty() ? setup.inputDeviceName : "Inputs";
+}
+
+juce::String GUIComponent::getTrackOutputDeviceName() const
+{
+    juce::AudioDeviceManager::AudioDeviceSetup setup;
+    deviceManager.getAudioDeviceSetup(setup);
+    return setup.outputDeviceName.isNotEmpty() ? setup.outputDeviceName : "Outputs";
+}
+
+juce::StringArray GUIComponent::getAvailableMasterOutputs() const
+{
+    return getAvailableTrackOutputs();
+}
+
+juce::String GUIComponent::getMasterOutputDeviceName() const
+{
+    return getTrackOutputDeviceName();
+}
+
 void GUIComponent::refreshFromState()
 {
     if (! uiTree.isValid())
@@ -683,6 +1066,8 @@ void GUIComponent::refreshFromState()
 
     if (root == nullptr)
         return;
+
+    syncPianoRollWithSelectedTrack();
 
     auto setTextById = [this] (const juce::String& id, const juce::String& text)
     {
@@ -711,17 +1096,17 @@ void GUIComponent::refreshFromState()
     setTextById ("playBtnLabel",
                  state.transportState == DAWState::TransportState::playing ? "Playing" : "Play");
 
-    setTextById ("stopBtnLabel",
-                 "Stop");
-
     setTextById ("pauseBtnLabel",
                  state.transportState == DAWState::TransportState::paused ? "Resume" : "Pause");
 
     setTextById ("recordBtnLabel",
-                 state.isRecording ? "Recording" : "Record");
+                 state.isRecording ? "Stop" : "Record");
 
     setClassById ("recordBtn",
                   state.isRecording ? "btn btn-record-active" : "btn btn-record");
+
+    if (auto* recordSprite = findMatchingSprite (juce::StringArray{ state.isRecording ? "stop" : "record", "recordbtn" }, spriteAssets))
+        setPropertyById ("recordBtnSprite", juce::Identifier ("source"), *recordSprite);
     
     setTextById ("monitorBtnLabel",
              state.audioMonitoringEnabled ? "Monitor On" : "Monitor Off");

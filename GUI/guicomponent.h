@@ -1,5 +1,7 @@
 #pragma once
 
+#include <map>
+
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <jive_layouts/jive_layouts.h>
@@ -42,6 +44,7 @@ public:
     std::function<void()> onPauseRequested;
     std::function<void()> onRestartRequested;
     std::function<void(int assetId, int trackIndex, double startSeconds)> onRecentClipDropped;
+    std::function<void(int assetId, const juce::String& newName)> onAssetRenameRequested;
     std::function<void(int placementId, int trackIndex, double startSeconds)> onTimelineClipMoved;
     std::function<void(int placementId)> onTimelineClipDeleteRequested;
 
@@ -53,6 +56,7 @@ private:
     std::unique_ptr<jive::GuiItem> root;
     juce::ValueTree uiTree;
     juce::var stylesheet;
+    std::map<juce::String, juce::var> spriteAssets;
 
     DAWState state;
     PluginHostManager pluginHostManager;
@@ -128,6 +132,13 @@ private:
     void refreshFromState();
     void rebuildTrackList();
     void openSettingsWindow();
+    void syncPianoRollWithSelectedTrack();
+    juce::StringArray getAvailableTrackInputs() const;
+    juce::StringArray getAvailableTrackOutputs() const;
+    juce::String getTrackInputDeviceName() const;
+    juce::String getTrackOutputDeviceName() const;
+    juce::StringArray getAvailableMasterOutputs() const;
+    juce::String getMasterOutputDeviceName() const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GUIComponent)
 };

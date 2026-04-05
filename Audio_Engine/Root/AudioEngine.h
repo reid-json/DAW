@@ -58,6 +58,9 @@ public:
 
     int importAudioFileAsRecentAsset(const juce::File& file);
     int createMidiPatternAsset();
+    int createPatternAsset(const juce::String& name, double lengthSeconds);
+    bool updatePatternAsset(int assetId, const juce::String& name, double lengthSeconds);
+    bool renameAsset(int assetId, const juce::String& newName);
     int createLiveInputAsset(const juce::String& name);
 
     const ArrangementState& getArrangementState() const { return arrangementState; }

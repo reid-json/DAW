@@ -41,6 +41,12 @@ public:
         state.selectTrack (2);
         expect (state.isTrackSelected (2));
         expect (! state.isTrackSelected (0));
+        expect (state.isMasterMixerFocused());
+
+        state.showSelectedTrackMixerFocus();
+        expect (! state.isMasterMixerFocused());
+        state.showMasterMixerFocus();
+        expect (state.isMasterMixerFocused());
 
         state.setTrackName (2, "Lead Vox");
         expectEquals (state.getTrackName (2), juce::String ("Lead Vox"));
@@ -64,11 +70,23 @@ public:
         state.toggleTrackMuted (0);
         expect (state.getTrackMixerState (0).muted);
 
+        expect (! state.getTrackMixerState (0).monitoringEnabled);
+        state.toggleTrackMonitoringEnabled (0);
+        expect (state.getTrackMixerState (0).monitoringEnabled);
+
         state.setTrackPan (0, 0.35f);
         expectWithinAbsoluteError (state.getTrackMixerState (0).pan, 0.35f, 0.001f);
 
         state.setTrackLevel (0, 0.55f);
         expectWithinAbsoluteError (state.getTrackMixerState (0).level, 0.55f, 0.001f);
+
+        state.setTrackInputAssignment (0, "Mic In");
+        state.setTrackOutputAssignment (0, "Main Out");
+        expectEquals (state.getTrackInputAssignment (0), juce::String ("Mic In"));
+        expectEquals (state.getTrackOutputAssignment (0), juce::String ("Main Out"));
+        expectEquals (state.getTrackIoAssignment (0), juce::String ("Mic In -> Main Out"));
+        state.setMasterOutputAssignment ("Main Speakers");
+        expectEquals (state.getMasterOutputAssignment (), juce::String ("Main Speakers"));
 
         beginTest ("Solo and mute rules affect track audibility");
 

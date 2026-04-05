@@ -17,6 +17,10 @@ MainComponent::MainComponent()
     {
         handleRecentClipDropped(assetId, trackIndex, startSeconds);
     };
+    gui->onAssetRenameRequested = [this] (int assetId, const juce::String& newName)
+    {
+        handleAssetRenamed(assetId, newName);
+    };
     gui->onTimelineClipMoved = [this] (int placementId, int trackIndex, double startSeconds)
     {
         handleTimelineClipMoved(placementId, trackIndex, startSeconds);
@@ -54,7 +58,10 @@ void MainComponent::syncStateFromEngine()
     if (gui == nullptr)
         return;
 
+    syncTrackPatternsToAssets();
+
     std::vector<RecentClipItem> recentClips;
+    std::vector<SavedPatternItem> savedPatterns;
     std::vector<TimelineClipItem> timelineClips;
     auto transportState = DAWState::TransportState::stopped;
     double playhead = 0.0;
@@ -76,7 +83,12 @@ void MainComponent::syncStateFromEngine()
         for (const auto assetId : arrangement.getRecentAssetIds())
         {
             if (const auto* asset = arrangement.findAsset(assetId))
+            {
+                if (asset->kind == AssetKind::pianoRollPattern)
+                    continue;
+
                 recentClips.push_back({ asset->assetId, asset->name, asset->clip.getLengthSeconds() });
+            }
         }
 
         timelineClips.reserve(arrangement.getTimelinePlacements().size());
@@ -99,11 +111,20 @@ void MainComponent::syncStateFromEngine()
     }
 
     auto& state = gui->getState();
+    savedPatterns.reserve(state.trackPatternStates.size());
+    for (int trackIndex = 0; trackIndex < state.trackCount; ++trackIndex)
+    {
+        const auto& pattern = state.getTrackPatternState(trackIndex);
+        if (pattern.assetId > 0 && ! pattern.notes.empty())
+            savedPatterns.push_back({ pattern.assetId, trackIndex, state.getTrackName(trackIndex), getPatternLengthSeconds(state, pattern) });
+    }
+
     const auto previousTransportState = state.transportState;
     const auto previousRecordingState = state.isRecording;
     const auto previousMonitoringState = state.audioMonitoringEnabled;
     const auto previousTrackCount = state.trackCount;
     const bool recentClipsChanged = state.recentClips != recentClips;
+    const bool savedPatternsChanged = state.savedPatterns != savedPatterns;
     const bool timelineClipsChanged = state.timelineClips != timelineClips;
 
     state.isRecording = engine.isRecording();
@@ -111,6 +132,7 @@ void MainComponent::syncStateFromEngine()
     state.transportState = transportState;
     state.playhead = playhead;
     state.recentClips = std::move(recentClips);
+    state.savedPatterns = std::move(savedPatterns);
     state.timelineClips = std::move(timelineClips);
     state.trackCount = juce::jmax(state.trackCount, maxTrackIndex + 1, 1);
 
@@ -121,7 +143,7 @@ void MainComponent::syncStateFromEngine()
 
     gui->refreshExternalState(controlsChanged, trackCountChanged);
 
-    if (!controlsChanged && !trackCountChanged && !recentClipsChanged && !timelineClipsChanged)
+    if (!controlsChanged && !trackCountChanged && !recentClipsChanged && !savedPatternsChanged && !timelineClipsChanged)
         gui->repaintDynamicViews();
 }
 
@@ -213,6 +235,66 @@ void MainComponent::handleRecentClipDropped(int assetId, int trackIndex, double 
                                             trackIndex + 1,
                                             static_cast<juce::int64>(std::llround(startSeconds * sampleRate)));
     syncStateFromEngine();
+}
+
+void MainComponent::handleAssetRenamed(int assetId, const juce::String& newName)
+{
+    const auto trimmedName = newName.trim();
+    if (trimmedName.isEmpty())
+        return;
+
+    auto& state = gui->getState();
+    for (int trackIndex = 0; trackIndex < state.trackCount; ++trackIndex)
+    {
+        auto& pattern = state.getTrackPatternState(trackIndex);
+        if (pattern.assetId == assetId)
+        {
+            state.setTrackName(trackIndex, trimmedName);
+            state.setTrackPatternName(trackIndex, trimmedName);
+            engine.updatePatternAsset(assetId, trimmedName, getPatternLengthSeconds(state, pattern));
+            syncStateFromEngine();
+            return;
+        }
+    }
+
+    if (engine.renameAsset(assetId, trimmedName))
+        syncStateFromEngine();
+}
+
+void MainComponent::syncTrackPatternsToAssets()
+{
+    if (gui == nullptr)
+        return;
+
+    auto& state = gui->getState();
+
+    for (int trackIndex = 0; trackIndex < state.trackCount; ++trackIndex)
+    {
+        auto& pattern = state.getTrackPatternState(trackIndex);
+
+        if (pattern.notes.empty())
+            continue;
+
+        const auto patternName = state.getTrackName(trackIndex);
+        state.setTrackPatternName(trackIndex, patternName);
+        const auto lengthSeconds = getPatternLengthSeconds(state, pattern);
+
+        if (pattern.assetId <= 0)
+            pattern.assetId = engine.createPatternAsset(patternName, lengthSeconds);
+        else
+            engine.updatePatternAsset(pattern.assetId, patternName, lengthSeconds);
+    }
+}
+
+double MainComponent::getPatternLengthSeconds(const DAWState& state, const TrackPatternState& pattern)
+{
+    double endBeat = 1.0;
+
+    for (const auto& note : pattern.notes)
+        endBeat = juce::jmax(endBeat, note.startBeat + note.lengthBeats);
+
+    const auto secondsPerBeat = 60.0 / juce::jmax(1.0, state.tempoBpm);
+    return juce::jmax(0.25, endBeat * secondsPerBeat);
 }
 
 void MainComponent::handleTimelineClipMoved(int placementId, int trackIndex, double startSeconds)

@@ -31,6 +31,28 @@ SourceAsset* ArrangementState::addRecentRecording(const RecordedClip& clip)
     return addAsset(clip.name, AssetKind::recording, clip);
 }
 
+bool ArrangementState::renameAsset(int assetId, const juce::String& newName)
+{
+    auto* asset = findAsset(assetId);
+    if (asset == nullptr)
+        return false;
+
+    asset->name = newName;
+    asset->clip.name = newName;
+    return true;
+}
+
+bool ArrangementState::updateAssetClip(int assetId, const RecordedClip& clip)
+{
+    auto* asset = findAsset(assetId);
+    if (asset == nullptr)
+        return false;
+
+    asset->clip = clip;
+    asset->clip.clipId = assetId;
+    return true;
+}
+
 CentralTrackSlot* ArrangementState::createCentralTrackSlot()
 {
     CentralTrackSlot slot;

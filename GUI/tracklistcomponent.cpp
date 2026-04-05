@@ -4,11 +4,6 @@
 
 namespace
 {
-    constexpr float pluginSlotHeight = 12.0f;
-    constexpr float pluginSlotGap = 7.0f;
-    constexpr float pluginAddGap = 8.0f;
-    constexpr float pluginAddHeight = 12.0f;
-
     juce::Colour getTrackPanelColour()
     {
         return juce::Colour(0xff2b3f92);
@@ -17,6 +12,11 @@ namespace
     juce::Colour getTrackEdgeColour()
     {
         return juce::Colour(0xff9db7ff).withAlpha(0.24f);
+    }
+
+    juce::Colour getMasterStripColour()
+    {
+        return juce::Colour(0xff31489f);
     }
 
     juce::String getPanLabelText(float pan)
@@ -38,13 +38,13 @@ void TrackListComponent::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colours::transparentBlack);
 
-    for (int rowIndex = 0; rowIndex < state.trackCount; ++rowIndex)
+    for (int rowIndex = 0; rowIndex < getVisualRowCount(); ++rowIndex)
     {
         auto rowBounds = getRowBounds(rowIndex);
         if (rowBounds.getBottom() < 0.0f || rowBounds.getY() > static_cast<float>(getHeight()))
             continue;
 
-        drawMixerStrip(g, rowBounds, state.getTrackName(rowIndex), rowIndex);
+        drawMixerStrip(g, rowBounds, rowIndex);
     }
 
     if (getMaxScroll() > 0)
@@ -66,16 +66,35 @@ void TrackListComponent::mouseDown(const juce::MouseEvent& e)
         return;
     }
 
-    const int trackIndex = getTrackIndexAt(e.position);
+    const int rowIndex = getVisualRowAt(e.position);
+    if (rowIndex < 0)
+        return;
+
+    if (isMasterRow(rowIndex))
+    {
+        state.showMasterMixerFocus();
+        repaint();
+        if (onMixerFocusChanged)
+            onMixerFocusChanged();
+        return;
+    }
+
+    const int trackIndex = getTrackIndexForRow(rowIndex);
     if (trackIndex < 0)
         return;
 
     state.selectTrack(trackIndex);
+    state.showSelectedTrackMixerFocus();
     repaint();
+
+    if (onTrackSelected)
+        onTrackSelected(trackIndex);
+    if (onMixerFocusChanged)
+        onMixerFocusChanged();
 
     if (e.mods.isPopupMenu())
     {
-        showTrackContextMenu(trackIndex, getRowBounds(trackIndex).toNearestInt());
+        showTrackContextMenu(trackIndex, getRowBounds(rowIndex).toNearestInt());
         return;
     }
 
@@ -83,64 +102,20 @@ void TrackListComponent::mouseDown(const juce::MouseEvent& e)
     {
         if (onRemoveTrackRequested)
             onRemoveTrackRequested(trackIndex);
-        return;
-    }
-
-    for (int buttonIndex = 0; buttonIndex < 3; ++buttonIndex)
-    {
-        if (getButtonBounds(trackIndex, buttonIndex).contains(e.position))
-        {
-            if (buttonIndex == 0)
-                state.toggleTrackMuted(trackIndex);
-            else if (buttonIndex == 1)
-                state.toggleTrackSoloed(trackIndex);
-            else
-                state.toggleTrackArmed(trackIndex);
-
-            repaint();
-            return;
-        }
-    }
-
-    for (int slotIndex = 0; slotIndex < state.getTrackFxSlotCount(trackIndex); ++slotIndex)
-    {
-        if (getPluginSlotBounds(trackIndex, slotIndex).contains(e.position))
-        {
-            showFxSlotMenu(trackIndex, slotIndex);
-            return;
-        }
-    }
-
-    if (state.canAddTrackFxSlot(trackIndex) && getAddFxSlotBounds(trackIndex).contains(e.position))
-    {
-        state.addTrackFxSlot(trackIndex);
-        repaint();
-        return;
-    }
-
-    if (getPanKnobBounds(trackIndex).contains(e.position))
-    {
-        activeDragTarget = DragTarget::pan;
-        dragTrackIndex = trackIndex;
-        updatePanFromPosition(trackIndex, e.position);
-        return;
-    }
-
-    if (getFaderBounds(trackIndex).contains(e.position))
-    {
-        activeDragTarget = DragTarget::level;
-        dragTrackIndex = trackIndex;
-        updateLevelFromPosition(trackIndex, e.position);
     }
 }
 
 void TrackListComponent::mouseDoubleClick(const juce::MouseEvent& e)
 {
-    const int trackIndex = getTrackIndexAt(e.position);
+    const int rowIndex = getVisualRowAt(e.position);
+    if (rowIndex <= 0)
+        return;
+
+    const int trackIndex = getTrackIndexForRow(rowIndex);
     if (trackIndex < 0)
         return;
 
-    if (getHeaderBounds(trackIndex).contains(e.position)
+    if (getHeaderBounds(rowIndex).contains(e.position)
         && !getRemoveButtonBounds(trackIndex).contains(e.position))
     {
         promptRenameTrack(trackIndex);
@@ -149,35 +124,20 @@ void TrackListComponent::mouseDoubleClick(const juce::MouseEvent& e)
 
 void TrackListComponent::mouseDrag(const juce::MouseEvent& e)
 {
-    if (draggingScrollbar)
-    {
-        const auto trackBounds = getScrollbarTrackBounds();
-        const auto thumbBounds = getScrollbarThumbBounds();
-        const float maxThumbY = trackBounds.getBottom() - thumbBounds.getHeight();
-        const float thumbY = juce::jlimit(trackBounds.getY(), maxThumbY, e.position.y - scrollbarDragOffset);
-        const float proportion = (thumbY - trackBounds.getY()) / juce::jmax(1.0f, maxThumbY - trackBounds.getY());
-        setScrollOffset(static_cast<int>(std::round(proportion * static_cast<float>(getMaxScroll()))));
-        return;
-    }
-
-    if (dragTrackIndex < 0)
+    if (!draggingScrollbar)
         return;
 
-    if (activeDragTarget == DragTarget::pan)
-    {
-        updatePanFromPosition(dragTrackIndex, e.position);
-        return;
-    }
-
-    if (activeDragTarget == DragTarget::level)
-        updateLevelFromPosition(dragTrackIndex, e.position);
+    const auto trackBounds = getScrollbarTrackBounds();
+    const auto thumbBounds = getScrollbarThumbBounds();
+    const float maxThumbY = trackBounds.getBottom() - thumbBounds.getHeight();
+    const float thumbY = juce::jlimit(trackBounds.getY(), maxThumbY, e.position.y - scrollbarDragOffset);
+    const float proportion = (thumbY - trackBounds.getY()) / juce::jmax(1.0f, maxThumbY - trackBounds.getY());
+    setScrollOffset(static_cast<int>(std::round(proportion * static_cast<float>(getMaxScroll()))));
 }
 
 void TrackListComponent::mouseUp(const juce::MouseEvent&)
 {
     draggingScrollbar = false;
-    activeDragTarget = DragTarget::none;
-    dragTrackIndex = -1;
 }
 
 void TrackListComponent::mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails& wheel)
@@ -188,7 +148,7 @@ void TrackListComponent::mouseWheelMove(const juce::MouseEvent&, const juce::Mou
 
 int TrackListComponent::getContentHeight() const
 {
-    return juce::jmax(rowHeight, state.trackCount * rowHeight + juce::jmax(0, state.trackCount - 1) * rowGap);
+    return juce::jmax(rowHeight, getVisualRowCount() * rowHeight + juce::jmax(0, getVisualRowCount() - 1) * rowGap);
 }
 
 int TrackListComponent::getMaxScroll() const
@@ -196,113 +156,83 @@ int TrackListComponent::getMaxScroll() const
     return juce::jmax(0, getContentHeight() - getHeight());
 }
 
+int TrackListComponent::getVisualRowCount() const
+{
+    return state.trackCount + 1;
+}
+
 int TrackListComponent::toContentY(float y) const
 {
     return static_cast<int>(std::floor(y + static_cast<float>(scrollOffset)));
 }
 
-int TrackListComponent::getTrackIndexAt(juce::Point<float> point) const
+int TrackListComponent::getVisualRowAt(juce::Point<float> point) const
 {
     const int rowIndex = toContentY(point.y) / (rowHeight + rowGap);
-    return rowIndex >= 0 && rowIndex < state.trackCount ? rowIndex : -1;
+    return rowIndex >= 0 && rowIndex < getVisualRowCount() ? rowIndex : -1;
 }
 
-juce::Rectangle<float> TrackListComponent::getCardInnerBounds(int trackIndex) const
+bool TrackListComponent::isMasterRow(int rowIndex) const
 {
-    return getRowBounds(trackIndex).reduced(16.0f, 14.0f);
+    return rowIndex == 0;
 }
 
-juce::Rectangle<float> TrackListComponent::getHeaderBounds(int trackIndex) const
+int TrackListComponent::getTrackIndexForRow(int rowIndex) const
 {
-    auto bounds = getCardInnerBounds(trackIndex);
-    return bounds.removeFromTop(28.0f);
+    return isMasterRow(rowIndex) ? -1 : rowIndex - 1;
+}
+
+juce::Rectangle<float> TrackListComponent::getCardInnerBounds(int rowIndex) const
+{
+    return getRowBounds(rowIndex).reduced(12.0f, 10.0f);
+}
+
+juce::Rectangle<float> TrackListComponent::getHeaderBounds(int rowIndex) const
+{
+    auto bounds = getCardInnerBounds(rowIndex);
+    return bounds.removeFromTop(24.0f);
 }
 
 juce::Rectangle<float> TrackListComponent::getRemoveButtonBounds(int trackIndex) const
 {
-    auto headerBounds = getHeaderBounds(trackIndex);
-    return headerBounds.removeFromRight(28.0f);
+    const int rowIndex = trackIndex + 1;
+    auto headerBounds = getHeaderBounds(rowIndex);
+    return headerBounds.removeFromRight(24.0f);
 }
 
-juce::Rectangle<float> TrackListComponent::getControlButtonsBounds(int trackIndex) const
+juce::Rectangle<float> TrackListComponent::getStatusIndicatorBounds(int rowIndex, int indicatorIndex) const
 {
-    auto bounds = getCardInnerBounds(trackIndex);
-    bounds.removeFromTop(36.0f);
-    auto topCluster = bounds.removeFromTop(58.0f);
-    return topCluster.removeFromLeft(156.0f);
-}
+    auto bounds = getCardInnerBounds(rowIndex);
+    bounds.removeFromTop(30.0f);
+    auto row = bounds.removeFromTop(24.0f);
 
-juce::Rectangle<float> TrackListComponent::getButtonBounds(int trackIndex, int buttonIndex) const
-{
-    auto row = getControlButtonsBounds(trackIndex).withHeight(28.0f);
-    for (int i = 0; i < buttonIndex; ++i)
+    static constexpr float widths[] { 30.0f, 30.0f, 40.0f, 40.0f };
+    for (int i = 0; i < indicatorIndex; ++i)
     {
-        row.removeFromLeft(38.0f);
-        row.removeFromLeft(10.0f);
+        row.removeFromLeft(widths[i]);
+        row.removeFromLeft(6.0f);
     }
 
-    return row.removeFromLeft(38.0f);
+    return row.removeFromLeft(widths[indicatorIndex]);
 }
 
-juce::Rectangle<float> TrackListComponent::getPanKnobBounds(int trackIndex) const
+juce::Rectangle<float> TrackListComponent::getCompactMeterBounds(int rowIndex) const
 {
-    auto bounds = getCardInnerBounds(trackIndex);
-    bounds.removeFromTop(36.0f);
-    auto topCluster = bounds.removeFromTop(58.0f);
-    topCluster.removeFromLeft(156.0f);
-    return topCluster.removeFromLeft(74.0f).reduced(2.0f);
+    auto bounds = getCardInnerBounds(rowIndex);
+    bounds.removeFromTop(30.0f);
+    bounds.removeFromTop(28.0f);
+    bounds.removeFromTop(10.0f);
+    return bounds.removeFromLeft(14.0f).withTrimmedBottom(6.0f);
 }
 
-juce::Rectangle<float> TrackListComponent::getFaderBounds(int trackIndex) const
+juce::Rectangle<float> TrackListComponent::getCompactLevelBounds(int rowIndex) const
 {
-    auto bounds = getCardInnerBounds(trackIndex);
-    bounds.removeFromTop(36.0f);
-    bounds.removeFromTop(58.0f);
-    bounds.removeFromTop(84.0f);
-    bounds.removeFromTop(12.0f);
-    auto lowerCluster = bounds;
-    lowerCluster.removeFromLeft(20.0f);
-    lowerCluster.removeFromLeft(12.0f);
-    return lowerCluster.reduced(2.0f, 0.0f);
-}
-
-juce::Rectangle<float> TrackListComponent::getPluginLaneBounds(int trackIndex) const
-{
-    auto bounds = getCardInnerBounds(trackIndex);
-    bounds.removeFromTop(36.0f);
-    bounds.removeFromTop(58.0f);
-    return bounds.removeFromTop(84.0f);
-}
-
-juce::Rectangle<float> TrackListComponent::getPluginSlotBounds(int trackIndex, int slotIndex) const
-{
-    auto slotArea = getPluginLaneBounds(trackIndex).reduced(14.0f, 10.0f);
-    slotArea.removeFromTop(22.0f);
-
-    for (int i = 0; i < slotIndex; ++i)
-    {
-        slotArea.removeFromTop(pluginSlotHeight);
-        slotArea.removeFromTop(pluginSlotGap);
-    }
-
-    return slotArea.removeFromTop(pluginSlotHeight);
-}
-
-juce::Rectangle<float> TrackListComponent::getAddFxSlotBounds(int trackIndex) const
-{
-    auto slotArea = getPluginLaneBounds(trackIndex).reduced(14.0f, 10.0f);
-    slotArea.removeFromTop(22.0f);
-
-    const int slotCount = state.getTrackFxSlotCount(trackIndex);
-    for (int i = 0; i < slotCount; ++i)
-    {
-        slotArea.removeFromTop(pluginSlotHeight);
-        if (i < slotCount - 1)
-            slotArea.removeFromTop(pluginSlotGap);
-    }
-
-    slotArea.removeFromTop(pluginAddGap);
-    return slotArea.removeFromTop(pluginAddHeight);
+    auto bounds = getCardInnerBounds(rowIndex);
+    bounds.removeFromTop(30.0f);
+    bounds.removeFromTop(28.0f);
+    bounds.removeFromTop(10.0f);
+    bounds.removeFromLeft(24.0f);
+    return bounds.removeFromTop(20.0f);
 }
 
 juce::Rectangle<float> TrackListComponent::getScrollbarTrackBounds() const
@@ -330,161 +260,166 @@ juce::Rectangle<float> TrackListComponent::getRowBounds(int rowIndex) const
     return { 8.0f, y, contentWidth, static_cast<float>(rowHeight) };
 }
 
-void TrackListComponent::drawMixerStrip(juce::Graphics& g,
-                                        juce::Rectangle<float> bounds,
-                                        const juce::String& title,
-                                        int trackIndex)
+void TrackListComponent::drawMixerStrip(juce::Graphics& g, juce::Rectangle<float> bounds, int rowIndex)
 {
     auto cardBounds = bounds.reduced(0.0f, 2.0f);
-    const bool isSelected = state.isTrackSelected(trackIndex);
-    const bool isAudible = state.isTrackAudible(trackIndex);
-    auto panelColour = isSelected ? juce::Colour(0xff314ba9) : getTrackPanelColour();
+    const bool masterRow = isMasterRow(rowIndex);
+    const int trackIndex = getTrackIndexForRow(rowIndex);
+    const bool isSelected = masterRow ? state.isMasterMixerFocused() : state.isTrackSelected(trackIndex) && !state.isMasterMixerFocused();
+    const bool isAudible = masterRow ? !state.masterMixerState.muted : state.isTrackAudible(trackIndex);
+    auto panelColour = masterRow ? getMasterStripColour() : getTrackPanelColour();
+    if (isSelected)
+        panelColour = panelColour.brighter(0.08f);
     if (!isAudible)
-        panelColour = panelColour.darker(0.25f).withMultipliedAlpha(0.88f);
-    g.setColour(panelColour);
-    g.fillRoundedRectangle(cardBounds, 24.0f);
+        panelColour = panelColour.darker(0.2f).withMultipliedAlpha(0.9f);
 
-    auto edgeColour = isSelected ? juce::Colour(0xffd7e3ff).withAlpha(0.65f) : getTrackEdgeColour();
+    g.setColour(panelColour);
+    g.fillRoundedRectangle(cardBounds, 20.0f);
+
+    auto edgeColour = isSelected ? juce::Colour(0xffd7e3ff).withAlpha(0.72f) : getTrackEdgeColour();
     if (!isAudible)
         edgeColour = edgeColour.withAlpha(0.22f);
     g.setColour(edgeColour);
-    g.drawRoundedRectangle(cardBounds.reduced(1.5f), 24.0f, isSelected ? 2.4f : 2.0f);
+    g.drawRoundedRectangle(cardBounds.reduced(1.3f), 20.0f, isSelected ? 2.2f : 1.8f);
 
-    auto innerBounds = cardBounds.reduced(16.0f, 14.0f);
-    auto headerBounds = innerBounds.removeFromTop(28.0f);
+    auto innerBounds = cardBounds.reduced(12.0f, 10.0f);
+    auto headerBounds = innerBounds.removeFromTop(24.0f);
 
-    g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.82f : 0.5f));
-    g.setFont(juce::Font(15.0f, juce::Font::bold));
+    g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.86f : 0.56f));
+    g.setFont(juce::Font(masterRow ? 14.5f : 14.0f, juce::Font::bold));
+    const auto title = masterRow ? juce::String("MASTER") : state.getTrackName(trackIndex);
     g.drawText(title,
-               headerBounds.withTrimmedRight(36.0f).toNearestInt(),
+               headerBounds.withTrimmedRight(masterRow ? 0.0f : 30.0f).toNearestInt(),
                juce::Justification::centredLeft,
                false);
 
-    auto removeBounds = getRemoveButtonBounds(trackIndex);
-    g.setColour(juce::Colour(0xff23357f).withMultipliedAlpha(isAudible ? 1.0f : 0.6f));
-    g.fillRoundedRectangle(removeBounds, 8.0f);
-    g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.75f : 0.45f));
-    g.setFont(juce::Font(18.0f, juce::Font::bold));
-    g.drawText("-", removeBounds.toNearestInt(), juce::Justification::centred, false);
+    if (masterRow)
+    {
+        g.setColour(juce::Colours::white.withAlpha(0.46f));
+        g.setFont(juce::Font(10.0f, juce::Font::plain));
+        g.drawText("Focused bus",
+                   headerBounds.toNearestInt(),
+                   juce::Justification::centredRight,
+                   false);
+    }
+    else
+    {
+        auto removeBounds = getRemoveButtonBounds(trackIndex);
+        g.setColour(juce::Colour(0xff23357f).withMultipliedAlpha(isAudible ? 1.0f : 0.6f));
+        g.fillRoundedRectangle(removeBounds, 7.0f);
+        g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.75f : 0.45f));
+        g.setFont(juce::Font(16.0f, juce::Font::bold));
+        g.drawText("-", removeBounds.toNearestInt(), juce::Justification::centred, false);
+    }
 
-    innerBounds.removeFromTop(8.0f);
+    innerBounds.removeFromTop(6.0f);
+    auto indicatorRow = innerBounds.removeFromTop(24.0f);
+    auto summaryRow = innerBounds;
 
-    auto topCluster = innerBounds.removeFromTop(58.0f);
-    auto fxBounds = innerBounds.removeFromTop(84.0f);
-    innerBounds.removeFromTop(12.0f);
-    auto lowerCluster = innerBounds;
+    if (masterRow)
+    {
+        auto row = indicatorRow;
+        const char* labels[] = { "M", "S", "ARM" };
+        const bool states[] = { state.masterMixerState.muted, state.masterMixerState.soloed, state.masterMixerState.armed };
+        static constexpr float widths[] { 30.0f, 30.0f, 44.0f };
 
-    auto buttonsBounds = topCluster.removeFromLeft(156.0f);
-    auto knobBounds = topCluster.removeFromLeft(74.0f).reduced(2.0f);
+        for (int i = 0; i < 3; ++i)
+        {
+            auto pill = row.removeFromLeft(widths[i]);
+            row.removeFromLeft(6.0f);
+            auto fill = states[i] ? (i == 2 ? juce::Colour(0xffc2485d) : juce::Colour(0xff3a7afe)) : juce::Colour(0xff2f437e);
+            g.setColour(fill);
+            g.fillRoundedRectangle(pill, 8.0f);
+            g.setColour(juce::Colours::white.withAlpha(states[i] ? 0.95f : 0.58f));
+            g.drawRoundedRectangle(pill, 8.0f, 1.0f);
+            g.setColour(juce::Colours::white.withAlpha(states[i] ? 1.0f : 0.82f));
+            g.setFont(juce::Font(i == 2 ? 9.5f : 11.0f, juce::Font::bold));
+            g.drawText(labels[i], pill.toNearestInt(), juce::Justification::centred, false);
+        }
 
-    drawTransportButtons(g, buttonsBounds, trackIndex);
-    drawPanKnob(g, knobBounds, trackIndex);
-    drawPluginLane(g, fxBounds, trackIndex);
+        auto meterBounds = getCompactMeterBounds(rowIndex);
+        auto levelBounds = getCompactLevelBounds(rowIndex);
+        drawCompactMeter(g, meterBounds, state.masterMixerState.level, !state.masterMixerState.muted);
 
-    auto labelArea = lowerCluster.removeFromTop(14.0f);
-    lowerCluster.removeFromTop(8.0f);
-    auto meterLane = lowerCluster.removeFromLeft(20.0f).reduced(0.0f, 4.0f);
-    lowerCluster.removeFromLeft(12.0f);
-    auto faderLane = lowerCluster.reduced(2.0f, 0.0f);
-    g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.48f : 0.28f));
-    g.setFont(juce::Font(11.0f, juce::Font::plain));
-    g.drawText("LEVEL",
-               labelArea.toNearestInt(),
+        g.setColour(juce::Colours::white.withAlpha(0.56f));
+        g.setFont(juce::Font(10.0f, juce::Font::plain));
+        g.drawText(state.getMasterOutputAssignment(),
+                   summaryRow.removeFromTop(16.0f).toNearestInt(),
+                   juce::Justification::centredLeft,
+                   false);
+
+        g.setColour(juce::Colours::white.withAlpha(0.42f));
+        g.drawText("Pan " + getPanLabelText(state.masterMixerState.pan),
+                   levelBounds.toNearestInt(),
+                   juce::Justification::centredLeft,
+                   false);
+        return;
+    }
+
+    drawStatusIndicators(g, indicatorRow, trackIndex);
+
+    auto meterBounds = getCompactMeterBounds(rowIndex);
+    auto levelBounds = getCompactLevelBounds(rowIndex);
+    drawCompactMeter(g, meterBounds, state.getTrackMixerState(trackIndex).level, isAudible);
+
+    g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.56f : 0.34f));
+    g.setFont(juce::Font(10.0f, juce::Font::plain));
+    g.drawText(state.getTrackIoAssignment(trackIndex),
+               summaryRow.removeFromTop(16.0f).toNearestInt(),
                juce::Justification::centredLeft,
                false);
 
-    drawMeter(g, meterLane, trackIndex);
-    drawFader(g, faderLane, trackIndex);
+    const auto dbValue = juce::jmap(state.getTrackMixerState(trackIndex).level, 0.0f, 1.0f, -60.0f, 6.0f);
+    const auto levelText = juce::String(static_cast<int>(std::round(dbValue))) + " dB";
+    g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.44f : 0.28f));
+    g.drawText("Pan " + getPanLabelText(state.getTrackMixerState(trackIndex).pan) + "   " + levelText,
+               levelBounds.toNearestInt(),
+               juce::Justification::centredLeft,
+               false);
 }
 
-void TrackListComponent::drawTransportButtons(juce::Graphics& g, juce::Rectangle<float> bounds, int trackIndex) const
+void TrackListComponent::drawStatusIndicators(juce::Graphics& g, juce::Rectangle<float>, int trackIndex) const
 {
-    const char* labels[] = { "M", "S", "R" };
+    const char* labels[] = { "M", "S", "MON", "ARM" };
     const auto& trackState = state.getTrackMixerState(trackIndex);
     const bool isAudible = state.isTrackAudible(trackIndex);
+    const bool states[] = { trackState.muted, trackState.soloed, trackState.monitoringEnabled, trackState.armed };
 
-    auto row = bounds.withHeight(28.0f);
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 4; ++i)
     {
-        auto button = row.removeFromLeft(38.0f);
-        row.removeFromLeft(10.0f);
-
-        auto fill = juce::Colour(0xff4460cf);
-        auto border = juce::Colours::white.withAlpha(0.72f);
-        auto text = juce::Colours::white.withAlpha(0.9f);
-
-        const bool isActive = (i == 0 && trackState.muted)
-                           || (i == 1 && trackState.soloed)
-                           || (i == 2 && trackState.armed);
-
-        if (isActive)
+        auto pill = getStatusIndicatorBounds(trackIndex + 1, i);
+        auto fill = juce::Colour(0xff2f437e);
+        if (states[i])
         {
-            fill = i == 2 ? juce::Colour(0xffc2485d) : juce::Colour(0xff3a7afe);
-            border = juce::Colours::white.withAlpha(0.95f);
-            text = juce::Colours::white;
+            if (i == 2)
+                fill = juce::Colour(0xff1f7a4d);
+            else if (i == 3)
+                fill = juce::Colour(0xffc2485d);
+            else
+                fill = juce::Colour(0xff3a7afe);
         }
-        else
-        {
-            fill = juce::Colour(0xff2f437e);
-            border = juce::Colours::white.withAlpha(0.58f);
-            text = juce::Colours::white.withAlpha(0.82f);
-        }
-
-        if (!isAudible && !isActive)
+        else if (!isAudible)
         {
             fill = fill.darker(0.18f).withMultipliedAlpha(0.82f);
-            border = border.withAlpha(border.getFloatAlpha() * 0.7f);
-            text = text.withAlpha(text.getFloatAlpha() * 0.68f);
         }
 
         g.setColour(fill);
-        g.fillRoundedRectangle(button, 9.0f);
-        g.setColour(border);
-        g.drawRoundedRectangle(button, 9.0f, 1.2f);
-        g.setFont(juce::Font(12.0f, juce::Font::bold));
-        g.setColour(text);
-        g.drawText(labels[i], button.toNearestInt(), juce::Justification::centred, false);
+        g.fillRoundedRectangle(pill, 8.0f);
+        g.setColour(juce::Colours::white.withAlpha(states[i] ? 0.95f : (isAudible ? 0.58f : 0.36f)));
+        g.drawRoundedRectangle(pill, 8.0f, 1.0f);
+        g.setColour(juce::Colours::white.withAlpha(states[i] ? 1.0f : (isAudible ? 0.82f : 0.5f)));
+        g.setFont(juce::Font(i >= 2 ? 9.5f : 11.0f, juce::Font::bold));
+        g.drawText(labels[i], pill.toNearestInt(), juce::Justification::centred, false);
     }
-
-    auto routeBounds = bounds.withY(bounds.getBottom() - 18.0f).withHeight(18.0f);
-    g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.42f : 0.24f));
-    g.setFont(juce::Font(10.0f, juce::Font::plain));
-    g.drawText("IN 1  ->  BUS A", routeBounds.toNearestInt(), juce::Justification::centredLeft, false);
 }
 
-void TrackListComponent::drawPanKnob(juce::Graphics& g, juce::Rectangle<float> bounds, int trackIndex) const
+void TrackListComponent::drawCompactMeter(juce::Graphics& g, juce::Rectangle<float> bounds, float level, bool isActive) const
 {
-    const float pan = state.getTrackMixerState(trackIndex).pan;
-    const bool isAudible = state.isTrackAudible(trackIndex);
-    g.setColour(juce::Colour(0xff182447).withMultipliedAlpha(isAudible ? 1.0f : 0.72f));
-    g.fillEllipse(bounds);
-    g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.9f : 0.58f));
-    g.drawEllipse(bounds, 1.6f);
-    const float angle = juce::jmap(pan, -1.0f, 1.0f, -juce::MathConstants<float>::pi * 0.75f, juce::MathConstants<float>::pi * 0.75f);
-    const auto endPoint = juce::Point<float>(bounds.getCentreX() + std::sin(angle) * 12.0f,
-                                             bounds.getCentreY() - std::cos(angle) * 12.0f);
-    g.drawLine(bounds.getCentreX(), bounds.getCentreY(), endPoint.x, endPoint.y, 2.0f);
-
-    auto labelBounds = bounds.withY(bounds.getY() - 14.0f).withHeight(12.0f);
-    g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.52f : 0.32f));
-    g.setFont(juce::Font(10.0f, juce::Font::plain));
-    g.drawText(getPanLabelText(pan),
-               labelBounds.toNearestInt(),
-               juce::Justification::centred,
-               false);
-}
-
-void TrackListComponent::drawMeter(juce::Graphics& g, juce::Rectangle<float> bounds, int trackIndex) const
-{
-    const auto& trackState = state.getTrackMixerState(juce::jlimit(0, state.trackCount - 1, trackIndex));
     auto laneBounds = bounds.reduced(1.0f, 1.0f);
-    g.setColour(juce::Colours::white.withAlpha(0.14f));
+    g.setColour(juce::Colours::white.withAlpha(isActive ? 0.14f : 0.08f));
     g.fillRoundedRectangle(laneBounds, 5.0f);
 
-    float fillRatio = trackState.level * (state.isTrackAudible(trackIndex) ? 0.95f : 0.08f);
-    if (trackState.soloed && state.isTrackAudible(trackIndex))
-        fillRatio = juce::jmin(1.0f, fillRatio + 0.08f);
-    fillRatio = juce::jlimit(0.03f, 0.98f, fillRatio);
+    const float fillRatio = juce::jlimit(0.05f, 0.98f, level * (isActive ? 0.95f : 0.1f));
     auto fillBounds = laneBounds.withY(laneBounds.getBottom() - laneBounds.getHeight() * fillRatio)
                                 .withHeight(laneBounds.getHeight() * fillRatio);
 
@@ -493,106 +428,6 @@ void TrackListComponent::drawMeter(juce::Graphics& g, juce::Rectangle<float> bou
     gradient.addColour(0.78, juce::Colour(0xffff8847));
     g.setGradientFill(gradient);
     g.fillRoundedRectangle(fillBounds, 5.0f);
-}
-
-void TrackListComponent::drawFader(juce::Graphics& g, juce::Rectangle<float> bounds, int trackIndex) const
-{
-    const auto& trackState = state.getTrackMixerState(trackIndex);
-    const bool isAudible = state.isTrackAudible(trackIndex);
-    auto content = bounds.reduced(2.0f, 0.0f);
-    auto valueBounds = content.removeFromTop(14.0f);
-    content.removeFromTop(8.0f);
-    auto lane = content.withHeight(26.0f).withCentre({ content.getCentreX(), content.getY() + 13.0f });
-
-    g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.46f : 0.28f));
-    g.setFont(juce::Font(10.0f, juce::Font::plain));
-    const auto dbValue = juce::jmap(trackState.level, 0.0f, 1.0f, -60.0f, 6.0f);
-    const auto dbText = juce::String(static_cast<int>(std::round(dbValue))) + " dB";
-    g.drawText(dbText,
-               valueBounds.toNearestInt(),
-               juce::Justification::centredLeft,
-               false);
-
-    g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.08f : 0.05f));
-    g.fillRoundedRectangle(lane, 13.0f);
-    g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.18f : 0.11f));
-    g.drawRoundedRectangle(lane, 13.0f, 1.1f);
-
-    auto rail = lane.reduced(12.0f, 10.0f);
-    g.setColour(juce::Colour(0xff172344).withMultipliedAlpha(isAudible ? 1.0f : 0.68f));
-    g.fillRoundedRectangle(rail, 3.0f);
-
-    const float thumbWidth = 20.0f;
-    const float thumbTravel = juce::jmax(0.0f, rail.getWidth() - thumbWidth);
-    const float thumbX = rail.getX() + thumbTravel * trackState.level;
-    auto thumb = juce::Rectangle<float>(thumbX, lane.getCentreY() - 9.0f, thumbWidth, 18.0f);
-    g.setColour(juce::Colour(0xffdce8ff).withMultipliedAlpha(isAudible ? 1.0f : 0.72f));
-    g.fillRoundedRectangle(thumb, 6.0f);
-
-    g.setColour(juce::Colour(0xffeef4ff).withAlpha(isAudible ? 0.8f : 0.5f));
-    g.drawLine(thumb.getCentreX(), thumb.getY() + 3.0f, thumb.getCentreX(), thumb.getBottom() - 3.0f, 1.1f);
-}
-
-void TrackListComponent::drawPluginLane(juce::Graphics& g, juce::Rectangle<float> bounds, int trackIndex) const
-{
-    const bool isAudible = state.isTrackAudible(trackIndex);
-    g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.08f : 0.05f));
-    g.fillRoundedRectangle(bounds, 18.0f);
-    g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.26f : 0.16f));
-    g.drawRoundedRectangle(bounds, 18.0f, 1.2f);
-
-    auto labelBounds = bounds.reduced(14.0f, 10.0f).removeFromTop(16.0f);
-    g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.58f : 0.34f));
-    g.setFont(juce::Font(10.5f, juce::Font::plain));
-    g.drawText("FX SLOTS", labelBounds.toNearestInt(), juce::Justification::centredLeft, false);
-
-    auto slotArea = bounds.reduced(14.0f, 10.0f);
-    slotArea.removeFromTop(22.0f);
-
-    const int slotCount = state.getTrackFxSlotCount(trackIndex);
-    for (int i = 0; i < slotCount; ++i)
-    {
-        auto slot = slotArea.removeFromTop(pluginSlotHeight);
-        if (i < slotCount - 1)
-            slotArea.removeFromTop(pluginSlotGap);
-        const auto& fxSlot = state.getTrackFxSlot(trackIndex, i);
-        g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.08f : 0.05f));
-        g.fillRoundedRectangle(slot, 7.0f);
-        g.setColour(fxSlot.bypassed ? juce::Colour(0xffffd34a).withAlpha(0.7f)
-                                    : juce::Colours::white.withAlpha(isAudible ? 0.2f : 0.12f));
-        g.drawRoundedRectangle(slot, 7.0f, 1.0f);
-
-        if (fxSlot.hasPlugin)
-        {
-            g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.72f : 0.44f));
-            g.setFont(juce::Font(9.0f, juce::Font::plain));
-            g.drawText(fxSlot.bypassed ? fxSlot.name + " (Bypassed)" : fxSlot.name,
-                       slot.reduced(6.0f, 0.0f).toNearestInt(),
-                       juce::Justification::centredLeft,
-                       false);
-        }
-        else
-        {
-            g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.34f : 0.22f));
-            g.setFont(juce::Font(9.0f, juce::Font::plain));
-            g.drawText("Add plugin",
-                       slot.reduced(6.0f, 0.0f).toNearestInt(),
-                       juce::Justification::centredLeft,
-                       false);
-        }
-    }
-
-    if (state.canAddTrackFxSlot(trackIndex))
-    {
-        slotArea.removeFromTop(pluginAddGap);
-        auto addSlot = slotArea.removeFromTop(pluginAddHeight);
-        g.setColour(juce::Colour(0xff3a7afe).withAlpha(isAudible ? 0.24f : 0.16f));
-        g.fillRoundedRectangle(addSlot, 7.0f);
-        g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.46f : 0.28f));
-        g.drawRoundedRectangle(addSlot, 7.0f, 1.0f);
-        g.setFont(juce::Font(8.5f, juce::Font::bold));
-        g.drawText("+ FX Slot", addSlot.toNearestInt(), juce::Justification::centred, false);
-    }
 }
 
 void TrackListComponent::scrollBy(float deltaY)
@@ -632,90 +467,6 @@ void TrackListComponent::promptRenameTrack(int trackIndex)
                                   true);
 }
 
-void TrackListComponent::showFxSlotMenu(int trackIndex, int slotIndex)
-{
-    juce::PopupMenu menu;
-    const auto& fxSlot = state.getTrackFxSlot(trackIndex, slotIndex);
-
-    if (!fxSlot.hasPlugin)
-    {
-        juce::PopupMenu addPluginMenu;
-        const auto availablePlugins = getAvailableTrackPlugins != nullptr
-            ? getAvailableTrackPlugins()
-            : juce::StringArray{};
-        for (int i = 0; i < availablePlugins.size(); ++i)
-            addPluginMenu.addItem(100 + i, availablePlugins[i]);
-
-        if (availablePlugins.isEmpty())
-            addPluginMenu.addItem(1, "No plugins available", false);
-
-        menu.addSubMenu("Add Plugin", addPluginMenu);
-        if (state.canRemoveTrackFxSlot(trackIndex))
-        {
-            menu.addSeparator();
-            menu.addItem(4, "Remove FX Slot");
-        }
-    }
-    else
-    {
-        menu.addItem(3, "Open Plugin Editor");
-        menu.addSeparator();
-        menu.addItem(1, fxSlot.bypassed ? "Enable Plugin" : "Bypass Plugin");
-        menu.addItem(2, "Remove Plugin");
-        menu.addSeparator();
-        menu.addItem(4, "Remove FX Slot", state.canRemoveTrackFxSlot(trackIndex));
-    }
-
-    auto target = getPluginSlotBounds(trackIndex, slotIndex).toNearestInt();
-    juce::Component::SafePointer<TrackListComponent> safeThis(this);
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(localAreaToGlobal(target)),
-                       [safeThis, trackIndex, slotIndex, hasPlugin = fxSlot.hasPlugin](int result)
-                       {
-                           if (safeThis == nullptr || result == 0)
-                               return;
-
-                           if (!hasPlugin && result >= 100)
-                           {
-                               const auto availablePlugins = safeThis->getAvailableTrackPlugins != nullptr
-                                   ? safeThis->getAvailableTrackPlugins()
-                                   : juce::StringArray{};
-                               const int pluginIndex = result - 100;
-                               if (juce::isPositiveAndBelow(pluginIndex, availablePlugins.size())
-                                   && safeThis->onTrackPluginLoadRequested != nullptr
-                                   && safeThis->onTrackPluginLoadRequested(trackIndex, slotIndex, availablePlugins[pluginIndex]))
-                               {
-                                   safeThis->state.loadTrackPluginIntoFxSlot(trackIndex, slotIndex, availablePlugins[pluginIndex]);
-                               }
-                           }
-                           else if (hasPlugin && result == 3)
-                           {
-                               if (safeThis->onTrackPluginEditorRequested != nullptr)
-                                   safeThis->onTrackPluginEditorRequested(trackIndex, slotIndex);
-                           }
-                           else if (hasPlugin && result == 1)
-                           {
-                               const bool shouldBeBypassed = !safeThis->state.getTrackFxSlot(trackIndex, slotIndex).bypassed;
-                               if (safeThis->onTrackPluginBypassRequested != nullptr)
-                                   safeThis->onTrackPluginBypassRequested(trackIndex, slotIndex, shouldBeBypassed);
-                               safeThis->state.toggleTrackFxSlotBypassed(trackIndex, slotIndex);
-                           }
-                           else if (hasPlugin && result == 2)
-                           {
-                               if (safeThis->onTrackPluginRemoveRequested != nullptr)
-                                   safeThis->onTrackPluginRemoveRequested(trackIndex, slotIndex);
-                               safeThis->state.clearTrackFxSlot(trackIndex, slotIndex);
-                           }
-                           else if (result == 4)
-                           {
-                               if (safeThis->onTrackPluginSlotRemoveRequested != nullptr)
-                                   safeThis->onTrackPluginSlotRemoveRequested(trackIndex, slotIndex);
-                               safeThis->state.removeTrackFxSlot(trackIndex, slotIndex);
-                           }
-
-                           safeThis->repaint();
-                       });
-}
-
 void TrackListComponent::showTrackContextMenu(int trackIndex, juce::Rectangle<int> targetBounds)
 {
     juce::PopupMenu menu;
@@ -753,20 +504,4 @@ void TrackListComponent::showTrackContextMenu(int trackIndex, juce::Rectangle<in
                                    safeThis->onRemoveTrackRequested(trackIndex);
                            }
                        });
-}
-
-void TrackListComponent::updatePanFromPosition(int trackIndex, juce::Point<float> position)
-{
-    auto knobBounds = getPanKnobBounds(trackIndex);
-    const float normalised = juce::jlimit(0.0f, 1.0f, (position.x - knobBounds.getX()) / juce::jmax(1.0f, knobBounds.getWidth()));
-    state.setTrackPan(trackIndex, juce::jmap(normalised, 0.0f, 1.0f, -1.0f, 1.0f));
-    repaint();
-}
-
-void TrackListComponent::updateLevelFromPosition(int trackIndex, juce::Point<float> position)
-{
-    auto faderBounds = getFaderBounds(trackIndex);
-    const float normalised = juce::jlimit(0.0f, 1.0f, (position.x - faderBounds.getX()) / juce::jmax(1.0f, faderBounds.getWidth()));
-    state.setTrackLevel(trackIndex, normalised);
-    repaint();
 }

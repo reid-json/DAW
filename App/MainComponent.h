@@ -27,6 +27,9 @@ private:
     void handlePause();
     void handleRestart();
     void handleRecentClipDropped(int assetId, int trackIndex, double startSeconds);
+    void handleAssetRenamed(int assetId, const juce::String& newName);
+    void syncTrackPatternsToAssets();
+    static double getPatternLengthSeconds(const DAWState& state, const TrackPatternState& pattern);
     void handleTimelineClipMoved(int placementId, int trackIndex, double startSeconds);
     void handleTimelineClipRemoved(int placementId);
     int getNewestRecentAssetId() const;

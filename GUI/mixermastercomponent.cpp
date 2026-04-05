@@ -9,15 +9,9 @@ namespace
     constexpr float pluginAddGap = 8.0f;
     constexpr float pluginAddHeight = 12.0f;
 
-    juce::Colour getMasterPanelColour()
-    {
-        return juce::Colour(0xff2d4299);
-    }
-
-    juce::Colour getMasterEdgeColour()
-    {
-        return juce::Colour(0xff9db7ff).withAlpha(0.24f);
-    }
+    juce::Colour getMasterPanelColour() { return juce::Colour(0xff2d4299); }
+    juce::Colour getTrackFocusColour() { return juce::Colour(0xff2b3f92); }
+    juce::Colour getPanelEdgeColour() { return juce::Colour(0xff9db7ff).withAlpha(0.24f); }
 
     juce::String getPanLabelText(float pan)
     {
@@ -34,56 +28,195 @@ MixerMasterComponent::MixerMasterComponent(DAWState& stateIn)
 {
 }
 
+bool MixerMasterComponent::isShowingMaster() const
+{
+    return state.isMasterMixerFocused();
+}
+
+int MixerMasterComponent::getFocusedTrackIndex() const
+{
+    return juce::jlimit(0, state.trackCount - 1, state.selectedTrackIndex);
+}
+
+juce::String MixerMasterComponent::getFocusedTitle() const
+{
+    return isShowingMaster() ? "MASTER" : state.getTrackName(getFocusedTrackIndex());
+}
+
+juce::Rectangle<float> MixerMasterComponent::getInnerBounds() const
+{
+    return getLocalBounds().toFloat().reduced(20.0f, 18.0f);
+}
+
+juce::Rectangle<float> MixerMasterComponent::getHeaderActionBounds() const
+{
+    auto innerBounds = getInnerBounds();
+    auto headerBounds = innerBounds.removeFromTop(26.0f);
+    return headerBounds.removeFromRight(74.0f).withTrimmedLeft(6.0f);
+}
+
+juce::Rectangle<float> MixerMasterComponent::getControlButtonsBounds() const
+{
+    auto innerBounds = getInnerBounds();
+    innerBounds.removeFromTop(34.0f);
+    auto topRow = innerBounds.removeFromTop(58.0f);
+    return topRow.removeFromLeft(isShowingMaster() ? 156.0f : 190.0f);
+}
+
+juce::Rectangle<float> MixerMasterComponent::getButtonBounds(int buttonIndex) const
+{
+    auto row = getControlButtonsBounds().withHeight(28.0f);
+
+    if (isShowingMaster())
+    {
+        static constexpr float widths[] { 32.0f, 32.0f, 44.0f };
+        for (int i = 0; i < buttonIndex; ++i)
+        {
+            row.removeFromLeft(widths[i]);
+            row.removeFromLeft(6.0f);
+        }
+
+        return row.removeFromLeft(widths[buttonIndex]);
+    }
+
+    static constexpr float widths[] { 32.0f, 32.0f, 42.0f, 42.0f };
+    for (int i = 0; i < buttonIndex; ++i)
+    {
+        row.removeFromLeft(widths[i]);
+        row.removeFromLeft(6.0f);
+    }
+
+    return row.removeFromLeft(widths[buttonIndex]);
+}
+
+juce::Rectangle<float> MixerMasterComponent::getIoButtonBounds() const
+{
+    auto bounds = getControlButtonsBounds();
+    bounds.removeFromTop(34.0f);
+    return bounds.removeFromTop(18.0f).withTrimmedRight(isShowingMaster() ? 10.0f : 18.0f);
+}
+
+juce::Rectangle<float> MixerMasterComponent::getPanKnobBounds() const
+{
+    auto innerBounds = getInnerBounds();
+    innerBounds.removeFromTop(34.0f);
+    auto topRow = innerBounds.removeFromTop(58.0f);
+    topRow.removeFromLeft(isShowingMaster() ? 156.0f : 190.0f);
+    return topRow.removeFromLeft(74.0f).reduced(2.0f);
+}
+
+juce::Rectangle<float> MixerMasterComponent::getPluginLaneBounds() const
+{
+    auto innerBounds = getInnerBounds();
+    innerBounds.removeFromTop(34.0f);
+    innerBounds.removeFromTop(58.0f);
+    innerBounds.removeFromTop(8.0f);
+    return innerBounds.removeFromTop(78.0f);
+}
+
+juce::Rectangle<float> MixerMasterComponent::getPluginSlotBounds(int slotIndex) const
+{
+    auto slotArea = getPluginLaneBounds().reduced(14.0f, 10.0f);
+    slotArea.removeFromTop(22.0f);
+
+    for (int i = 0; i < slotIndex; ++i)
+    {
+        slotArea.removeFromTop(pluginSlotHeight);
+        slotArea.removeFromTop(pluginSlotGap);
+    }
+
+    return slotArea.removeFromTop(pluginSlotHeight);
+}
+
+juce::Rectangle<float> MixerMasterComponent::getAddFxSlotBounds() const
+{
+    auto slotArea = getPluginLaneBounds().reduced(14.0f, 10.0f);
+    slotArea.removeFromTop(22.0f);
+    const int slotCount = isShowingMaster() ? state.getMasterFxSlotCount() : state.getTrackFxSlotCount(getFocusedTrackIndex());
+
+    for (int i = 0; i < slotCount; ++i)
+    {
+        slotArea.removeFromTop(pluginSlotHeight);
+        if (i < slotCount - 1)
+            slotArea.removeFromTop(pluginSlotGap);
+    }
+
+    slotArea.removeFromTop(pluginAddGap);
+    return slotArea.removeFromTop(pluginAddHeight);
+}
+
+juce::Rectangle<float> MixerMasterComponent::getFaderBounds() const
+{
+    auto innerBounds = getInnerBounds();
+    innerBounds.removeFromTop(34.0f);
+    innerBounds.removeFromTop(58.0f);
+    innerBounds.removeFromTop(8.0f);
+    innerBounds.removeFromTop(78.0f);
+    innerBounds.removeFromTop(10.0f);
+    auto lowerArea = innerBounds;
+    lowerArea.removeFromTop(18.0f);
+    lowerArea.removeFromTop(14.0f);
+    auto stripArea = lowerArea.withTrimmedBottom(4.0f);
+    stripArea.removeFromLeft(18.0f);
+    stripArea.removeFromLeft(12.0f);
+    return stripArea.reduced(2.0f, 0.0f);
+}
+
 void MixerMasterComponent::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colours::transparentBlack);
 
     auto bounds = getLocalBounds().toFloat().reduced(4.0f);
-    g.setColour(getMasterPanelColour());
+    g.setColour(isShowingMaster() ? getMasterPanelColour() : getTrackFocusColour());
     g.fillRoundedRectangle(bounds, 24.0f);
 
-    g.setColour(getMasterEdgeColour());
+    g.setColour(getPanelEdgeColour());
     g.drawRoundedRectangle(bounds.reduced(1.5f), 24.0f, 2.0f);
 
     auto innerBounds = getInnerBounds();
     auto headerBounds = innerBounds.removeFromTop(26.0f);
 
-    g.setColour(juce::Colours::white.withAlpha(0.82f));
+    g.setColour(juce::Colours::white.withAlpha(0.84f));
     g.setFont(juce::Font(15.0f, juce::Font::bold));
-    g.drawText("MASTER", headerBounds.toNearestInt(), juce::Justification::centredLeft, false);
+    g.drawText(getFocusedTitle(), headerBounds.toNearestInt(), juce::Justification::centredLeft, false);
+
+    g.setColour(juce::Colours::white.withAlpha(0.42f));
+    g.setFont(juce::Font(10.0f, juce::Font::plain));
+    g.drawText(isShowingMaster() ? "Master bus" : "Focused track",
+               headerBounds.withTrimmedLeft(110.0f).toNearestInt(),
+               juce::Justification::centredRight,
+               false);
+
+    if (!isShowingMaster())
+    {
+        auto actionBounds = getHeaderActionBounds();
+        g.setColour(juce::Colour(0xff22346e));
+        g.fillRoundedRectangle(actionBounds, 8.0f);
+        g.setColour(juce::Colours::white.withAlpha(0.18f));
+        g.drawRoundedRectangle(actionBounds, 8.0f, 1.0f);
+        g.setColour(juce::Colours::white.withAlpha(0.72f));
+        g.setFont(juce::Font(10.0f, juce::Font::bold));
+        g.drawText("MASTER", actionBounds.toNearestInt(), juce::Justification::centred, false);
+    }
 
     innerBounds.removeFromTop(8.0f);
-    auto topRow = innerBounds.removeFromTop(48.0f);
-    innerBounds.removeFromTop(8.0f);
-    auto pluginBounds = innerBounds.removeFromTop(78.0f);
-    innerBounds.removeFromTop(10.0f);
-    auto lowerArea = innerBounds;
-
-    auto buttonsBounds = topRow.removeFromLeft(156.0f);
-    auto knobBounds = topRow.removeFromLeft(68.0f).reduced(4.0f);
-
-    drawTransportButtons(g, buttonsBounds);
-    drawPanKnob(g, knobBounds);
-    drawPluginLane(g, pluginBounds);
-
-    auto levelLabelBounds = lowerArea.removeFromTop(18.0f);
-    g.setColour(juce::Colours::white.withAlpha(0.52f));
-    g.setFont(juce::Font(11.0f, juce::Font::plain));
-    g.drawText("MASTER LEVEL", levelLabelBounds.toNearestInt(), juce::Justification::centredLeft, false);
-
-    lowerArea.removeFromTop(14.0f);
-    auto stripArea = lowerArea.withTrimmedBottom(4.0f);
-    auto meterBounds = stripArea.removeFromLeft(18.0f).reduced(0.0f, 2.0f);
-    stripArea.removeFromLeft(12.0f);
-    auto faderBounds = stripArea.reduced(2.0f, 0.0f);
-
-    drawMeter(g, meterBounds);
-    drawFader(g, faderBounds);
+    if (isShowingMaster())
+        paintMasterView(g, innerBounds);
+    else
+        paintTrackView(g, innerBounds, getFocusedTrackIndex());
 }
 
 void MixerMasterComponent::mouseDown(const juce::MouseEvent& e)
 {
-    for (int slotIndex = 0; slotIndex < state.getMasterFxSlotCount(); ++slotIndex)
+    if (!isShowingMaster() && getHeaderActionBounds().contains(e.position))
+    {
+        state.showMasterMixerFocus();
+        repaint();
+        return;
+    }
+
+    const int slotCount = isShowingMaster() ? state.getMasterFxSlotCount() : state.getTrackFxSlotCount(getFocusedTrackIndex());
+    for (int slotIndex = 0; slotIndex < slotCount; ++slotIndex)
     {
         if (getPluginSlotBounds(slotIndex).contains(e.position))
         {
@@ -92,27 +225,47 @@ void MixerMasterComponent::mouseDown(const juce::MouseEvent& e)
         }
     }
 
-    if (state.canAddMasterFxSlot() && getAddFxSlotBounds().contains(e.position))
+    if ((isShowingMaster() ? state.canAddMasterFxSlot() : state.canAddTrackFxSlot(getFocusedTrackIndex()))
+        && getAddFxSlotBounds().contains(e.position))
     {
-        state.addMasterFxSlot();
+        if (isShowingMaster())
+            state.addMasterFxSlot();
+        else
+            state.addTrackFxSlot(getFocusedTrackIndex());
+
         repaint();
         return;
     }
 
-    for (int buttonIndex = 0; buttonIndex < 3; ++buttonIndex)
+    const int buttonCount = isShowingMaster() ? 3 : 4;
+    for (int buttonIndex = 0; buttonIndex < buttonCount; ++buttonIndex)
     {
         if (getButtonBounds(buttonIndex).contains(e.position))
         {
-            if (buttonIndex == 0)
-                state.toggleMasterMuted();
-            else if (buttonIndex == 1)
-                state.toggleMasterSoloed();
+            if (isShowingMaster())
+            {
+                if (buttonIndex == 0) state.toggleMasterMuted();
+                else if (buttonIndex == 1) state.toggleMasterSoloed();
+                else state.toggleMasterArmed();
+            }
             else
-                state.toggleMasterArmed();
+            {
+                const int trackIndex = getFocusedTrackIndex();
+                if (buttonIndex == 0) state.toggleTrackMuted(trackIndex);
+                else if (buttonIndex == 1) state.toggleTrackSoloed(trackIndex);
+                else if (buttonIndex == 2) state.toggleTrackMonitoringEnabled(trackIndex);
+                else state.toggleTrackArmed(trackIndex);
+            }
 
             repaint();
             return;
         }
+    }
+
+    if (getIoButtonBounds().contains(e.position))
+    {
+        showIoMenu();
+        return;
     }
 
     if (getPanKnobBounds().contains(e.position))
@@ -146,139 +299,152 @@ void MixerMasterComponent::mouseUp(const juce::MouseEvent&)
     activeDragTarget = DragTarget::none;
 }
 
-juce::Rectangle<float> MixerMasterComponent::getInnerBounds() const
+void MixerMasterComponent::paintMasterView(juce::Graphics& g, juce::Rectangle<float> innerBounds)
 {
-    return getLocalBounds().toFloat().reduced(20.0f, 18.0f);
-}
-
-juce::Rectangle<float> MixerMasterComponent::getPanKnobBounds() const
-{
-    auto innerBounds = getInnerBounds();
-    innerBounds.removeFromTop(34.0f);
-    auto topRow = innerBounds.removeFromTop(48.0f);
-    topRow.removeFromLeft(156.0f);
-    return topRow.removeFromLeft(68.0f).reduced(4.0f);
-}
-
-juce::Rectangle<float> MixerMasterComponent::getControlButtonsBounds() const
-{
-    auto innerBounds = getInnerBounds();
-    innerBounds.removeFromTop(34.0f);
-    auto topRow = innerBounds.removeFromTop(48.0f);
-    return topRow.removeFromLeft(156.0f);
-}
-
-juce::Rectangle<float> MixerMasterComponent::getButtonBounds(int buttonIndex) const
-{
-    auto row = getControlButtonsBounds().withHeight(28.0f);
-    for (int i = 0; i < buttonIndex; ++i)
-    {
-        row.removeFromLeft(38.0f);
-        row.removeFromLeft(10.0f);
-    }
-
-    return row.removeFromLeft(38.0f);
-}
-
-juce::Rectangle<float> MixerMasterComponent::getFaderBounds() const
-{
-    auto innerBounds = getInnerBounds();
-    innerBounds.removeFromTop(34.0f);
-    innerBounds.removeFromTop(48.0f);
+    auto topRow = innerBounds.removeFromTop(58.0f);
     innerBounds.removeFromTop(8.0f);
-    innerBounds.removeFromTop(78.0f);
+    auto pluginBounds = innerBounds.removeFromTop(78.0f);
     innerBounds.removeFromTop(10.0f);
     auto lowerArea = innerBounds;
-    lowerArea.removeFromTop(18.0f);
+
+    drawTransportButtons(g, topRow.removeFromLeft(156.0f));
+    drawPanKnob(g, topRow.removeFromLeft(74.0f).reduced(2.0f));
+    drawPluginLane(g, pluginBounds);
+
+    auto levelLabelBounds = lowerArea.removeFromTop(18.0f);
+    g.setColour(juce::Colours::white.withAlpha(0.52f));
+    g.setFont(juce::Font(11.0f, juce::Font::plain));
+    g.drawText("MASTER LEVEL", levelLabelBounds.toNearestInt(), juce::Justification::centredLeft, false);
+
     lowerArea.removeFromTop(14.0f);
     auto stripArea = lowerArea.withTrimmedBottom(4.0f);
-    stripArea.removeFromLeft(18.0f);
+    auto meterBounds = stripArea.removeFromLeft(18.0f).reduced(0.0f, 2.0f);
     stripArea.removeFromLeft(12.0f);
-    return stripArea.reduced(2.0f, 0.0f);
+    drawMeter(g, meterBounds);
+    drawFader(g, stripArea.reduced(2.0f, 0.0f));
 }
 
-juce::Rectangle<float> MixerMasterComponent::getPluginLaneBounds() const
+void MixerMasterComponent::paintTrackView(juce::Graphics& g, juce::Rectangle<float> innerBounds, int)
 {
-    auto innerBounds = getInnerBounds();
-    innerBounds.removeFromTop(34.0f);
-    innerBounds.removeFromTop(48.0f);
+    auto topRow = innerBounds.removeFromTop(58.0f);
     innerBounds.removeFromTop(8.0f);
-    return innerBounds.removeFromTop(78.0f);
-}
+    auto pluginBounds = innerBounds.removeFromTop(78.0f);
+    innerBounds.removeFromTop(10.0f);
+    auto lowerArea = innerBounds;
 
-juce::Rectangle<float> MixerMasterComponent::getPluginSlotBounds(int slotIndex) const
-{
-    auto slotArea = getPluginLaneBounds().reduced(14.0f, 10.0f);
-    slotArea.removeFromTop(22.0f);
+    drawTransportButtons(g, topRow.removeFromLeft(190.0f));
+    drawPanKnob(g, topRow.removeFromLeft(74.0f).reduced(2.0f));
+    drawPluginLane(g, pluginBounds);
 
-    for (int i = 0; i < slotIndex; ++i)
-    {
-        slotArea.removeFromTop(pluginSlotHeight);
-        slotArea.removeFromTop(pluginSlotGap);
-    }
+    auto levelLabelBounds = lowerArea.removeFromTop(18.0f);
+    g.setColour(juce::Colours::white.withAlpha(0.52f));
+    g.setFont(juce::Font(11.0f, juce::Font::plain));
+    g.drawText("LEVEL", levelLabelBounds.toNearestInt(), juce::Justification::centredLeft, false);
 
-    return slotArea.removeFromTop(pluginSlotHeight);
-}
-
-juce::Rectangle<float> MixerMasterComponent::getAddFxSlotBounds() const
-{
-    auto slotArea = getPluginLaneBounds().reduced(14.0f, 10.0f);
-    slotArea.removeFromTop(22.0f);
-
-    const int slotCount = state.getMasterFxSlotCount();
-    for (int i = 0; i < slotCount; ++i)
-    {
-        slotArea.removeFromTop(pluginSlotHeight);
-        slotArea.removeFromTop(pluginSlotGap);
-    }
-
-    slotArea.removeFromTop(pluginAddGap);
-    return slotArea.removeFromTop(pluginAddHeight);
+    lowerArea.removeFromTop(14.0f);
+    auto stripArea = lowerArea.withTrimmedBottom(4.0f);
+    auto meterBounds = stripArea.removeFromLeft(18.0f).reduced(0.0f, 2.0f);
+    stripArea.removeFromLeft(12.0f);
+    drawMeter(g, meterBounds);
+    drawFader(g, stripArea.reduced(2.0f, 0.0f));
 }
 
 void MixerMasterComponent::drawTransportButtons(juce::Graphics& g, juce::Rectangle<float> bounds) const
 {
-    const char* labels[] = { "M", "S", "R" };
+    if (isShowingMaster())
+    {
+        const char* labels[] = { "M", "S", "ARM" };
+        static constexpr float widths[] { 32.0f, 32.0f, 44.0f };
+        auto row = bounds.withHeight(28.0f);
+
+        for (int i = 0; i < 3; ++i)
+        {
+            auto button = row.removeFromLeft(widths[i]);
+            if (i < 2)
+                row.removeFromLeft(6.0f);
+
+            const bool isActive = (i == 0 && state.masterMixerState.muted)
+                               || (i == 1 && state.masterMixerState.soloed)
+                               || (i == 2 && state.masterMixerState.armed);
+            auto fill = isActive ? (i == 2 ? juce::Colour(0xffc2485d) : juce::Colour(0xff3a7afe))
+                                 : juce::Colour(0xff2f437e);
+            g.setColour(fill);
+            g.fillRoundedRectangle(button, 9.0f);
+            g.setColour(juce::Colours::white.withAlpha(isActive ? 0.95f : 0.58f));
+            g.drawRoundedRectangle(button, 9.0f, 1.2f);
+            g.setColour(juce::Colours::white.withAlpha(isActive ? 1.0f : 0.82f));
+            g.setFont(juce::Font(i == 2 ? 9.5f : 12.0f, juce::Font::bold));
+            g.drawText(labels[i], button.toNearestInt(), juce::Justification::centred, false);
+        }
+
+        auto ioBounds = getIoButtonBounds();
+        g.setColour(juce::Colour(0xff22346e));
+        g.fillRoundedRectangle(ioBounds, 8.0f);
+        g.setColour(juce::Colours::white.withAlpha(0.18f));
+        g.drawRoundedRectangle(ioBounds, 8.0f, 1.0f);
+        g.setColour(juce::Colours::white.withAlpha(0.56f));
+        g.setFont(juce::Font(9.5f, juce::Font::plain));
+        g.drawText(state.getMasterOutputAssignment(),
+                   ioBounds.reduced(6.0f, 0.0f).toNearestInt(),
+                   juce::Justification::centredLeft,
+                   false);
+        return;
+    }
+
+    const auto& trackState = state.getTrackMixerState(getFocusedTrackIndex());
+    const char* labels[] = { "M", "S", "MON", "ARM" };
+    static constexpr float widths[] { 32.0f, 32.0f, 42.0f, 42.0f };
     auto row = bounds.withHeight(28.0f);
 
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 4; ++i)
     {
-        auto button = row.removeFromLeft(38.0f);
-        row.removeFromLeft(10.0f);
+        auto button = row.removeFromLeft(widths[i]);
+        if (i < 3)
+            row.removeFromLeft(6.0f);
 
-        const bool isActive = (i == 0 && state.masterMixerState.muted)
-                           || (i == 1 && state.masterMixerState.soloed)
-                           || (i == 2 && state.masterMixerState.armed);
-
-        auto fill = isActive
-            ? (i == 2 ? juce::Colour(0xffc2485d) : juce::Colour(0xff3a7afe))
-            : juce::Colour(0xff2f437e);
-        auto border = isActive
-            ? juce::Colours::white.withAlpha(0.95f)
-            : juce::Colours::white.withAlpha(0.58f);
-        auto text = isActive
-            ? juce::Colours::white
-            : juce::Colours::white.withAlpha(0.82f);
+        const bool isActive = (i == 0 && trackState.muted)
+                           || (i == 1 && trackState.soloed)
+                           || (i == 2 && trackState.monitoringEnabled)
+                           || (i == 3 && trackState.armed);
+        auto fill = juce::Colour(0xff2f437e);
+        if (isActive)
+        {
+            if (i == 2) fill = juce::Colour(0xff1f7a4d);
+            else if (i == 3) fill = juce::Colour(0xffc2485d);
+            else fill = juce::Colour(0xff3a7afe);
+        }
 
         g.setColour(fill);
         g.fillRoundedRectangle(button, 9.0f);
-        g.setColour(border);
+        g.setColour(juce::Colours::white.withAlpha(isActive ? 0.95f : 0.58f));
         g.drawRoundedRectangle(button, 9.0f, 1.2f);
-        g.setFont(juce::Font(12.0f, juce::Font::bold));
-        g.setColour(text);
+        g.setColour(juce::Colours::white.withAlpha(isActive ? 1.0f : 0.82f));
+        g.setFont(juce::Font(i >= 2 ? 9.5f : 12.0f, juce::Font::bold));
         g.drawText(labels[i], button.toNearestInt(), juce::Justification::centred, false);
     }
+
+    auto ioBounds = getIoButtonBounds();
+    g.setColour(juce::Colour(0xff22346e));
+    g.fillRoundedRectangle(ioBounds, 8.0f);
+    g.setColour(juce::Colours::white.withAlpha(0.18f));
+    g.drawRoundedRectangle(ioBounds, 8.0f, 1.0f);
+    g.setColour(juce::Colours::white.withAlpha(0.56f));
+    g.setFont(juce::Font(9.5f, juce::Font::plain));
+    g.drawText(state.getTrackIoAssignment(getFocusedTrackIndex()),
+               ioBounds.reduced(6.0f, 0.0f).toNearestInt(),
+               juce::Justification::centredLeft,
+               false);
 }
 
 void MixerMasterComponent::drawPanKnob(juce::Graphics& g, juce::Rectangle<float> bounds) const
 {
+    const float pan = isShowingMaster() ? state.masterMixerState.pan : state.getTrackMixerState(getFocusedTrackIndex()).pan;
     g.setColour(juce::Colour(0xff182447));
     g.fillEllipse(bounds);
     g.setColour(juce::Colours::white.withAlpha(0.9f));
     g.drawEllipse(bounds, 1.6f);
 
-    const float angle = juce::jmap(state.masterMixerState.pan,
-                                   -1.0f, 1.0f,
+    const float angle = juce::jmap(pan, -1.0f, 1.0f,
                                    -juce::MathConstants<float>::pi * 0.75f,
                                    juce::MathConstants<float>::pi * 0.75f);
     const auto endPoint = juce::Point<float>(bounds.getCentreX() + std::sin(angle) * 13.0f,
@@ -288,26 +454,27 @@ void MixerMasterComponent::drawPanKnob(juce::Graphics& g, juce::Rectangle<float>
     auto labelBounds = bounds.withY(bounds.getY() - 14.0f).withHeight(12.0f);
     g.setColour(juce::Colours::white.withAlpha(0.52f));
     g.setFont(juce::Font(10.0f, juce::Font::plain));
-    g.drawText(getPanLabelText(state.masterMixerState.pan),
-               labelBounds.toNearestInt(),
-               juce::Justification::centred,
-               false);
+    g.drawText(getPanLabelText(pan), labelBounds.toNearestInt(), juce::Justification::centred, false);
 }
 
 void MixerMasterComponent::drawMeter(juce::Graphics& g, juce::Rectangle<float> bounds) const
 {
+    const bool muted = isShowingMaster() ? state.masterMixerState.muted : !state.isTrackAudible(getFocusedTrackIndex());
+    const bool soloed = isShowingMaster() ? state.masterMixerState.soloed
+                                          : (state.getTrackMixerState(getFocusedTrackIndex()).soloed && state.isTrackAudible(getFocusedTrackIndex()));
+    const float level = isShowingMaster() ? state.masterMixerState.level : state.getTrackMixerState(getFocusedTrackIndex()).level;
+
     auto laneBounds = bounds.reduced(1.0f, 1.0f);
     g.setColour(juce::Colours::white.withAlpha(0.14f));
     g.fillRoundedRectangle(laneBounds, 5.0f);
 
-    float fillRatio = state.masterMixerState.level * (state.masterMixerState.muted ? 0.15f : 0.95f);
-    if (state.masterMixerState.soloed)
+    float fillRatio = level * (muted ? 0.15f : 0.95f);
+    if (soloed)
         fillRatio = juce::jmin(1.0f, fillRatio + 0.08f);
     fillRatio = juce::jlimit(0.05f, 0.98f, fillRatio);
 
     auto fillBounds = laneBounds.withY(laneBounds.getBottom() - laneBounds.getHeight() * fillRatio)
                                 .withHeight(laneBounds.getHeight() * fillRatio);
-
     juce::ColourGradient gradient(juce::Colour(0xff3bf38d), fillBounds.getCentreX(), fillBounds.getBottom(),
                                   juce::Colour(0xffffd34a), fillBounds.getCentreX(), fillBounds.getY(), false);
     gradient.addColour(0.8, juce::Colour(0xffff8847));
@@ -317,6 +484,7 @@ void MixerMasterComponent::drawMeter(juce::Graphics& g, juce::Rectangle<float> b
 
 void MixerMasterComponent::drawFader(juce::Graphics& g, juce::Rectangle<float> bounds) const
 {
+    const float level = isShowingMaster() ? state.masterMixerState.level : state.getTrackMixerState(getFocusedTrackIndex()).level;
     auto content = bounds.reduced(2.0f, 0.0f);
     auto valueBounds = content.removeFromTop(14.0f);
     content.removeFromTop(8.0f);
@@ -324,9 +492,8 @@ void MixerMasterComponent::drawFader(juce::Graphics& g, juce::Rectangle<float> b
 
     g.setColour(juce::Colours::white.withAlpha(0.5f));
     g.setFont(juce::Font(10.0f, juce::Font::plain));
-    const auto dbValue = juce::jmap(state.masterMixerState.level, 0.0f, 1.0f, -60.0f, 6.0f);
-    const auto dbText = juce::String(static_cast<int>(std::round(dbValue))) + " dB";
-    g.drawText(dbText,
+    const auto dbValue = juce::jmap(level, 0.0f, 1.0f, -60.0f, 6.0f);
+    g.drawText(juce::String(static_cast<int>(std::round(dbValue))) + " dB",
                valueBounds.toNearestInt(),
                juce::Justification::centredLeft,
                false);
@@ -342,7 +509,7 @@ void MixerMasterComponent::drawFader(juce::Graphics& g, juce::Rectangle<float> b
 
     const float thumbWidth = 20.0f;
     const float thumbTravel = juce::jmax(0.0f, rail.getWidth() - thumbWidth);
-    const float thumbX = rail.getX() + thumbTravel * state.masterMixerState.level;
+    const float thumbX = rail.getX() + thumbTravel * level;
     auto thumb = juce::Rectangle<float>(thumbX, lane.getCentreY() - 9.0f, thumbWidth, 18.0f);
     g.setColour(juce::Colour(0xffdfe9ff));
     g.fillRoundedRectangle(thumb, 6.0f);
@@ -360,18 +527,21 @@ void MixerMasterComponent::drawPluginLane(juce::Graphics& g, juce::Rectangle<flo
     auto labelBounds = bounds.reduced(14.0f, 10.0f).removeFromTop(16.0f);
     g.setColour(juce::Colours::white.withAlpha(0.6f));
     g.setFont(juce::Font(10.5f, juce::Font::plain));
-    g.drawText("MASTER FX RACK", labelBounds.toNearestInt(), juce::Justification::centredLeft, false);
+    g.drawText(isShowingMaster() ? "MASTER FX RACK" : "TRACK FX RACK",
+               labelBounds.toNearestInt(), juce::Justification::centredLeft, false);
 
     auto slotArea = bounds.reduced(14.0f, 10.0f);
     slotArea.removeFromTop(22.0f);
+    const int trackIndex = getFocusedTrackIndex();
+    const int slotCount = isShowingMaster() ? state.getMasterFxSlotCount() : state.getTrackFxSlotCount(trackIndex);
 
-    const int slotCount = state.getMasterFxSlotCount();
     for (int i = 0; i < slotCount; ++i)
     {
         auto slot = slotArea.removeFromTop(pluginSlotHeight);
         if (i < slotCount - 1)
             slotArea.removeFromTop(pluginSlotGap);
-        const auto& fxSlot = state.getMasterFxSlot(i);
+
+        const auto& fxSlot = isShowingMaster() ? state.getMasterFxSlot(i) : state.getTrackFxSlot(trackIndex, i);
         g.setColour(juce::Colours::white.withAlpha(0.08f));
         g.fillRoundedRectangle(slot, 7.0f);
         g.setColour(fxSlot.bypassed ? juce::Colour(0xffffd34a).withAlpha(0.7f)
@@ -381,14 +551,14 @@ void MixerMasterComponent::drawPluginLane(juce::Graphics& g, juce::Rectangle<flo
         g.setColour(fxSlot.hasPlugin ? juce::Colours::white.withAlpha(0.68f)
                                      : juce::Colours::white.withAlpha(0.34f));
         g.setFont(juce::Font(9.0f, juce::Font::plain));
-        g.drawText(fxSlot.hasPlugin ? (fxSlot.bypassed ? fxSlot.name + " (Byp)" : fxSlot.name)
-                                    : "Add plugin",
+        g.drawText(fxSlot.hasPlugin ? (fxSlot.bypassed ? fxSlot.name + " (Byp)" : fxSlot.name) : "Add plugin",
                    slot.reduced(5.0f, 0.0f).toNearestInt(),
                    juce::Justification::centredLeft,
                    false);
     }
 
-    if (state.canAddMasterFxSlot())
+    const bool canAdd = isShowingMaster() ? state.canAddMasterFxSlot() : state.canAddTrackFxSlot(trackIndex);
+    if (canAdd)
     {
         slotArea.removeFromTop(pluginAddGap);
         auto addSlot = slotArea.removeFromTop(pluginAddHeight);
@@ -404,14 +574,15 @@ void MixerMasterComponent::drawPluginLane(juce::Graphics& g, juce::Rectangle<flo
 void MixerMasterComponent::showFxSlotMenu(int slotIndex)
 {
     juce::PopupMenu menu;
-    const auto& fxSlot = state.getMasterFxSlot(slotIndex);
+    const int trackIndex = getFocusedTrackIndex();
+    const auto& fxSlot = isShowingMaster() ? state.getMasterFxSlot(slotIndex) : state.getTrackFxSlot(trackIndex, slotIndex);
 
     if (!fxSlot.hasPlugin)
     {
         juce::PopupMenu addPluginMenu;
-        const auto availablePlugins = getAvailableMasterPlugins != nullptr
-            ? getAvailableMasterPlugins()
-            : juce::StringArray{};
+        const auto availablePlugins = isShowingMaster()
+            ? (getAvailableMasterPlugins != nullptr ? getAvailableMasterPlugins() : juce::StringArray{})
+            : (getAvailableTrackPlugins != nullptr ? getAvailableTrackPlugins() : juce::StringArray{});
         for (int i = 0; i < availablePlugins.size(); ++i)
             addPluginMenu.addItem(100 + i, availablePlugins[i]);
 
@@ -419,7 +590,7 @@ void MixerMasterComponent::showFxSlotMenu(int slotIndex)
             addPluginMenu.addItem(1, "No plugins available", false);
 
         menu.addSubMenu("Add Plugin", addPluginMenu);
-        if (state.canRemoveMasterFxSlot())
+        if (isShowingMaster() ? state.canRemoveMasterFxSlot() : state.canRemoveTrackFxSlot(trackIndex))
         {
             menu.addSeparator();
             menu.addItem(4, "Remove FX Slot");
@@ -432,53 +603,174 @@ void MixerMasterComponent::showFxSlotMenu(int slotIndex)
         menu.addItem(1, fxSlot.bypassed ? "Enable Plugin" : "Bypass Plugin");
         menu.addItem(2, "Remove Plugin");
         menu.addSeparator();
-        menu.addItem(4, "Remove FX Slot", state.canRemoveMasterFxSlot());
+        menu.addItem(4, "Remove FX Slot",
+                     isShowingMaster() ? state.canRemoveMasterFxSlot() : state.canRemoveTrackFxSlot(trackIndex));
     }
 
     auto target = getPluginSlotBounds(slotIndex).toNearestInt();
     juce::Component::SafePointer<MixerMasterComponent> safeThis(this);
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(localAreaToGlobal(target)),
-                       [safeThis, slotIndex, hasPlugin = fxSlot.hasPlugin](int result)
+                       [safeThis, slotIndex, trackIndex, hasPlugin = fxSlot.hasPlugin](int result)
                        {
                            if (safeThis == nullptr || result == 0)
                                return;
 
                            if (!hasPlugin && result >= 100)
                            {
-                               const auto availablePlugins = safeThis->getAvailableMasterPlugins != nullptr
-                                   ? safeThis->getAvailableMasterPlugins()
-                                   : juce::StringArray{};
+                               const auto availablePlugins = safeThis->isShowingMaster()
+                                   ? (safeThis->getAvailableMasterPlugins != nullptr ? safeThis->getAvailableMasterPlugins() : juce::StringArray{})
+                                   : (safeThis->getAvailableTrackPlugins != nullptr ? safeThis->getAvailableTrackPlugins() : juce::StringArray{});
                                const int pluginIndex = result - 100;
-                               if (juce::isPositiveAndBelow(pluginIndex, availablePlugins.size())
-                                   && safeThis->onMasterPluginLoadRequested != nullptr
-                                   && safeThis->onMasterPluginLoadRequested(slotIndex, availablePlugins[pluginIndex]))
+                               if (!juce::isPositiveAndBelow(pluginIndex, availablePlugins.size()))
+                                   return;
+
+                               if (safeThis->isShowingMaster())
                                {
-                                   safeThis->state.loadMasterPluginIntoFxSlot(slotIndex, availablePlugins[pluginIndex]);
+                                   if (safeThis->onMasterPluginLoadRequested != nullptr
+                                       && safeThis->onMasterPluginLoadRequested(slotIndex, availablePlugins[pluginIndex]))
+                                       safeThis->state.loadMasterPluginIntoFxSlot(slotIndex, availablePlugins[pluginIndex]);
+                               }
+                               else
+                               {
+                                   if (safeThis->onTrackPluginLoadRequested != nullptr
+                                       && safeThis->onTrackPluginLoadRequested(trackIndex, slotIndex, availablePlugins[pluginIndex]))
+                                       safeThis->state.loadTrackPluginIntoFxSlot(trackIndex, slotIndex, availablePlugins[pluginIndex]);
                                }
                            }
                            else if (hasPlugin && result == 3)
                            {
-                               if (safeThis->onMasterPluginEditorRequested != nullptr)
-                                   safeThis->onMasterPluginEditorRequested(slotIndex);
+                               if (safeThis->isShowingMaster())
+                               {
+                                   if (safeThis->onMasterPluginEditorRequested != nullptr)
+                                       safeThis->onMasterPluginEditorRequested(slotIndex);
+                               }
+                               else if (safeThis->onTrackPluginEditorRequested != nullptr)
+                               {
+                                   safeThis->onTrackPluginEditorRequested(trackIndex, slotIndex);
+                               }
                            }
                            else if (hasPlugin && result == 1)
                            {
-                               const bool shouldBeBypassed = !safeThis->state.getMasterFxSlot(slotIndex).bypassed;
-                               if (safeThis->onMasterPluginBypassRequested != nullptr)
-                                   safeThis->onMasterPluginBypassRequested(slotIndex, shouldBeBypassed);
-                               safeThis->state.toggleMasterFxSlotBypassed(slotIndex);
+                               if (safeThis->isShowingMaster())
+                               {
+                                   const bool bypass = !safeThis->state.getMasterFxSlot(slotIndex).bypassed;
+                                   if (safeThis->onMasterPluginBypassRequested != nullptr)
+                                       safeThis->onMasterPluginBypassRequested(slotIndex, bypass);
+                                   safeThis->state.toggleMasterFxSlotBypassed(slotIndex);
+                               }
+                               else
+                               {
+                                   const bool bypass = !safeThis->state.getTrackFxSlot(trackIndex, slotIndex).bypassed;
+                                   if (safeThis->onTrackPluginBypassRequested != nullptr)
+                                       safeThis->onTrackPluginBypassRequested(trackIndex, slotIndex, bypass);
+                                   safeThis->state.toggleTrackFxSlotBypassed(trackIndex, slotIndex);
+                               }
                            }
                            else if (hasPlugin && result == 2)
                            {
-                               if (safeThis->onMasterPluginRemoveRequested != nullptr)
-                                   safeThis->onMasterPluginRemoveRequested(slotIndex);
-                               safeThis->state.clearMasterFxSlot(slotIndex);
+                               if (safeThis->isShowingMaster())
+                               {
+                                   if (safeThis->onMasterPluginRemoveRequested != nullptr)
+                                       safeThis->onMasterPluginRemoveRequested(slotIndex);
+                                   safeThis->state.clearMasterFxSlot(slotIndex);
+                               }
+                               else
+                               {
+                                   if (safeThis->onTrackPluginRemoveRequested != nullptr)
+                                       safeThis->onTrackPluginRemoveRequested(trackIndex, slotIndex);
+                                   safeThis->state.clearTrackFxSlot(trackIndex, slotIndex);
+                               }
                            }
                            else if (result == 4)
                            {
-                               if (safeThis->onMasterPluginSlotRemoveRequested != nullptr)
-                                   safeThis->onMasterPluginSlotRemoveRequested(slotIndex);
-                               safeThis->state.removeMasterFxSlot(slotIndex);
+                               if (safeThis->isShowingMaster())
+                               {
+                                   if (safeThis->onMasterPluginSlotRemoveRequested != nullptr)
+                                       safeThis->onMasterPluginSlotRemoveRequested(slotIndex);
+                                   safeThis->state.removeMasterFxSlot(slotIndex);
+                               }
+                               else
+                               {
+                                   if (safeThis->onTrackPluginSlotRemoveRequested != nullptr)
+                                       safeThis->onTrackPluginSlotRemoveRequested(trackIndex, slotIndex);
+                                   safeThis->state.removeTrackFxSlot(trackIndex, slotIndex);
+                               }
+                           }
+
+                           safeThis->repaint();
+                       });
+}
+
+void MixerMasterComponent::showIoMenu()
+{
+    juce::PopupMenu menu;
+
+    if (isShowingMaster())
+    {
+        juce::PopupMenu outputMenu;
+        const auto outputs = getAvailableMasterOutputs != nullptr ? getAvailableMasterOutputs() : juce::StringArray{};
+        if (outputs.isEmpty())
+            outputMenu.addItem(1, "No Outputs Available", false);
+        else
+            for (int i = 0; i < outputs.size(); ++i)
+                outputMenu.addItem(200 + i, outputs[i], true, outputs[i] == state.getMasterOutputAssignment());
+
+        const auto label = getMasterOutputDeviceName != nullptr ? getMasterOutputDeviceName() : juce::String("Outputs");
+        menu.addSubMenu("Outputs (" + label + ")", outputMenu);
+    }
+    else
+    {
+        const int trackIndex = getFocusedTrackIndex();
+        const auto inputs = getAvailableTrackInputs != nullptr ? getAvailableTrackInputs() : juce::StringArray{};
+        const auto outputs = getAvailableTrackOutputs != nullptr ? getAvailableTrackOutputs() : juce::StringArray{};
+        juce::PopupMenu inputMenu, outputMenu;
+
+        if (inputs.isEmpty()) inputMenu.addItem(1, "No Inputs Available", false);
+        else for (int i = 0; i < inputs.size(); ++i)
+            inputMenu.addItem(100 + i, inputs[i], true, inputs[i] == state.getTrackInputAssignment(trackIndex));
+
+        if (outputs.isEmpty()) outputMenu.addItem(1, "No Outputs Available", false);
+        else for (int i = 0; i < outputs.size(); ++i)
+            outputMenu.addItem(200 + i, outputs[i], true, outputs[i] == state.getTrackOutputAssignment(trackIndex));
+
+        const auto inLabel = getTrackInputDeviceName != nullptr ? getTrackInputDeviceName() : juce::String("Inputs");
+        const auto outLabel = getTrackOutputDeviceName != nullptr ? getTrackOutputDeviceName() : juce::String("Outputs");
+        menu.addSubMenu("Inputs (" + inLabel + ")", inputMenu);
+        menu.addSubMenu("Outputs (" + outLabel + ")", outputMenu);
+    }
+
+    auto target = getIoButtonBounds().toNearestInt();
+    juce::Component::SafePointer<MixerMasterComponent> safeThis(this);
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(localAreaToGlobal(target)),
+                       [safeThis](int result)
+                       {
+                           if (safeThis == nullptr || result == 0)
+                               return;
+
+                           if (safeThis->isShowingMaster())
+                           {
+                               const auto outputs = safeThis->getAvailableMasterOutputs != nullptr ? safeThis->getAvailableMasterOutputs() : juce::StringArray{};
+                               const int outputIndex = result - 200;
+                               if (juce::isPositiveAndBelow(outputIndex, outputs.size()))
+                                   safeThis->state.setMasterOutputAssignment(outputs[outputIndex]);
+                           }
+                           else
+                           {
+                               const int trackIndex = safeThis->getFocusedTrackIndex();
+                               const auto inputs = safeThis->getAvailableTrackInputs != nullptr ? safeThis->getAvailableTrackInputs() : juce::StringArray{};
+                               const auto outputs = safeThis->getAvailableTrackOutputs != nullptr ? safeThis->getAvailableTrackOutputs() : juce::StringArray{};
+                               if (result >= 100 && result < 200)
+                               {
+                                   const int inputIndex = result - 100;
+                                   if (juce::isPositiveAndBelow(inputIndex, inputs.size()))
+                                       safeThis->state.setTrackInputAssignment(trackIndex, inputs[inputIndex]);
+                               }
+                               else if (result >= 200)
+                               {
+                                   const int outputIndex = result - 200;
+                                   if (juce::isPositiveAndBelow(outputIndex, outputs.size()))
+                                       safeThis->state.setTrackOutputAssignment(trackIndex, outputs[outputIndex]);
+                               }
                            }
 
                            safeThis->repaint();
@@ -489,7 +781,11 @@ void MixerMasterComponent::updatePanFromPosition(juce::Point<float> position)
 {
     auto knobBounds = getPanKnobBounds();
     const float normalised = juce::jlimit(0.0f, 1.0f, (position.x - knobBounds.getX()) / juce::jmax(1.0f, knobBounds.getWidth()));
-    state.masterMixerState.pan = juce::jmap(normalised, 0.0f, 1.0f, -1.0f, 1.0f);
+    const float newPan = juce::jmap(normalised, 0.0f, 1.0f, -1.0f, 1.0f);
+
+    if (isShowingMaster()) state.masterMixerState.pan = newPan;
+    else state.setTrackPan(getFocusedTrackIndex(), newPan);
+
     repaint();
 }
 
@@ -497,6 +793,9 @@ void MixerMasterComponent::updateLevelFromPosition(juce::Point<float> position)
 {
     auto faderBounds = getFaderBounds();
     const float normalised = juce::jlimit(0.0f, 1.0f, (position.x - faderBounds.getX()) / juce::jmax(1.0f, faderBounds.getWidth()));
-    state.masterMixerState.level = normalised;
+
+    if (isShowingMaster()) state.masterMixerState.level = normalised;
+    else state.setTrackLevel(getFocusedTrackIndex(), normalised);
+
     repaint();
 }
