@@ -28,6 +28,7 @@ public:
 
     DAWState& getState() noexcept                     { return state; }
     const DAWState& getState() const noexcept         { return state; }
+    PluginHostManager& getPluginHostManager() noexcept { return pluginHostManager; }
     void refreshExternalState(bool shouldRefreshControls, bool shouldRebuildTrackList);
     void repaintDynamicViews();
     juce::ValueTree getUITree() const                 { return uiTree; }

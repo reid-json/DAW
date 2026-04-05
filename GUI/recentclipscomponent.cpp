@@ -41,6 +41,22 @@ RecentClipsComponent::RecentClipsComponent(DAWState& stateIn)
 {
 }
 
+juce::Rectangle<int> RecentClipsComponent::getItemBounds(ItemKind kind, int index) const
+{
+    const bool hasClips = ! state.recentClips.empty();
+    const bool hasPatterns = ! state.savedPatterns.empty();
+
+    int y = -scrollOffset;
+    y += sectionHeaderHeight;
+
+    if (kind == ItemKind::clip)
+        return juce::Rectangle<int>(0, y + index * rowHeight, getWidth() - scrollbarWidth, rowHeight - 6).reduced(4);
+
+    y += hasClips ? static_cast<int>(state.recentClips.size()) * rowHeight : (hasPatterns ? emptyRowHeight : 0);
+    y += sectionGap + sectionHeaderHeight;
+    return juce::Rectangle<int>(0, y + index * rowHeight, getWidth() - scrollbarWidth, rowHeight - 6).reduced(4);
+}
+
 void RecentClipsComponent::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colours::transparentBlack);
@@ -102,7 +118,7 @@ void RecentClipsComponent::paint(juce::Graphics& g)
 
         for (int i = 0; i < count; ++i)
         {
-            auto area = juce::Rectangle<int>(0, y + i * rowHeight, getWidth() - scrollbarWidth, rowHeight - 6).reduced(4);
+            auto area = getItemBounds(kind, i);
             if (area.getBottom() < 0 || area.getY() > getHeight())
                 continue;
 
@@ -226,25 +242,16 @@ void RecentClipsComponent::mouseWheelMove(const juce::MouseEvent&, const juce::M
 
 std::optional<RecentClipsComponent::ItemRef> RecentClipsComponent::getItemAt(juce::Point<float> point) const
 {
-    const int contentY = toContentY(point.y);
-    int y = 0;
-
-    y += sectionHeaderHeight;
     for (int i = 0; i < (int) state.recentClips.size(); ++i)
     {
-        if (contentY >= y && contentY < y + rowHeight)
+        if (getItemBounds(ItemKind::clip, i).toFloat().contains(point))
             return ItemRef { ItemKind::clip, i };
-
-        y += rowHeight;
     }
 
-    y += sectionGap + sectionHeaderHeight;
     for (int i = 0; i < (int) state.savedPatterns.size(); ++i)
     {
-        if (contentY >= y && contentY < y + rowHeight)
+        if (getItemBounds(ItemKind::pattern, i).toFloat().contains(point))
             return ItemRef { ItemKind::pattern, i };
-
-        y += rowHeight;
     }
 
     return std::nullopt;

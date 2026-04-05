@@ -200,6 +200,14 @@ juce::Rectangle<float> TrackListComponent::getRemoveButtonBounds(int trackIndex)
     return headerBounds.removeFromRight(24.0f);
 }
 
+juce::Rectangle<float> TrackListComponent::getContentTypeBadgeBounds(int trackIndex) const
+{
+    const int rowIndex = trackIndex + 1;
+    auto headerBounds = getHeaderBounds(rowIndex);
+    headerBounds.removeFromRight(30.0f);
+    return headerBounds.removeFromRight(56.0f).withTrimmedRight(6.0f).reduced(0.0f, 2.0f);
+}
+
 juce::Rectangle<float> TrackListComponent::getStatusIndicatorBounds(int rowIndex, int indicatorIndex) const
 {
     auto bounds = getCardInnerBounds(rowIndex);
@@ -304,6 +312,20 @@ void TrackListComponent::drawMixerStrip(juce::Graphics& g, juce::Rectangle<float
     }
     else
     {
+        const auto contentType = state.getTrackContentType(trackIndex);
+        auto modeBounds = getContentTypeBadgeBounds(trackIndex);
+        g.setColour(contentType == TrackMixerState::ContentType::pattern
+                        ? juce::Colour(0xff2a5d94).withMultipliedAlpha(isAudible ? 1.0f : 0.72f)
+                        : juce::Colour(0xff394677).withMultipliedAlpha(isAudible ? 1.0f : 0.72f));
+        g.fillRoundedRectangle(modeBounds, 7.0f);
+        g.setColour(juce::Colours::white.withAlpha(isAudible ? 0.78f : 0.46f));
+        g.drawRoundedRectangle(modeBounds, 7.0f, 1.0f);
+        g.setFont(juce::Font(9.0f, juce::Font::bold));
+        g.drawText(DAWState::getTrackContentTypeBadge(contentType),
+                   modeBounds.toNearestInt(),
+                   juce::Justification::centred,
+                   false);
+
         auto removeBounds = getRemoveButtonBounds(trackIndex);
         g.setColour(juce::Colour(0xff23357f).withMultipliedAlpha(isAudible ? 1.0f : 0.6f));
         g.fillRoundedRectangle(removeBounds, 7.0f);

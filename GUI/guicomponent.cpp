@@ -343,6 +343,10 @@ void GUIComponent::registerCustomComponentTypes()
         {
             return pluginHostManager.getAvailableTrackPlugins();
         };
+        component->getAvailableTrackInstrumentPlugins = [this]
+        {
+            return pluginHostManager.getAvailableTrackInstrumentPlugins();
+        };
         component->getAvailableTrackInputs = [this]
         {
             return getAvailableTrackInputs();
@@ -361,14 +365,20 @@ void GUIComponent::registerCustomComponentTypes()
         };
         component->onMasterPluginLoadRequested = [this] (int slotIndex, const juce::String& pluginName)
         {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
+            if (auto* device = deviceManager.getCurrentAudioDevice())
+                pluginHostManager.setProcessingConfig(device->getCurrentSampleRate(),
+                                                      device->getCurrentBufferSizeSamples());
             return pluginHostManager.loadMasterPlugin(pluginName, slotIndex);
         };
         component->onMasterPluginBypassRequested = [this] (int slotIndex, bool shouldBeBypassed)
         {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
             pluginHostManager.setMasterPluginBypassed(slotIndex, shouldBeBypassed);
         };
         component->onMasterPluginRemoveRequested = [this] (int slotIndex)
         {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
             pluginHostManager.removeMasterPlugin(slotIndex);
         };
         component->onMasterPluginEditorRequested = [this] (int slotIndex)
@@ -377,18 +387,25 @@ void GUIComponent::registerCustomComponentTypes()
         };
         component->onMasterPluginSlotRemoveRequested = [this] (int slotIndex)
         {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
             pluginHostManager.removeMasterPluginSlot(slotIndex);
         };
         component->onTrackPluginLoadRequested = [this] (int trackIndex, int slotIndex, const juce::String& pluginName)
         {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
+            if (auto* device = deviceManager.getCurrentAudioDevice())
+                pluginHostManager.setProcessingConfig(device->getCurrentSampleRate(),
+                                                      device->getCurrentBufferSizeSamples());
             return pluginHostManager.loadTrackPlugin(pluginName, trackIndex, slotIndex);
         };
         component->onTrackPluginBypassRequested = [this] (int trackIndex, int slotIndex, bool shouldBeBypassed)
         {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
             pluginHostManager.setTrackPluginBypassed(trackIndex, slotIndex, shouldBeBypassed);
         };
         component->onTrackPluginRemoveRequested = [this] (int trackIndex, int slotIndex)
         {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
             pluginHostManager.removeTrackPlugin(trackIndex, slotIndex);
         };
         component->onTrackPluginEditorRequested = [this] (int trackIndex, int slotIndex)
@@ -397,7 +414,34 @@ void GUIComponent::registerCustomComponentTypes()
         };
         component->onTrackPluginSlotRemoveRequested = [this] (int trackIndex, int slotIndex)
         {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
             pluginHostManager.removeTrackPluginSlot(trackIndex, slotIndex);
+        };
+        component->onTrackInstrumentPluginLoadRequested = [this] (int trackIndex, const juce::String& pluginName)
+        {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
+            if (auto* device = deviceManager.getCurrentAudioDevice())
+                pluginHostManager.setProcessingConfig(device->getCurrentSampleRate(),
+                                                      device->getCurrentBufferSizeSamples());
+            return pluginHostManager.loadTrackInstrumentPlugin(pluginName, trackIndex);
+        };
+        component->onTrackInstrumentPluginBypassRequested = [this] (int trackIndex, bool shouldBeBypassed)
+        {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
+            pluginHostManager.setTrackInstrumentPluginBypassed(trackIndex, shouldBeBypassed);
+        };
+        component->onTrackInstrumentPluginRemoveRequested = [this] (int trackIndex)
+        {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
+            pluginHostManager.removeTrackInstrumentPlugin(trackIndex);
+        };
+        component->onTrackInstrumentPluginEditorRequested = [this] (int trackIndex)
+        {
+            pluginHostManager.showTrackInstrumentPluginEditor(trackIndex);
+        };
+        component->onTrackContentTypeChanged = [this] (int)
+        {
+            refreshFromState();
         };
         mixerMasterComponent = component.get();
         return component;
@@ -409,14 +453,19 @@ void GUIComponent::registerCustomComponentTypes()
         component->onTrackSelected = [this] (int)
         {
             syncPianoRollWithSelectedTrack();
+            if (arrangementComponent != nullptr)
+                arrangementComponent->repaint();
         };
         component->onMixerFocusChanged = [this]
         {
             if (mixerMasterComponent != nullptr)
                 mixerMasterComponent->repaint();
+            if (arrangementComponent != nullptr)
+                arrangementComponent->repaint();
         };
         component->onRemoveTrackRequested = [this] (int trackIndex)
         {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
             pluginHostManager.removeTrack(trackIndex);
             state.removeTrackAt (trackIndex);
             refreshFromState();
@@ -443,14 +492,17 @@ void GUIComponent::registerCustomComponentTypes()
         };
         component->onTrackPluginLoadRequested = [this] (int trackIndex, int slotIndex, const juce::String& pluginName)
         {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
             return pluginHostManager.loadTrackPlugin(pluginName, trackIndex, slotIndex);
         };
         component->onTrackPluginBypassRequested = [this] (int trackIndex, int slotIndex, bool shouldBeBypassed)
         {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
             pluginHostManager.setTrackPluginBypassed(trackIndex, slotIndex, shouldBeBypassed);
         };
         component->onTrackPluginRemoveRequested = [this] (int trackIndex, int slotIndex)
         {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
             pluginHostManager.removeTrackPlugin(trackIndex, slotIndex);
         };
         component->onTrackPluginEditorRequested = [this] (int trackIndex, int slotIndex)
@@ -459,6 +511,7 @@ void GUIComponent::registerCustomComponentTypes()
         };
         component->onTrackPluginSlotRemoveRequested = [this] (int trackIndex, int slotIndex)
         {
+            juce::ScopedLock audioLock(deviceManager.getAudioCallbackLock());
             pluginHostManager.removeTrackPluginSlot(trackIndex, slotIndex);
         };
         trackListComponent = component.get();

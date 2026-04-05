@@ -24,8 +24,18 @@ void ArrangementComponent::paint(juce::Graphics& g)
         if (y + rowHeight < 0.0f || y > bounds.getHeight())
             continue;
 
-        g.setColour(juce::Colour::fromRGBA(255, 255, 255, 10));
-        g.fillRoundedRectangle(8.0f, y + 4.0f, bounds.getWidth() - scrollbarWidth - 18.0f, static_cast<float>(rowHeight), 8.0f);
+        const bool isSelectedTrack = !state.isMasterMixerFocused() && state.isTrackSelected(i);
+        auto rowBounds = juce::Rectangle<float>(8.0f, y + 4.0f, bounds.getWidth() - scrollbarWidth - 18.0f, static_cast<float>(rowHeight));
+
+        g.setColour(isSelectedTrack ? juce::Colour(0xff24478d).withAlpha(0.52f)
+                                    : juce::Colour::fromRGBA(255, 255, 255, 10));
+        g.fillRoundedRectangle(rowBounds, 8.0f);
+
+        if (isSelectedTrack)
+        {
+            g.setColour(juce::Colour(0xffd7e3ff).withAlpha(0.42f));
+            g.drawRoundedRectangle(rowBounds.reduced(1.0f), 8.0f, 1.4f);
+        }
     }
 
     for (const auto& clip : state.timelineClips)

@@ -25,9 +25,16 @@ struct RecentClipItem
 
 struct TimelineClipItem
 {
+    enum class ContentKind
+    {
+        recording,
+        pattern
+    };
+
     int placementId = 0;
     int assetId = 0;
     juce::String name;
+    ContentKind kind = ContentKind::recording;
     int trackIndex = 0;
     double startSeconds = 0.0;
     double lengthSeconds = 0.0;
@@ -37,6 +44,7 @@ struct TimelineClipItem
         return placementId == other.placementId
             && assetId == other.assetId
             && name == other.name
+            && kind == other.kind
             && trackIndex == other.trackIndex
             && startSeconds == other.startSeconds
             && lengthSeconds == other.lengthSeconds;
@@ -71,7 +79,14 @@ struct SavedPatternItem
 
 struct TrackMixerState
 {
+    enum class ContentType
+    {
+        recording,
+        pattern
+    };
+
     juce::String name;
+    ContentType contentType = ContentType::recording;
     bool muted = false;
     bool soloed = false;
     bool armed = false;
@@ -86,7 +101,11 @@ struct TrackMixerState
         bool hasPlugin = false;
         bool bypassed = false;
     };
+
+    using InstrumentSlotState = FxSlotState;
+
     std::vector<FxSlotState> fxSlots;
+    InstrumentSlotState instrumentSlot;
 };
 
 struct TrackPatternNote
@@ -363,6 +382,61 @@ struct DAWState
         track.level = juce::jlimit (0.0f, 1.0f, newLevel);
     }
 
+    TrackMixerState::ContentType getTrackContentType (int trackIndex) const
+    {
+        return getTrackMixerState (trackIndex).contentType;
+    }
+
+    bool isTrackPatternMode (int trackIndex) const
+    {
+        return getTrackContentType (trackIndex) == TrackMixerState::ContentType::pattern;
+    }
+
+    static juce::String getTrackContentTypeLabel (TrackMixerState::ContentType contentType)
+    {
+        return contentType == TrackMixerState::ContentType::pattern ? "Pattern" : "Recording";
+    }
+
+    static juce::String getTrackContentTypeBadge (TrackMixerState::ContentType contentType)
+    {
+        return contentType == TrackMixerState::ContentType::pattern ? "PAT" : "REC";
+    }
+
+    static TimelineClipItem::ContentKind getTimelineContentKindForTrackType (TrackMixerState::ContentType contentType)
+    {
+        return contentType == TrackMixerState::ContentType::pattern
+            ? TimelineClipItem::ContentKind::pattern
+            : TimelineClipItem::ContentKind::recording;
+    }
+
+    bool canTrackUseContentType (int trackIndex, TrackMixerState::ContentType contentType) const
+    {
+        const int clampedTrackIndex = juce::jlimit (0, trackCount - 1, trackIndex);
+        const auto requiredKind = getTimelineContentKindForTrackType (contentType);
+
+        return std::none_of (timelineClips.begin(), timelineClips.end(),
+                             [clampedTrackIndex, requiredKind] (const TimelineClipItem& clip)
+                             {
+                                 return clip.trackIndex == clampedTrackIndex
+                                     && clip.kind != requiredKind;
+                             });
+    }
+
+    bool trySetTrackContentType (int trackIndex, TrackMixerState::ContentType contentType)
+    {
+        if (! canTrackUseContentType (trackIndex, contentType))
+            return false;
+
+        auto& track = getTrackMixerState (trackIndex);
+        track.contentType = contentType;
+        return true;
+    }
+
+    bool canTrackAcceptTimelineKind (int trackIndex, TimelineClipItem::ContentKind kind) const
+    {
+        return getTimelineContentKindForTrackType (getTrackContentType (trackIndex)) == kind;
+    }
+
     void selectTrack (int trackIndex)
     {
         selectedTrackIndex = juce::jlimit (0, trackCount - 1, trackIndex);
@@ -535,6 +609,36 @@ struct DAWState
     {
         auto& slot = getTrackFxSlot (trackIndex, slotIndex);
         slot = {};
+    }
+
+    TrackMixerState::InstrumentSlotState& getTrackInstrumentSlot (int trackIndex)
+    {
+        return getTrackMixerState (trackIndex).instrumentSlot;
+    }
+
+    const TrackMixerState::InstrumentSlotState& getTrackInstrumentSlot (int trackIndex) const
+    {
+        return getTrackMixerState (trackIndex).instrumentSlot;
+    }
+
+    void loadTrackInstrumentPlugin (int trackIndex, const juce::String& pluginName)
+    {
+        auto& slot = getTrackInstrumentSlot (trackIndex);
+        slot.hasPlugin = true;
+        slot.bypassed = false;
+        slot.name = pluginName;
+    }
+
+    void toggleTrackInstrumentBypassed (int trackIndex)
+    {
+        auto& slot = getTrackInstrumentSlot (trackIndex);
+        if (slot.hasPlugin)
+            slot.bypassed = ! slot.bypassed;
+    }
+
+    void clearTrackInstrumentSlot (int trackIndex)
+    {
+        getTrackInstrumentSlot (trackIndex) = {};
     }
 
     void toggleMasterMuted()

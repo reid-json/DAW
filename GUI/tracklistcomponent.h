@@ -43,6 +43,7 @@ private:
     int getTrackIndexForRow(int rowIndex) const;
     juce::Rectangle<float> getCardInnerBounds(int rowIndex) const;
     juce::Rectangle<float> getHeaderBounds(int rowIndex) const;
+    juce::Rectangle<float> getContentTypeBadgeBounds(int trackIndex) const;
     juce::Rectangle<float> getRemoveButtonBounds(int trackIndex) const;
     juce::Rectangle<float> getStatusIndicatorBounds(int rowIndex, int indicatorIndex) const;
     juce::Rectangle<float> getCompactMeterBounds(int rowIndex) const;

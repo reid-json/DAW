@@ -32,6 +32,7 @@ public:
 private:
     static constexpr int scrollbarWidth = 10;
 
+    juce::Rectangle<int> getItemBounds(ItemKind kind, int index) const;
     std::optional<ItemRef> getItemAt(juce::Point<float> point) const;
     int getContentHeight() const;
     int getMaxScroll() const;

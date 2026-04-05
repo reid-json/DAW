@@ -1,11 +1,49 @@
 #include "MainComponent.h"
+#include <algorithm>
 #include <cmath>
+
+namespace
+{
+TimelineClipItem::ContentKind toTimelineContentKind(AssetKind assetKind)
+{
+    return assetKind == AssetKind::pianoRollPattern
+        ? TimelineClipItem::ContentKind::pattern
+        : TimelineClipItem::ContentKind::recording;
+}
+
+std::vector<PatternNote> toPatternNotes(const DAWState& state, const TrackPatternState& pattern)
+{
+    std::vector<PatternNote> patternNotes;
+    patternNotes.reserve(pattern.notes.size());
+
+    const auto secondsPerBeat = 60.0 / juce::jmax(1.0, state.tempoBpm);
+    for (const auto& note : pattern.notes)
+    {
+        PatternNote patternNote;
+        patternNote.startSeconds = juce::jmax(0.0, note.startBeat * secondsPerBeat);
+        patternNote.lengthSeconds = juce::jmax(0.01, note.lengthBeats * secondsPerBeat);
+        patternNote.midiNote = note.midiNote;
+        patternNote.velocity = 0.85f;
+        patternNotes.push_back(patternNote);
+    }
+
+    return patternNotes;
+}
+}
 
 MainComponent::MainComponent()
 {
     engine.initialise(2, 2);
 
     gui = std::make_unique<GUIComponent>(engine.getDeviceManager());
+    engine.setPatternTrackRenderer([this] (int trackIndex,
+                                           juce::AudioBuffer<float>& buffer,
+                                           juce::MidiBuffer& midi,
+                                           double sampleRate)
+    {
+        return gui != nullptr
+            && gui->getPluginHostManager().renderTrackInstrument(trackIndex, buffer, midi, sampleRate);
+    });
     gui->onRecordToggleRequested = [this] { handleRecordToggle(); };
     gui->onMonitoringToggleRequested = [this] { handleMonitoringToggle(); };
     gui->onImportAudioRequested = [this] { handleImportAudio(); };
@@ -102,6 +140,7 @@ void MainComponent::syncStateFromEngine()
                     placement.placementId,
                     placement.assetId,
                     asset->name,
+                    toTimelineContentKind(asset->kind),
                     trackIndex,
                     placement.startSample / timelineSampleRate,
                     asset->clip.getLengthSeconds()
@@ -114,6 +153,9 @@ void MainComponent::syncStateFromEngine()
     savedPatterns.reserve(state.trackPatternStates.size());
     for (int trackIndex = 0; trackIndex < state.trackCount; ++trackIndex)
     {
+        if (! state.isTrackPatternMode(trackIndex))
+            continue;
+
         const auto& pattern = state.getTrackPatternState(trackIndex);
         if (pattern.assetId > 0 && ! pattern.notes.empty())
             savedPatterns.push_back({ pattern.assetId, trackIndex, state.getTrackName(trackIndex), getPatternLengthSeconds(state, pattern) });
@@ -157,7 +199,21 @@ void MainComponent::placeNewestRecentAssetOnNextEmptyTrack()
         return;
 
     auto& state = gui->getState();
-    const int nextTrackIndex = state.findNextEmptyTrackIndex();
+    int nextTrackIndex = state.trackCount;
+    for (int trackIndex = 0; trackIndex < state.trackCount; ++trackIndex)
+    {
+        const bool isEmpty = std::none_of(state.timelineClips.begin(), state.timelineClips.end(),
+                                          [trackIndex](const TimelineClipItem& clip) { return clip.trackIndex == trackIndex; });
+        if (isEmpty && state.getTrackContentType(trackIndex) == TrackMixerState::ContentType::recording)
+        {
+            nextTrackIndex = trackIndex;
+            break;
+        }
+    }
+
+    if (nextTrackIndex >= state.trackCount)
+        nextTrackIndex = state.findNextEmptyTrackIndex();
+
     engine.placeRecentAssetDirectToTimeline(newestAssetId, nextTrackIndex + 1, 0);
 }
 
@@ -230,6 +286,15 @@ void MainComponent::handleRestart()
 
 void MainComponent::handleRecentClipDropped(int assetId, int trackIndex, double startSeconds)
 {
+    const auto& arrangement = engine.getArrangementState();
+    const auto* asset = arrangement.findAsset(assetId);
+    if (asset == nullptr)
+        return;
+
+    const auto& state = gui->getState();
+    if (! state.canTrackAcceptTimelineKind(trackIndex, toTimelineContentKind(asset->kind)))
+        return;
+
     const auto sampleRate = engine.getTimelineSampleRate();
     engine.placeRecentAssetDirectToTimeline(assetId,
                                             trackIndex + 1,
@@ -251,7 +316,7 @@ void MainComponent::handleAssetRenamed(int assetId, const juce::String& newName)
         {
             state.setTrackName(trackIndex, trimmedName);
             state.setTrackPatternName(trackIndex, trimmedName);
-            engine.updatePatternAsset(assetId, trimmedName, getPatternLengthSeconds(state, pattern));
+            engine.updatePatternAsset(assetId, trimmedName, getPatternLengthSeconds(state, pattern), toPatternNotes(state, pattern));
             syncStateFromEngine();
             return;
         }
@@ -270,6 +335,9 @@ void MainComponent::syncTrackPatternsToAssets()
 
     for (int trackIndex = 0; trackIndex < state.trackCount; ++trackIndex)
     {
+        if (! state.isTrackPatternMode(trackIndex))
+            continue;
+
         auto& pattern = state.getTrackPatternState(trackIndex);
 
         if (pattern.notes.empty())
@@ -278,11 +346,12 @@ void MainComponent::syncTrackPatternsToAssets()
         const auto patternName = state.getTrackName(trackIndex);
         state.setTrackPatternName(trackIndex, patternName);
         const auto lengthSeconds = getPatternLengthSeconds(state, pattern);
+        auto patternNotes = toPatternNotes(state, pattern);
 
         if (pattern.assetId <= 0)
-            pattern.assetId = engine.createPatternAsset(patternName, lengthSeconds);
+            pattern.assetId = engine.createPatternAsset(patternName, lengthSeconds, std::move(patternNotes));
         else
-            engine.updatePatternAsset(pattern.assetId, patternName, lengthSeconds);
+            engine.updatePatternAsset(pattern.assetId, patternName, lengthSeconds, std::move(patternNotes));
     }
 }
 
@@ -299,6 +368,16 @@ double MainComponent::getPatternLengthSeconds(const DAWState& state, const Track
 
 void MainComponent::handleTimelineClipMoved(int placementId, int trackIndex, double startSeconds)
 {
+    const auto& arrangement = engine.getArrangementState();
+    const auto* placement = arrangement.findTimelinePlacement(placementId);
+    const auto* asset = placement != nullptr ? arrangement.findAsset(placement->assetId) : nullptr;
+    if (asset == nullptr)
+        return;
+
+    const auto& state = gui->getState();
+    if (! state.canTrackAcceptTimelineKind(trackIndex, toTimelineContentKind(asset->kind)))
+        return;
+
     const auto sampleRate = engine.getTimelineSampleRate();
     engine.moveTimelinePlacement(placementId,
                                  trackIndex + 1,
