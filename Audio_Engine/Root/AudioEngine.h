@@ -58,7 +58,11 @@ public:
 
     int importAudioFileAsRecentAsset(const juce::File& file);
     int createMidiPatternAsset();
+    int createPatternAsset(const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes = {});
+    bool updatePatternAsset(int assetId, const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes = {});
+    bool renameAsset(int assetId, const juce::String& newName);
     int createLiveInputAsset(const juce::String& name);
+    void setPatternTrackRenderer(ArrangementState::PatternTrackRenderer renderer);
 
     const ArrangementState& getArrangementState() const { return arrangementState; }
 

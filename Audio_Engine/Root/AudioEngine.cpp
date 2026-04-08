@@ -362,9 +362,59 @@ int AudioEngine::createMidiPatternAsset()
     return asset != nullptr ? asset->assetId : -1;
 }
 
+int AudioEngine::createPatternAsset(const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes)
+{
+    RecordedClip clip;
+    clip.name = name;
+    clip.sampleRate = getTimelineSampleRate();
+
+    const auto clampedLengthSeconds = juce::jmax(0.1, lengthSeconds);
+    const int samples = static_cast<int>(std::round(clip.sampleRate * clampedLengthSeconds));
+    clip.leftChannel.resize(static_cast<size_t>(samples), 0.0f);
+    clip.rightChannel.resize(static_cast<size_t>(samples), 0.0f);
+
+    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
+    auto* asset = arrangementState.addAsset(name, AssetKind::pianoRollPattern, clip);
+    if (asset != nullptr)
+        asset->patternNotes = std::move(patternNotes);
+    return asset != nullptr ? asset->assetId : -1;
+}
+
+bool AudioEngine::updatePatternAsset(int assetId, const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes)
+{
+    RecordedClip clip;
+    clip.name = name;
+    clip.sampleRate = getTimelineSampleRate();
+
+    const auto clampedLengthSeconds = juce::jmax(0.1, lengthSeconds);
+    const int samples = static_cast<int>(std::round(clip.sampleRate * clampedLengthSeconds));
+    clip.leftChannel.resize(static_cast<size_t>(samples), 0.0f);
+    clip.rightChannel.resize(static_cast<size_t>(samples), 0.0f);
+
+    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
+    const bool renamed = arrangementState.renameAsset(assetId, name);
+    const bool updated = arrangementState.updateAssetClip(assetId, clip);
+    if (auto* asset = arrangementState.findAsset(assetId))
+        asset->patternNotes = std::move(patternNotes);
+
+    return renamed && updated;
+}
+
+bool AudioEngine::renameAsset(int assetId, const juce::String& newName)
+{
+    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
+    return arrangementState.renameAsset(assetId, newName);
+}
+
 int AudioEngine::createLiveInputAsset(const juce::String& name)
 {
     juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
     auto* asset = arrangementState.addAsset(name, AssetKind::liveInput, {});
     return asset != nullptr ? asset->assetId : -1;
+}
+
+void AudioEngine::setPatternTrackRenderer(ArrangementState::PatternTrackRenderer renderer)
+{
+    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
+    arrangementState.setPatternTrackRenderer(std::move(renderer));
 }

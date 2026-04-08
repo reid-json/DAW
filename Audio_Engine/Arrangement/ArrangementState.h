@@ -3,6 +3,9 @@
 #include "../Tracks/TrackInputRouter.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_core/juce_core.h>
+#include <functional>
+#include <map>
+#include <set>
 #include <vector>
 
 enum class AssetKind
@@ -13,12 +16,21 @@ enum class AssetKind
     liveInput
 };
 
+struct PatternNote
+{
+    double startSeconds = 0.0;
+    double lengthSeconds = 0.0;
+    int midiNote = 60;
+    float velocity = 0.85f;
+};
+
 struct SourceAsset
 {
     int assetId = 0;
     juce::String name;
     AssetKind kind = AssetKind::recording;
     RecordedClip clip;
+    std::vector<PatternNote> patternNotes;
 };
 
 struct MixerTrack
@@ -70,10 +82,17 @@ struct TimelineClipPlacement
 class ArrangementState
 {
 public:
+    using PatternTrackRenderer = std::function<bool(int trackIndex,
+                                                    juce::AudioBuffer<float>& buffer,
+                                                    juce::MidiBuffer& midi,
+                                                    double sampleRate)>;
+
     void initialiseDefaults(int numMixerTracks = 4, int numTimelineTracks = 9);
 
     SourceAsset* addAsset(const juce::String& name, AssetKind kind, const RecordedClip& clip = {});
     SourceAsset* addRecentRecording(const RecordedClip& clip);
+    bool renameAsset(int assetId, const juce::String& newName);
+    bool updateAssetClip(int assetId, const RecordedClip& clip);
 
     CentralTrackSlot* createCentralTrackSlot();
     bool assignAssetToCentralTrack(int assetId, int slotId);
@@ -89,6 +108,7 @@ public:
     bool setCentralTrackOutputToTrack(int slotId, int destinationSlotId);
     bool setCentralTrackLiveInputArmed(int slotId, bool shouldArm);
 
+    void setPatternTrackRenderer(PatternTrackRenderer renderer);
     void render(juce::AudioBuffer<float>& buffer, juce::int64 playbackStartSample) const;
 
     const std::vector<SourceAsset>& getAssets() const { return assets; }
@@ -106,8 +126,25 @@ public:
     const TimelineClipPlacement* findTimelinePlacement(int placementId) const;
 
 private:
-    float resolveRouteGainForSlot(int slotId, std::vector<int>& visitedSlotIds) const;
+    struct ActivePatternNote
+    {
+        int placementId = 0;
+        int noteIndex = 0;
 
+        auto tie() const noexcept { return std::tie(placementId, noteIndex); }
+        bool operator<(const ActivePatternNote& other) const noexcept { return tie() < other.tie(); }
+    };
+
+    float resolveRouteGainForSlot(int slotId, std::vector<int>& visitedSlotIds) const;
+    void renderPatternAsset(const SourceAsset& asset,
+                            const TimelineClipPlacement& placement,
+                            juce::AudioBuffer<float>& buffer,
+                            juce::int64 playbackStartSample,
+                            float gain) const;
+
+    mutable PatternTrackRenderer patternTrackRenderer;
+    mutable std::map<int, std::set<ActivePatternNote>> activePatternNotesByTrack;
+    mutable juce::int64 lastPatternRenderEndSample = -1;
     int nextAssetId = 1;
     int nextCentralTrackSlotId = 1;
     int nextPlacementId = 1;

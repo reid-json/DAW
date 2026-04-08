@@ -47,6 +47,10 @@
     "border-radius": 8
   },
 
+  ".btn-icon": {
+    "border-radius": 23
+  },
+
   ".btn-primary": {
     "background": "#3a7afe",
     "foreground": "#ffffff",

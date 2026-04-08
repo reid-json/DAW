@@ -1,5 +1,7 @@
 #include "ArrangementState.h"
 #include <algorithm>
+#include <cmath>
+#include <map>
 
 void ArrangementState::initialiseDefaults(int numMixerTracks, int numTimelineTracks)
 {
@@ -29,6 +31,28 @@ SourceAsset* ArrangementState::addAsset(const juce::String& name, AssetKind kind
 SourceAsset* ArrangementState::addRecentRecording(const RecordedClip& clip)
 {
     return addAsset(clip.name, AssetKind::recording, clip);
+}
+
+bool ArrangementState::renameAsset(int assetId, const juce::String& newName)
+{
+    auto* asset = findAsset(assetId);
+    if (asset == nullptr)
+        return false;
+
+    asset->name = newName;
+    asset->clip.name = newName;
+    return true;
+}
+
+bool ArrangementState::updateAssetClip(int assetId, const RecordedClip& clip)
+{
+    auto* asset = findAsset(assetId);
+    if (asset == nullptr)
+        return false;
+
+    asset->clip = clip;
+    asset->clip.clipId = assetId;
+    return true;
 }
 
 CentralTrackSlot* ArrangementState::createCentralTrackSlot()
@@ -185,9 +209,25 @@ bool ArrangementState::setCentralTrackLiveInputArmed(int slotId, bool shouldArm)
     return true;
 }
 
+void ArrangementState::setPatternTrackRenderer(PatternTrackRenderer renderer)
+{
+    patternTrackRenderer = std::move(renderer);
+    activePatternNotesByTrack.clear();
+    lastPatternRenderEndSample = -1;
+}
+
 void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 playbackStartSample) const
 {
     const auto blockEndSample = playbackStartSample + buffer.getNumSamples();
+    const bool patternRenderDiscontinuity = lastPatternRenderEndSample != playbackStartSample;
+
+    if (patternRenderDiscontinuity)
+        activePatternNotesByTrack.clear();
+
+    std::map<int, juce::MidiBuffer> midiByTrack;
+    std::map<int, float> gainByTrack;
+    std::map<int, double> sampleRateByTrack;
+    std::map<int, bool> trackHasPatternFallback;
 
     for (const auto& placement : timelinePlacements)
     {
@@ -218,9 +258,96 @@ void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 play
             gain *= resolveRouteGainForSlot(placement.centralTrackSlotId, visitedSlotIds);
         }
 
+        if (asset->kind == AssetKind::pianoRollPattern && !asset->patternNotes.empty())
+        {
+            const int trackIndex = juce::jmax(0, placement.timelineTrackId - 1);
+            gainByTrack.emplace(trackIndex, gain);
+            sampleRateByTrack.emplace(trackIndex, asset->clip.sampleRate > 0.0 ? asset->clip.sampleRate : 44100.0);
+
+            auto& midi = midiByTrack[trackIndex];
+            auto& activeNotes = activePatternNotesByTrack[trackIndex];
+
+            for (int noteIndex = 0; noteIndex < static_cast<int>(asset->patternNotes.size()); ++noteIndex)
+            {
+                const auto& note = asset->patternNotes[static_cast<size_t>(noteIndex)];
+                const auto noteStartSample = placement.startSample + static_cast<juce::int64>(std::llround(note.startSeconds * asset->clip.sampleRate));
+                const auto noteLengthSamples = static_cast<juce::int64>(std::llround(juce::jmax(0.01, note.lengthSeconds) * asset->clip.sampleRate));
+                const auto noteEndSample = noteStartSample + noteLengthSamples;
+                const ActivePatternNote key { placement.placementId, noteIndex };
+                const bool isActive = activeNotes.find(key) != activeNotes.end();
+
+                if (noteEndSample <= playbackStartSample || noteStartSample >= blockEndSample)
+                    continue;
+
+                if (noteStartSample >= playbackStartSample && noteStartSample < blockEndSample)
+                {
+                    midi.addEvent(juce::MidiMessage::noteOn(1, note.midiNote, note.velocity),
+                                  static_cast<int>(noteStartSample - playbackStartSample));
+                    activeNotes.insert(key);
+                }
+                else if ((patternRenderDiscontinuity || !isActive) && noteStartSample < playbackStartSample && noteEndSample > playbackStartSample)
+                {
+                    midi.addEvent(juce::MidiMessage::noteOn(1, note.midiNote, note.velocity), 0);
+                    activeNotes.insert(key);
+                }
+
+                if (noteEndSample > playbackStartSample && noteEndSample <= blockEndSample)
+                {
+                    midi.addEvent(juce::MidiMessage::noteOff(1, note.midiNote),
+                                  static_cast<int>(noteEndSample - playbackStartSample));
+                    activeNotes.erase(key);
+                }
+            }
+
+            trackHasPatternFallback[trackIndex] = true;
+            continue;
+        }
+
         buffer.addFrom(0, bufferOffset, clip.leftChannel.data() + clipOffset, overlapLength, gain);
         buffer.addFrom(1, bufferOffset, clip.rightChannel.data() + clipOffset, overlapLength, gain);
     }
+
+    for (auto& [trackIndex, midi] : midiByTrack)
+    {
+        juce::AudioBuffer<float> tempBuffer(2, buffer.getNumSamples());
+        tempBuffer.clear();
+
+        const auto gain = gainByTrack.count(trackIndex) > 0 ? gainByTrack[trackIndex] : 1.0f;
+        const auto sampleRate = sampleRateByTrack.count(trackIndex) > 0 ? sampleRateByTrack[trackIndex] : 44100.0;
+        const bool renderedByPlugin = patternTrackRenderer != nullptr
+            && patternTrackRenderer(trackIndex, tempBuffer, midi, sampleRate);
+
+        if (renderedByPlugin)
+        {
+            tempBuffer.applyGain(gain);
+            buffer.addFrom(0, 0, tempBuffer, 0, 0, buffer.getNumSamples());
+            buffer.addFrom(1, 0, tempBuffer, 1, 0, buffer.getNumSamples());
+            trackHasPatternFallback[trackIndex] = false;
+        }
+    }
+
+    for (const auto& placement : timelinePlacements)
+    {
+        const auto* asset = findAsset(placement.assetId);
+        if (asset == nullptr || asset->kind != AssetKind::pianoRollPattern || asset->patternNotes.empty())
+            continue;
+
+        const int trackIndex = juce::jmax(0, placement.timelineTrackId - 1);
+        const auto fallbackIt = trackHasPatternFallback.find(trackIndex);
+        if (fallbackIt != trackHasPatternFallback.end() && !fallbackIt->second)
+            continue;
+
+        float gain = masterTrack.gainLinear;
+        if (!placement.directToMaster && placement.centralTrackSlotId >= 0)
+        {
+            std::vector<int> visitedSlotIds;
+            gain *= resolveRouteGainForSlot(placement.centralTrackSlotId, visitedSlotIds);
+        }
+
+        renderPatternAsset(*asset, placement, buffer, playbackStartSample, gain);
+    }
+
+    lastPatternRenderEndSample = blockEndSample;
 }
 
 const SourceAsset* ArrangementState::findAsset(int assetId) const
@@ -281,4 +408,64 @@ float ArrangementState::resolveRouteGainForSlot(int slotId, std::vector<int>& vi
         gain *= resolveRouteGainForSlot(slot->outputCentralTrackId, visitedSlotIds);
 
     return gain;
+}
+
+void ArrangementState::renderPatternAsset(const SourceAsset& asset,
+                                          const TimelineClipPlacement& placement,
+                                          juce::AudioBuffer<float>& buffer,
+                                          juce::int64 playbackStartSample,
+                                          float gain) const
+{
+    const auto sampleRate = asset.clip.sampleRate > 0.0 ? asset.clip.sampleRate : 44100.0;
+    const auto blockEndSample = playbackStartSample + buffer.getNumSamples();
+
+    for (const auto& note : asset.patternNotes)
+    {
+        const auto noteStartSample = placement.startSample + static_cast<juce::int64>(std::llround(note.startSeconds * sampleRate));
+        const auto noteLengthSamples = static_cast<juce::int64>(std::llround(juce::jmax(0.01, note.lengthSeconds) * sampleRate));
+        const auto noteEndSample = noteStartSample + noteLengthSamples;
+
+        if (noteEndSample <= playbackStartSample || noteStartSample >= blockEndSample)
+            continue;
+
+        const auto overlapStart = juce::jmax(playbackStartSample, noteStartSample);
+        const auto overlapEnd = juce::jmin(blockEndSample, noteEndSample);
+        const auto overlapLength = static_cast<int>(overlapEnd - overlapStart);
+        const auto bufferOffset = static_cast<int>(overlapStart - playbackStartSample);
+        const auto noteOffsetSamples = static_cast<int>(overlapStart - noteStartSample);
+
+        if (overlapLength <= 0)
+            continue;
+
+        const auto frequency = juce::MidiMessage::getMidiNoteInHertz(note.midiNote);
+        const auto angularFrequency = 2.0 * juce::MathConstants<double>::pi * frequency;
+        const auto attackSeconds = 0.01;
+        const auto releaseSeconds = 0.08;
+
+        for (int sampleIndex = 0; sampleIndex < overlapLength; ++sampleIndex)
+        {
+            const auto absoluteSample = noteOffsetSamples + sampleIndex;
+            const auto timeSeconds = static_cast<double>(absoluteSample) / sampleRate;
+            const auto noteProgressSeconds = static_cast<double>(absoluteSample) / sampleRate;
+            const auto noteRemainingSeconds = juce::jmax(0.0, note.lengthSeconds - noteProgressSeconds);
+
+            double envelope = 1.0;
+            if (timeSeconds < attackSeconds)
+                envelope = timeSeconds / attackSeconds;
+            else if (noteRemainingSeconds < releaseSeconds)
+                envelope = noteRemainingSeconds / releaseSeconds;
+
+            envelope = juce::jlimit(0.0, 1.0, envelope);
+
+            const auto phase = angularFrequency * timeSeconds;
+            const float sampleValue = static_cast<float>(
+                (0.55 * std::sin(phase))
+                + (0.18 * std::sin(phase * 2.0))
+                + (0.08 * std::sin(phase * 3.0)));
+            const float output = sampleValue * note.velocity * static_cast<float>(envelope) * gain * 0.25f;
+
+            buffer.addSample(0, bufferOffset + sampleIndex, output);
+            buffer.addSample(1, bufferOffset + sampleIndex, output);
+        }
+    }
 }

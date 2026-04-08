@@ -12,3 +12,8 @@ target_link_libraries(Plugin_Hosting
         juce::juce_audio_processors
         juce::juce_gui_extra
 )
+
+target_compile_definitions(Plugin_Hosting
+    PUBLIC
+        JUCE_PLUGINHOST_VST3=1
+)
