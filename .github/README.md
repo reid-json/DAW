@@ -12,5 +12,4 @@ Chroma is a Digital Audio Workstation. Currently in development by Tyler Martin,
 
 ## Download Latest Update
 
--https://github.com/reid-json/DAW/releases/download/v1.0.1/DAW.zip
-
+-https://github.com/reid-json/DAW/releases/download/v1.0.2/Chroma.zip
