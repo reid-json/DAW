@@ -10,59 +10,70 @@ public:
 
     void paint(juce::Graphics& g) override;
     void mouseDown(const juce::MouseEvent& e) override;
-    void mouseDoubleClick(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
+    void mouseDoubleClick(const juce::MouseEvent& e) override;
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
 
+    std::function<void()> onAddTrackRequested;
     std::function<void(int trackIndex)> onRemoveTrackRequested;
     std::function<void(int trackIndex)> onTrackSelected;
     std::function<void()> onMixerFocusChanged;
-    std::function<juce::StringArray()> getAvailableTrackPlugins;
-    std::function<juce::StringArray()> getAvailableTrackInputs;
-    std::function<juce::StringArray()> getAvailableTrackOutputs;
-    std::function<juce::String()> getTrackInputDeviceName;
-    std::function<juce::String()> getTrackOutputDeviceName;
-    std::function<bool(int trackIndex, int slotIndex, const juce::String& pluginName)> onTrackPluginLoadRequested;
-    std::function<void(int trackIndex, int slotIndex, bool shouldBeBypassed)> onTrackPluginBypassRequested;
-    std::function<void(int trackIndex, int slotIndex)> onTrackPluginRemoveRequested;
-    std::function<void(int trackIndex, int slotIndex)> onTrackPluginEditorRequested;
-    std::function<void(int trackIndex, int slotIndex)> onTrackPluginSlotRemoveRequested;
+
+    // Plugin management
+    std::function<juce::StringArray(bool isMaster)> onGetAvailablePlugins;
+    std::function<juce::String(bool isMaster, int trackIndex, int slotIndex)> onGetPluginName;
+    std::function<void(bool isMaster, int trackIndex, int slotIndex, const juce::String&)> onLoadPlugin;
+    std::function<void(bool isMaster, int trackIndex, int slotIndex)> onRemovePlugin;
+    std::function<void(bool isMaster, int trackIndex, int slotIndex)> onShowPluginEditor;
+
+    // Input device selection
+    std::function<juce::StringArray()> onGetAvailableInputs;
 
 private:
     static constexpr int rowHeight = 92;
-    static constexpr int rowGap = 12;
-    static constexpr int scrollbarWidth = 10;
+    static constexpr int rowGap = 8;
 
-    int getContentHeight() const;
-    int getMaxScroll() const;
-    int toContentY(float y) const;
     int getVisualRowCount() const;
     int getVisualRowAt(juce::Point<float> point) const;
     bool isMasterRow(int rowIndex) const;
     int getTrackIndexForRow(int rowIndex) const;
-    juce::Rectangle<float> getCardInnerBounds(int rowIndex) const;
-    juce::Rectangle<float> getHeaderBounds(int rowIndex) const;
-    juce::Rectangle<float> getContentTypeBadgeBounds(int trackIndex) const;
-    juce::Rectangle<float> getRemoveButtonBounds(int trackIndex) const;
-    juce::Rectangle<float> getStatusIndicatorBounds(int rowIndex, int indicatorIndex) const;
-    juce::Rectangle<float> getCompactMeterBounds(int rowIndex) const;
-    juce::Rectangle<float> getCompactLevelBounds(int rowIndex) const;
-    juce::Rectangle<float> getScrollbarTrackBounds() const;
-    juce::Rectangle<float> getScrollbarThumbBounds() const;
+
     juce::Rectangle<float> getRowBounds(int rowIndex) const;
-    void drawMixerStrip(juce::Graphics& g, juce::Rectangle<float> bounds, int rowIndex);
-    void drawStatusIndicators(juce::Graphics& g, juce::Rectangle<float> bounds, int trackIndex) const;
-    void drawCompactMeter(juce::Graphics& g, juce::Rectangle<float> bounds, float level, bool isActive) const;
-    void scrollBy(float deltaY);
-    void setScrollOffset(int newOffset);
+    juce::Rectangle<float> getAddTrackButtonBounds() const;
+
+    // Hit-test regions within a row
+    juce::Rectangle<float> getIndicatorBounds(int rowIndex, int indicatorIndex) const;
+    juce::Rectangle<float> getRemoveButtonBounds(int trackIndex) const;
+    juce::Rectangle<float> getFaderBounds(int rowIndex) const;
+    juce::Rectangle<float> getPanKnobBounds(int rowIndex) const;
+    juce::Rectangle<float> getRoutingButtonBounds(int rowIndex) const;
+
+    // Drawing
+    void drawStrip(juce::Graphics& g, int rowIndex);
+    void drawIndicatorPill(juce::Graphics& g, juce::Rectangle<float> bounds,
+                           const char* label, bool active, juce::Colour activeColour) const;
+    void drawFader(juce::Graphics& g, juce::Rectangle<float> bounds, float level, bool active) const;
+    void drawPanKnob(juce::Graphics& g, juce::Rectangle<float> bounds, float pan, bool active) const;
+
     void promptRenameTrack(int trackIndex);
-    void showTrackContextMenu(int trackIndex, juce::Rectangle<int> targetBounds);
+    void showTrackContextMenu(int trackIndex);
+    void showRoutingMenu(int rowIndex);
+    void showFxMenu(int rowIndex);
+    void showInputMenu(int rowIndex);
+
+    int getContentHeight() const;
+    int getMaxScroll() const;
+
+    void startInlineRename (int trackIndex);
+    void commitInlineRename();
+    void cancelInlineRename();
 
     DAWState& state;
-    int scrollOffset = 0;
-    bool draggingScrollbar = false;
-    float scrollbarDragOffset = 0.0f;
+    int draggingFaderRow = -1;
+    int draggingPanRow = -1;
+    std::unique_ptr<juce::TextEditor> inlineEditor;
+    int editingTrackIndex = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TrackListComponent)
 };

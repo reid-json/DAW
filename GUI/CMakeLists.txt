@@ -2,13 +2,10 @@ add_library(GUI STATIC
     guicomponent.cpp
     guicomponent.h
     dawstate.h
-    test_dawstate.cpp
     timelinecomponent.cpp
     timelinecomponent.h
     arrangementcomponent.cpp
     arrangementcomponent.h
-    mixermastercomponent.cpp
-    mixermastercomponent.h
     tracklistcomponent.cpp
     tracklistcomponent.h
     recentclipscomponent.cpp
@@ -37,4 +34,3 @@ target_compile_definitions(GUI PUBLIC
     JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS=1
 )
 
-add_subdirectory(Test)

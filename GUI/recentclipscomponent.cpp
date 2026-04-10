@@ -9,7 +9,7 @@ constexpr int rowHeight = 56;
 constexpr int sectionGap = 12;
 constexpr int emptyRowHeight = 42;
 
-juce::Image createDragPreviewImage(const juce::String& name, double lengthSeconds, bool isPattern)
+juce::Image createDragPreviewImage(const juce::String& name, bool isPattern)
 {
     juce::Image image(juce::Image::ARGB, 220, rowHeight - 6, true);
     juce::Graphics g(image);
@@ -19,20 +19,14 @@ juce::Image createDragPreviewImage(const juce::String& name, double lengthSecond
     g.fillRoundedRectangle(area.toFloat(), 8.0f);
 
     g.setColour(juce::Colours::white);
-    g.drawText(name, area.reduced(10, 8), juce::Justification::topLeft, true);
-
-    g.setColour(juce::Colours::white.withAlpha(0.6f));
-    g.drawText((isPattern ? "Pattern" : "Clip") + juce::String("  ") + juce::String(lengthSeconds, 2) + " s",
-               area.reduced(10, 8).withTrimmedTop(24),
-               juce::Justification::topLeft,
-               false);
+    g.drawText(name, area.reduced(10, 8), juce::Justification::centredLeft, true);
 
     return image;
 }
 
 juce::String getSectionTitle(RecentClipsComponent::ItemKind kind)
 {
-    return kind == RecentClipsComponent::ItemKind::clip ? "Saved Clips" : "Saved Patterns";
+    return kind == RecentClipsComponent::ItemKind::clip ? "Recent Audio Files" : "Saved Patterns";
 }
 }
 
@@ -69,17 +63,11 @@ void RecentClipsComponent::paint(juce::Graphics& g)
         auto emptyBounds = getLocalBounds().reduced(10, 20);
         g.setColour(juce::Colours::white.withAlpha(0.92f));
         g.setFont(16.0f);
-        g.drawText("No saved clips or patterns yet",
+        g.drawText("No clips or patterns",
                    emptyBounds.removeFromTop(28),
                    juce::Justification::centredTop,
                    false);
 
-        g.setColour(juce::Colours::white.withAlpha(0.55f));
-        g.setFont(13.0f);
-        g.drawFittedText("Record audio or draw notes in the piano roll to create reusable items.",
-                         emptyBounds.removeFromTop(44),
-                         juce::Justification::centredTop,
-                         3);
         return;
     }
 
@@ -106,7 +94,7 @@ void RecentClipsComponent::paint(juce::Graphics& g)
 
                 g.setColour(juce::Colours::white.withAlpha(0.48f));
                 g.setFont(13.0f);
-                g.drawText(kind == ItemKind::clip ? "No saved clips yet" : "No saved patterns yet",
+                g.drawText(kind == ItemKind::clip ? "No audio files yet" : "No saved patterns yet",
                            emptyArea.reduced(10, 8),
                            juce::Justification::centredLeft,
                            false);
@@ -126,16 +114,11 @@ void RecentClipsComponent::paint(juce::Graphics& g)
             const auto colour = isPattern ? juce::Colour(0xff30415d) : juce::Colour(0xff223044);
             const auto& name = isPattern ? state.savedPatterns[(size_t) i].name
                                          : state.recentClips[(size_t) i].name;
-            const auto length = isPattern ? state.savedPatterns[(size_t) i].lengthSeconds
-                                          : state.recentClips[(size_t) i].lengthSeconds;
 
             g.setColour(colour);
             g.fillRoundedRectangle(area.toFloat(), 8.0f);
             g.setColour(juce::Colours::white);
-            g.drawText(name, area.reduced(10, 8), juce::Justification::topLeft, true);
-            g.setColour(juce::Colours::white.withAlpha(0.6f));
-            g.drawText((isPattern ? "Pattern" : "Clip") + juce::String("  ") + juce::String(length, 2) + " s",
-                       area.reduced(10, 8).withTrimmedTop(24), juce::Justification::topLeft, false);
+            g.drawText(name, area.reduced(10, 8), juce::Justification::centredLeft, true);
         }
 
         y += count * rowHeight + sectionGap;
@@ -189,7 +172,6 @@ void RecentClipsComponent::mouseDrag(const juce::MouseEvent& e)
 
     int assetId = -1;
     juce::String name;
-    double lengthSeconds = 0.0;
     const bool isPattern = dragItem->kind == ItemKind::pattern;
 
     if (isPattern)
@@ -200,7 +182,6 @@ void RecentClipsComponent::mouseDrag(const juce::MouseEvent& e)
         const auto& pattern = state.savedPatterns[(size_t) dragItem->index];
         assetId = pattern.assetId;
         name = pattern.name;
-        lengthSeconds = pattern.lengthSeconds;
     }
     else
     {
@@ -210,7 +191,6 @@ void RecentClipsComponent::mouseDrag(const juce::MouseEvent& e)
         const auto& clip = state.recentClips[(size_t) dragItem->index];
         assetId = clip.assetId;
         name = clip.name;
-        lengthSeconds = clip.lengthSeconds;
     }
 
     if (assetId <= 0)
@@ -220,7 +200,7 @@ void RecentClipsComponent::mouseDrag(const juce::MouseEvent& e)
     {
         container->startDragging("recent:" + juce::String(assetId),
                                  this,
-                                 createDragPreviewImage(name, lengthSeconds, isPattern),
+                                 createDragPreviewImage(name, isPattern),
                                  false,
                                  nullptr,
                                  &e.source);
@@ -279,11 +259,6 @@ int RecentClipsComponent::getContentHeight() const
 int RecentClipsComponent::getMaxScroll() const
 {
     return juce::jmax(0, getContentHeight() - getHeight());
-}
-
-int RecentClipsComponent::toContentY(float y) const
-{
-    return static_cast<int>(std::floor(y + static_cast<float>(scrollOffset)));
 }
 
 juce::Rectangle<float> RecentClipsComponent::getScrollbarTrackBounds() const

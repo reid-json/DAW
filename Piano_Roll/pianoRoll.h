@@ -7,15 +7,15 @@
 
 namespace PianoRoll
 {
-    static constexpr int toolbarHeight   = 46;
-    static constexpr int timelineHeight  = 34;
-    static constexpr int headerHeight    = toolbarHeight + timelineHeight;
-    static constexpr int keyColumnWidth  = 96;
-    static constexpr int noteRowHeight   = 24;
-    static constexpr int beatWidth       = 48;
-    static constexpr int totalRows       = 36;
-    static constexpr int totalBeats      = 32;
-    static constexpr int topMidiNote     = 84; // C6
+    static constexpr int toolbarH    = 46;
+    static constexpr int timelineH   = 34;
+    static constexpr int headerH     = toolbarH + timelineH;
+    static constexpr int keyWidth    = 96;
+    static constexpr int rowHeight   = 24;
+    static constexpr int beatWidth   = 48;
+    static constexpr int numRows     = 36;
+    static constexpr int numBeats    = 32;
+    static constexpr int topNote     = 84; // C6
 
     struct Note
     {
@@ -28,64 +28,10 @@ namespace PianoRoll
 
     juce::String getNoteName (int midiNote);
     bool isBlackKey (int midiNote);
-    int getRowForMidiNote (int midiNote);
-    int getMidiNoteForRow (int row);
+    int noteToRow (int midiNote);
+    int rowToNote (int row);
+    juce::Rectangle<float> getNoteBounds (const Note& note);
 }
-
-//==================================================
-class PianoKeyboardStrip : public juce::Component
-{
-public:
-    PianoKeyboardStrip();
-
-    void paint (juce::Graphics& g) override;
-    void setVerticalScrollOffset (int newScrollOffset);
-
-private:
-    int verticalScrollOffset = 0;
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PianoKeyboardStrip)
-};
-
-//==================================================
-class PianoGridComponent : public juce::Component
-{
-public:
-    PianoGridComponent();
-
-    void paint (juce::Graphics& g) override;
-    void mouseDown (const juce::MouseEvent& event) override;
-    void mouseDrag (const juce::MouseEvent& event) override;
-    void mouseUp (const juce::MouseEvent& event) override;
-    void mouseWheelMove (const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
-
-    void setNotes (std::vector<PianoRoll::Note> newNotes);
-    void setSelectedNoteIds (std::set<int> newSelectedNoteIds);
-    void setMarqueeRect (std::optional<juce::Rectangle<int>> newMarqueeRect);
-    void setScrollOffsets (int newHorizontalOffset, int newVerticalOffset);
-    void setMouseDownCallback (std::function<void (const juce::MouseEvent&)> callback);
-    void setMouseDragCallback (std::function<void (const juce::MouseEvent&)> callback);
-    void setMouseUpCallback (std::function<void (const juce::MouseEvent&)> callback);
-    void setMouseWheelCallback (std::function<void (const juce::MouseEvent&, const juce::MouseWheelDetails&)> callback);
-
-private:
-    std::vector<PianoRoll::Note> notes;
-    std::set<int> selectedNoteIds;
-    std::optional<juce::Rectangle<int>> marqueeRect;
-    std::function<void (const juce::MouseEvent&)> mouseDownCallback;
-    std::function<void (const juce::MouseEvent&)> mouseDragCallback;
-    std::function<void (const juce::MouseEvent&)> mouseUpCallback;
-    std::function<void (const juce::MouseEvent&, const juce::MouseWheelDetails&)> mouseWheelCallback;
-    int horizontalScrollOffset = 0;
-    int verticalScrollOffset = 0;
-
-    void paintGrid (juce::Graphics& g);
-    void paintNotes (juce::Graphics& g);
-    void paintMarquee (juce::Graphics& g);
-    void paintPlayhead (juce::Graphics& g);
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PianoGridComponent)
-};
 
 //==================================================
 class PianoRollComponent : public juce::Component
@@ -95,155 +41,148 @@ public:
 
     void paint (juce::Graphics& g) override;
     void resized() override;
-    void mouseMove (const juce::MouseEvent& event) override;
-    void mouseExit (const juce::MouseEvent& event) override;
-    void mouseDown (const juce::MouseEvent& event) override;
-    void mouseWheelMove (const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
-    void setTrackContext (juce::String newTrackName, juce::String newPatternName);
+    void mouseMove (const juce::MouseEvent& e) override;
+    void mouseExit (const juce::MouseEvent& e) override;
+    void mouseDown (const juce::MouseEvent& e) override;
+    void mouseDrag (const juce::MouseEvent& e) override;
+    void mouseUp (const juce::MouseEvent& e) override;
+    void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
+    bool keyPressed (const juce::KeyPress& key) override;
+
     void setNotes (std::vector<PianoRoll::Note> newNotes);
-    void setNotesChangedCallback (std::function<void (const std::vector<PianoRoll::Note>&)> callback);
+    void setOnSavePattern (std::function<void (const std::vector<PianoRoll::Note>&)> cb);
+    void setOnGetAvailableInstruments (std::function<juce::StringArray()> cb);
+    void setOnInstrumentChanged (std::function<void (const juce::String&)> cb);
+    void setInstrumentName (const juce::String& name);
 
 private:
-    enum class EditorTool
+    enum class Tool { select, draw, erase };
+    enum class Edge { left, right };
+
+    struct ButtonRects
     {
-        select,
-        draw,
-        erase
+        juce::Rectangle<int> select, draw, erase, save, instrument;
     };
 
-    struct ToolbarLayout
-    {
-        juce::Rectangle<int> selectButton;
-        juce::Rectangle<int> drawButton;
-        juce::Rectangle<int> eraseButton;
-        juce::Rectangle<int> snapButton;
-        juce::Rectangle<int> gridButton;
-    };
-
-    enum class ResizeEdge
-    {
-        left,
-        right
-    };
-
-    struct ResizeState
+    struct ResizeInfo
     {
         int noteId = 0;
-        double startBeat = 0.0;
-        double endBeat = 0.0;
-        ResizeEdge edge = ResizeEdge::right;
+        double startBeat = 0.0, endBeat = 0.0;
+        Edge edge = Edge::right;
     };
 
-    struct MoveNoteSnapshot
+    struct MoveSnapshot
     {
         int noteId = 0;
         double startBeat = 0.0;
         int midiNote = 60;
-        juce::String label;
         double lengthBeats = 1.0;
     };
 
-    struct MoveState
+    struct MoveInfo
     {
-        int anchorNoteId = 0;
-        double pointerOffsetBeats = 0.0;
-        int pointerRowOffset = 0;
-        double anchorStartBeat = 0.0;
-        int anchorMidiNote = 60;
-        std::vector<MoveNoteSnapshot> snapshots;
+        int anchorId = 0;
+        double beatOffset = 0.0;
+        int rowOffset = 0;
+        double anchorBeat = 0.0;
+        int anchorNote = 60;
+        std::vector<MoveSnapshot> snapshots;
     };
 
-    struct MarqueeState
+    struct MarqueeInfo
     {
-        juce::Point<int> origin;
-        juce::Point<int> current;
-        std::set<int> baseSelectionIds;
+        juce::Point<int> start, current;
+        std::set<int> baseSelection;
     };
 
-    class ScrollbarListener : public juce::ScrollBar::Listener
+    class ScrollListener : public juce::ScrollBar::Listener
     {
     public:
-        explicit ScrollbarListener (PianoRollComponent& ownerToNotify) : owner (ownerToNotify) {}
-        void scrollBarMoved (juce::ScrollBar* scrollBarThatHasMoved, double newRangeStart) override;
-
+        explicit ScrollListener (PianoRollComponent& o) : owner (o) {}
+        void scrollBarMoved (juce::ScrollBar* bar, double newStart) override;
     private:
         PianoRollComponent& owner;
     };
 
-    PianoKeyboardStrip keyboardStrip;
-    PianoGridComponent gridComponent;
-    juce::ScrollBar horizontalScrollBar { false };
-    juce::ScrollBar verticalScrollBar { true };
-    ScrollbarListener scrollbarListener { *this };
-    ToolbarLayout toolbarLayout;
-    std::vector<PianoRoll::Note> notes;
-    std::optional<PianoRoll::Note> pendingDrawNote;
-    std::set<int> selectedNoteIds;
-    std::optional<ResizeState> resizeState;
-    std::optional<MoveState> moveState;
-    std::optional<MarqueeState> marqueeState;
-    EditorTool activeTool = EditorTool::select;
-    bool snapEnabled = true;
-    int gridDivisionIndex = 2;
-    int nextNoteId = 1;
-    int horizontalScrollOffset = 0;
-    int verticalScrollOffset = 0;
-    juce::String trackName = "Track 1";
-    juce::String patternName = "Pattern 1";
-    std::function<void (const std::vector<PianoRoll::Note>&)> notesChangedCallback;
-    bool suppressNotesChanged = false;
-
+    // Painting
     void paintToolbar (juce::Graphics& g, juce::Rectangle<int> area);
     void paintTimeline (juce::Graphics& g, juce::Rectangle<int> area);
-    void paintToolbarButton (juce::Graphics& g,
-                             juce::Rectangle<int> area,
-                             const juce::String& text,
-                             bool isActive = false,
-                             bool isAccent = false);
-    void paintIconButton (juce::Graphics& g,
-                          juce::Rectangle<int> area,
-                          const juce::String& text);
-    ToolbarLayout layoutToolbar (juce::Rectangle<int> area) const;
-    bool isToolbarInteractiveArea (juce::Point<int> position) const;
-    bool handleToolbarClick (juce::Point<int> position);
-    void handleGridMouseDown (const juce::MouseEvent& event);
-    void handleGridMouseDrag (const juce::MouseEvent& event);
-    void handleGridMouseUp (const juce::MouseEvent& event);
-    std::optional<size_t> findNoteAt (juce::Point<int> position) const;
-    std::optional<std::pair<size_t, ResizeEdge>> findResizableNoteAt (juce::Point<int> position) const;
-    std::optional<size_t> findNoteIndexById (int noteId) const;
-    void setSelectedNoteIds (std::set<int> noteIds);
-    void selectSingleNote (std::optional<size_t> noteIndex);
-    void beginMarqueeSelection (const juce::MouseEvent& event);
-    void updateMarqueeSelection (juce::Point<int> contentPosition);
-    void endMarqueeSelection();
-    void beginNoteMove (size_t noteIndex, juce::Point<int> position);
-    void updateNoteMove (juce::Point<int> position);
-    void endNoteMove();
-    void beginNoteResize (size_t noteIndex, ResizeEdge edge);
-    void updateNoteResize (juce::Point<int> position);
-    void endNoteResize();
-    void beginNoteDrawAt (juce::Point<int> position);
-    void updatePendingDrawNote (juce::Point<int> position);
-    void commitPendingDrawNote();
-    void eraseNoteAt (juce::Point<int> position);
-    void deleteSelectedNotes();
-    bool keyPressed (const juce::KeyPress& key) override;
-    void nudgeSelectedNotes (double beatDelta, int rowDelta);
+    void paintKeys (juce::Graphics& g);
+    void paintGrid (juce::Graphics& g);
+    void paintNotes (juce::Graphics& g);
+    void paintMarquee (juce::Graphics& g);
+    void paintButton (juce::Graphics& g, juce::Rectangle<int> area,
+                      const juce::String& text, bool active = false, bool accent = false);
+
+    // Layout / toolbar
+    ButtonRects layoutButtons (juce::Rectangle<int> area) const;
+    bool isOverButton (juce::Point<int> pos) const;
+    bool handleButtonClick (juce::Point<int> pos);
+
+    // Grid mouse handlers
+    void gridMouseDown (const juce::MouseEvent& e);
+    void gridMouseDrag (const juce::MouseEvent& e);
+    void gridMouseUp (const juce::MouseEvent& e);
+
+    // Note finding
+    std::optional<size_t> findNoteAt (juce::Point<int> pos) const;
+    std::optional<std::pair<size_t, Edge>> findNoteEdge (juce::Point<int> pos) const;
+    std::optional<size_t> findNoteById (int id) const;
+
+    // Selection
+    void setSelection (std::set<int> ids);
+    void selectOne (std::optional<size_t> index);
+    void startMarquee (const juce::MouseEvent& e);
+    void updateMarquee (juce::Point<int> pos);
+    void endMarquee();
+
+    // Note operations
+    void startMove (size_t index, juce::Point<int> pos);
+    void updateMove (juce::Point<int> pos);
+    void endMove();
+    void startResize (size_t index, Edge edge);
+    void updateResize (juce::Point<int> pos);
+    void endResize();
+    void startDraw (juce::Point<int> pos);
+    void updateDraw (juce::Point<int> pos);
+    void commitDraw();
+    void eraseAt (juce::Point<int> pos);
+    void deleteSelected();
+    void nudgeSelected (double beatDelta, int rowDelta);
+
+    // Helpers
+    juce::Point<int> toGridPos (juce::Point<int> local) const;
     std::optional<juce::Rectangle<int>> getMarqueeRect() const;
-    std::optional<juce::Rectangle<int>> getMarqueeRectInContentSpace() const;
-    juce::Point<int> getContentPosition (juce::Point<int> localPosition) const;
-    bool isToggleSelectionModifierDown (const juce::ModifierKeys& mods) const;
-    void handleMouseWheelScroll (const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel);
-    void notifyNotesChanged() const;
+    void handleScroll (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel);
     void updateScrollbars();
     void updateViewport();
-    void refreshGridNotes();
-    int getGridDivisionSubsteps() const;
-    double getGridStepBeats() const;
-    void showGridDivisionMenu();
-    juce::String getGridDivisionLabel() const;
-    static juce::Array<juce::String> getGridDivisionOptions();
+    void refreshDisplay();
+    double getStepBeats() const;
+
+    // Child components (scrollbars only)
+    juce::ScrollBar hScroll { false };
+    juce::ScrollBar vScroll { true };
+    ScrollListener scrollListener { *this };
+
+    // Layout rects (computed in resized)
+    ButtonRects btnRects;
+    juce::Rectangle<int> keyArea, gridArea;
+
+    // State
+    std::vector<PianoRoll::Note> notes;
+    std::optional<PianoRoll::Note> drawingNote;
+    std::set<int> selectedIds;
+    std::optional<ResizeInfo> resizing;
+    std::optional<MoveInfo> moving;
+    std::optional<MarqueeInfo> marqueeState;
+
+    Tool tool = Tool::select;
+    int nextId = 1;
+    int scrollX = 0, scrollY = 0;
+    juce::String instrumentName;
+    std::function<void (const std::vector<PianoRoll::Note>&)> onSavePatternRequested;
+    std::function<juce::StringArray()> onGetAvailableInstruments;
+    std::function<void (const juce::String&)> onInstrumentChangeRequested;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PianoRollComponent)
 };
@@ -253,13 +192,13 @@ class PianoRollWindow : public juce::DocumentWindow
 {
 public:
     PianoRollWindow();
-    void setTrackContext (juce::String trackName, juce::String patternName);
-    void setNotes (std::vector<PianoRoll::Note> notes);
-    void setNotesChangedCallback (std::function<void (const std::vector<PianoRoll::Note>&)> callback);
+    void setOnSavePattern (std::function<void (const std::vector<PianoRoll::Note>&)> cb);
+    void setOnGetAvailableInstruments (std::function<juce::StringArray()> cb);
+    void setOnInstrumentChanged (std::function<void (const juce::String&)> cb);
+    void setInstrumentName (const juce::String& name);
     void closeButtonPressed() override;
 
 private:
     PianoRollComponent* content = nullptr;
-
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PianoRollWindow)
 };

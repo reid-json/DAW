@@ -10,26 +10,15 @@ struct RecentClipItem
     juce::String name;
     double lengthSeconds = 0.0;
 
-    bool operator==(const RecentClipItem& other) const
+    bool operator== (const RecentClipItem& o) const
     {
-        return assetId == other.assetId
-            && name == other.name
-            && lengthSeconds == other.lengthSeconds;
-    }
-
-    bool operator!=(const RecentClipItem& other) const
-    {
-        return !(*this == other);
+        return assetId == o.assetId && name == o.name && lengthSeconds == o.lengthSeconds;
     }
 };
 
 struct TimelineClipItem
 {
-    enum class ContentKind
-    {
-        recording,
-        pattern
-    };
+    enum class ContentKind { recording, pattern };
 
     int placementId = 0;
     int assetId = 0;
@@ -39,20 +28,11 @@ struct TimelineClipItem
     double startSeconds = 0.0;
     double lengthSeconds = 0.0;
 
-    bool operator==(const TimelineClipItem& other) const
+    bool operator== (const TimelineClipItem& o) const
     {
-        return placementId == other.placementId
-            && assetId == other.assetId
-            && name == other.name
-            && kind == other.kind
-            && trackIndex == other.trackIndex
-            && startSeconds == other.startSeconds
-            && lengthSeconds == other.lengthSeconds;
-    }
-
-    bool operator!=(const TimelineClipItem& other) const
-    {
-        return !(*this == other);
+        return placementId == o.placementId && assetId == o.assetId && name == o.name
+            && kind == o.kind && trackIndex == o.trackIndex
+            && startSeconds == o.startSeconds && lengthSeconds == o.lengthSeconds;
     }
 };
 
@@ -63,38 +43,26 @@ struct SavedPatternItem
     juce::String name;
     double lengthSeconds = 0.0;
 
-    bool operator==(const SavedPatternItem& other) const
+    bool operator== (const SavedPatternItem& o) const
     {
-        return assetId == other.assetId
-            && trackIndex == other.trackIndex
-            && name == other.name
-            && lengthSeconds == other.lengthSeconds;
-    }
-
-    bool operator!=(const SavedPatternItem& other) const
-    {
-        return !(*this == other);
+        return assetId == o.assetId && trackIndex == o.trackIndex
+            && name == o.name && lengthSeconds == o.lengthSeconds;
     }
 };
 
 struct TrackMixerState
 {
-    enum class ContentType
-    {
-        recording,
-        pattern
-    };
+    enum class ContentType { recording, pattern };
 
     juce::String name;
     ContentType contentType = ContentType::recording;
     bool muted = false;
-    bool soloed = false;
     bool armed = false;
-    bool monitoringEnabled = false;
     float pan = 0.0f;
     float level = 0.72f;
     juce::String inputAssignment = "Input channel 1";
-    juce::String outputAssignment = "Output channel 1";
+    juce::String outputAssignment = "Master";
+
     struct FxSlotState
     {
         juce::String name;
@@ -116,18 +84,10 @@ struct TrackPatternNote
     int midiNote = 60;
     juce::String label = "C4";
 
-    bool operator==(const TrackPatternNote& other) const
+    bool operator== (const TrackPatternNote& o) const
     {
-        return id == other.id
-            && startBeat == other.startBeat
-            && lengthBeats == other.lengthBeats
-            && midiNote == other.midiNote
-            && label == other.label;
-    }
-
-    bool operator!=(const TrackPatternNote& other) const
-    {
-        return !(*this == other);
+        return id == o.id && startBeat == o.startBeat
+            && lengthBeats == o.lengthBeats && midiNote == o.midiNote && label == o.label;
     }
 };
 
@@ -137,24 +97,15 @@ struct TrackPatternState
     juce::String name = "Pattern 1";
     std::vector<TrackPatternNote> notes;
 
-    bool operator==(const TrackPatternState& other) const
+    bool operator== (const TrackPatternState& o) const
     {
-        return assetId == other.assetId
-            && name == other.name
-            && notes == other.notes;
-    }
-
-    bool operator!=(const TrackPatternState& other) const
-    {
-        return !(*this == other);
+        return assetId == o.assetId && name == o.name && notes == o.notes;
     }
 };
 
 struct MasterMixerState
 {
     bool muted = false;
-    bool soloed = false;
-    bool armed = false;
     float pan = 0.0f;
     float level = 0.8f;
     std::vector<TrackMixerState::FxSlotState> fxSlots;
@@ -162,12 +113,7 @@ struct MasterMixerState
 
 struct DAWState
 {
-    enum class TransportState
-    {
-        stopped,
-        playing,
-        paused
-    };
+    enum class TransportState { stopped, playing, paused };
 
     TransportState transportState = TransportState::stopped;
 
@@ -175,12 +121,12 @@ struct DAWState
     int sidebarWidth = 340;
     int clipSidebarWidth = 220;
     int horizontalScrollOffset = 0;
+    int verticalScrollOffset = 0;
     int selectedTrackIndex = 0;
     double tempoBpm = 120.0;
     bool focusedMixerShowsMaster = true;
 
     double playhead = 0.0;
-
     bool isRecording = false;
     bool clipSidebarCollapsed = false;
     bool audioMonitoringEnabled = false;
@@ -194,603 +140,280 @@ struct DAWState
     std::vector<SavedPatternItem> savedPatterns;
     std::vector<TimelineClipItem> timelineClips;
 
-    DAWState()
-    {
-        ensureTrackMixerStateCount();
-    }
+    DAWState() { ensureTrackCount(); }
 
+    // Transport
     void play()    { transportState = TransportState::playing; }
     void pause()   { transportState = TransportState::paused; }
+    void stop()    { transportState = TransportState::stopped; playhead = 0.0; isRecording = false; }
+    void toggleAudioMonitoring() { audioMonitoringEnabled = ! audioMonitoringEnabled; }
+    void setTempoBpm (double bpm) { tempoBpm = juce::jlimit (40.0, 240.0, bpm); }
 
-    void stop()
-    {
-        transportState = TransportState::stopped;
-        playhead = 0.0;
-        isRecording = false;
-    }
-
-    void restart()
-    {
-        transportState = TransportState::stopped;
-        playhead = 0.0;
-    }
-
-    void setRecording(bool shouldRecord)
-    {
-        isRecording = shouldRecord;
-        transportState = shouldRecord ? TransportState::playing : TransportState::stopped;
-        if (!shouldRecord)
-            playhead = 0.0;
-    }
-
-    void toggleAudioMonitoring()
-    {
-        audioMonitoringEnabled = ! audioMonitoringEnabled;
-    }
-
-    void setTempoBpm (double newTempoBpm)
-    {
-        tempoBpm = juce::jlimit (40.0, 240.0, newTempoBpm);
-    }
-
+    // Track management
     void addTrack()
     {
         ++trackCount;
-        ensureTrackMixerStateCount();
+        ensureTrackCount();
         selectedTrackIndex = trackCount - 1;
     }
 
-    void removeTrack()
+    void removeTrackAt (int idx)
     {
-        trackCount = std::max (1, trackCount - 1);
-        ensureTrackMixerStateCount();
-    }
-
-    void removeTrackAt (int trackIndex)
-    {
-        if (trackCount <= 1)
-            return;
-
-        const int clampedIndex = juce::jlimit (0, trackCount - 1, trackIndex);
+        if (trackCount <= 1) return;
+        int i = juce::jlimit (0, trackCount - 1, idx);
         --trackCount;
 
-        if (clampedIndex >= 0 && clampedIndex < static_cast<int> (trackMixerStates.size()))
-            trackMixerStates.erase (trackMixerStates.begin() + clampedIndex);
+        if (i < (int) trackMixerStates.size())
+            trackMixerStates.erase (trackMixerStates.begin() + i);
+        if (i < (int) trackPatternStates.size())
+            trackPatternStates.erase (trackPatternStates.begin() + i);
 
-        if (clampedIndex >= 0 && clampedIndex < static_cast<int> (trackPatternStates.size()))
-            trackPatternStates.erase (trackPatternStates.begin() + clampedIndex);
-
-        ensureTrackMixerStateCount();
-        selectedTrackIndex = juce::jlimit (0, trackCount - 1, selectedTrackIndex > clampedIndex ? selectedTrackIndex - 1 : selectedTrackIndex);
+        ensureTrackCount();
+        selectedTrackIndex = juce::jlimit (0, trackCount - 1,
+                                           selectedTrackIndex > i ? selectedTrackIndex - 1 : selectedTrackIndex);
     }
 
-    void toggleClipSidebar()
+    void toggleClipSidebar() { clipSidebarCollapsed = ! clipSidebarCollapsed; }
+
+    // Track state accessors
+    TrackMixerState& getTrackMixerState (int i)
     {
-        clipSidebarCollapsed = ! clipSidebarCollapsed;
+        ensureTrackCount();
+        return trackMixerStates[juce::jlimit (0, trackCount - 1, i)];
     }
 
-    int findNextEmptyTrackIndex() const
+    const TrackMixerState& getTrackMixerState (int i) const
     {
-        for (int track = 0; track < trackCount; ++track)
-        {
-            const bool hasClip = std::any_of (timelineClips.begin(), timelineClips.end(),
-                                              [track] (const TimelineClipItem& clip) { return clip.trackIndex == track; });
-            if (! hasClip)
-                return track;
-        }
-
-        return trackCount;
+        return trackMixerStates[juce::jlimit (0, trackCount - 1, i)];
     }
 
-    TrackMixerState& getTrackMixerState (int trackIndex)
+    TrackPatternState& getTrackPatternState (int i)
     {
-        ensureTrackMixerStateCount();
-        return trackMixerStates[juce::jlimit (0, trackCount - 1, trackIndex)];
+        ensureTrackCount();
+        return trackPatternStates[juce::jlimit (0, trackCount - 1, i)];
     }
 
-    const TrackMixerState& getTrackMixerState (int trackIndex) const
+    const TrackPatternState& getTrackPatternState (int i) const
     {
-        return trackMixerStates[juce::jlimit (0, trackCount - 1, trackIndex)];
+        return trackPatternStates[juce::jlimit (0, trackCount - 1, i)];
     }
 
-    TrackPatternState& getTrackPatternState (int trackIndex)
+    void setTrackPatternName (int i, juce::String name)
     {
-        ensureTrackMixerStateCount();
-        return trackPatternStates[juce::jlimit (0, trackCount - 1, trackIndex)];
+        auto& p = getTrackPatternState (i);
+        p.name = name.trim();
+        if (p.name.isEmpty()) p.name = "Pattern 1";
     }
 
-    const TrackPatternState& getTrackPatternState (int trackIndex) const
+    // Track toggles
+    void toggleTrackMuted  (int i) { getTrackMixerState (i).muted  = ! getTrackMixerState (i).muted; }
+    void toggleTrackArmed  (int i) { getTrackMixerState (i).armed  = ! getTrackMixerState (i).armed; }
+
+    void armOnlyTrack (int target)
     {
-        return trackPatternStates[juce::jlimit (0, trackCount - 1, trackIndex)];
-    }
-
-    TrackPatternState& getSelectedTrackPatternState()
-    {
-        return getTrackPatternState (selectedTrackIndex);
-    }
-
-    const TrackPatternState& getSelectedTrackPatternState() const
-    {
-        return getTrackPatternState (selectedTrackIndex);
-    }
-
-    juce::String getTrackPatternName (int trackIndex) const
-    {
-        const auto& pattern = getTrackPatternState (trackIndex);
-        return pattern.name.isNotEmpty() ? pattern.name : "Pattern 1";
-    }
-
-    void setTrackPatternName (int trackIndex, juce::String newName)
-    {
-        auto& pattern = getTrackPatternState (trackIndex);
-        pattern.name = newName.trim();
-
-        if (pattern.name.isEmpty())
-            pattern.name = "Pattern 1";
-    }
-
-    void toggleTrackMuted (int trackIndex)
-    {
-        auto& track = getTrackMixerState (trackIndex);
-        track.muted = ! track.muted;
-    }
-
-    void toggleTrackSoloed (int trackIndex)
-    {
-        auto& track = getTrackMixerState (trackIndex);
-        track.soloed = ! track.soloed;
-    }
-
-    void toggleTrackArmed (int trackIndex)
-    {
-        auto& track = getTrackMixerState (trackIndex);
-        track.armed = ! track.armed;
-    }
-
-    void toggleTrackMonitoringEnabled (int trackIndex)
-    {
-        auto& track = getTrackMixerState (trackIndex);
-        track.monitoringEnabled = ! track.monitoringEnabled;
-    }
-
-    void armOnlyTrack (int trackIndex)
-    {
-        const int targetIndex = juce::jlimit (0, trackCount - 1, trackIndex);
-        ensureTrackMixerStateCount();
-
+        ensureTrackCount();
+        int t = juce::jlimit (0, trackCount - 1, target);
         for (int i = 0; i < trackCount; ++i)
-            trackMixerStates[static_cast<size_t> (i)].armed = (i == targetIndex);
+            trackMixerStates[i].armed = (i == t);
     }
 
     void disarmAllTracks()
     {
-        ensureTrackMixerStateCount();
-
+        ensureTrackCount();
         for (int i = 0; i < trackCount; ++i)
-            trackMixerStates[static_cast<size_t> (i)].armed = false;
+            trackMixerStates[i].armed = false;
     }
 
-    void setTrackPan (int trackIndex, float newPan)
+    int getFirstArmedTrackIndex() const
     {
-        auto& track = getTrackMixerState (trackIndex);
-        track.pan = juce::jlimit (-1.0f, 1.0f, newPan);
+        for (int i = 0; i < trackCount; ++i)
+            if (getTrackMixerState (i).armed) return i;
+        return -1;
     }
 
-    void setTrackLevel (int trackIndex, float newLevel)
+    void setTrackPan   (int i, float v) { getTrackMixerState (i).pan   = juce::jlimit (-1.0f, 1.0f, v); }
+    void setTrackLevel (int i, float v) { getTrackMixerState (i).level = juce::jlimit (0.0f, 1.0f, v); }
+
+    // Selection / focus
+    void selectTrack (int i)               { selectedTrackIndex = juce::jlimit (0, trackCount - 1, i); }
+    void showMasterMixerFocus()            { focusedMixerShowsMaster = true; }
+    void showSelectedTrackMixerFocus()     { focusedMixerShowsMaster = false; selectTrack (selectedTrackIndex); }
+    bool isMasterMixerFocused() const      { return focusedMixerShowsMaster; }
+    bool isTrackSelected (int i) const     { return juce::jlimit (0, trackCount - 1, selectedTrackIndex) == i; }
+
+    bool isTrackAudible (int i) const
     {
-        auto& track = getTrackMixerState (trackIndex);
-        track.level = juce::jlimit (0.0f, 1.0f, newLevel);
+        return ! getTrackMixerState (i).muted;
     }
 
-    TrackMixerState::ContentType getTrackContentType (int trackIndex) const
+    // Track naming
+    juce::String getTrackName (int i) const
     {
-        return getTrackMixerState (trackIndex).contentType;
+        auto& t = getTrackMixerState (i);
+        return t.name.isNotEmpty() ? t.name : "Track " + juce::String (i + 1);
     }
 
-    bool isTrackPatternMode (int trackIndex) const
+    void setTrackName (int i, juce::String name)
     {
-        return getTrackContentType (trackIndex) == TrackMixerState::ContentType::pattern;
+        auto& t = getTrackMixerState (i);
+        t.name = name.trim();
+        if (t.name.isEmpty()) t.name = "Track " + juce::String (i + 1);
     }
 
-    static juce::String getTrackContentTypeLabel (TrackMixerState::ContentType contentType)
+    // I/O assignments
+    juce::String getTrackInputAssignment (int i) const
     {
-        return contentType == TrackMixerState::ContentType::pattern ? "Pattern" : "Recording";
+        auto& t = getTrackMixerState (i);
+        return t.inputAssignment.isNotEmpty() ? t.inputAssignment : "Input channel 1";
     }
 
-    static juce::String getTrackContentTypeBadge (TrackMixerState::ContentType contentType)
+    juce::String getTrackOutputAssignment (int i) const
     {
-        return contentType == TrackMixerState::ContentType::pattern ? "PAT" : "REC";
+        auto& t = getTrackMixerState (i);
+        return t.outputAssignment.isNotEmpty() ? t.outputAssignment : "Output channel 1";
     }
 
-    static TimelineClipItem::ContentKind getTimelineContentKindForTrackType (TrackMixerState::ContentType contentType)
+    void setTrackInputAssignment (int i, juce::String s)
     {
-        return contentType == TrackMixerState::ContentType::pattern
-            ? TimelineClipItem::ContentKind::pattern
-            : TimelineClipItem::ContentKind::recording;
+        auto& t = getTrackMixerState (i);
+        t.inputAssignment = s.trim();
+        if (t.inputAssignment.isEmpty()) t.inputAssignment = "Input channel 1";
     }
 
-    bool canTrackUseContentType (int trackIndex, TrackMixerState::ContentType contentType) const
+    void setTrackOutputAssignment (int i, juce::String s)
     {
-        const int clampedTrackIndex = juce::jlimit (0, trackCount - 1, trackIndex);
-        const auto requiredKind = getTimelineContentKindForTrackType (contentType);
-
-        return std::none_of (timelineClips.begin(), timelineClips.end(),
-                             [clampedTrackIndex, requiredKind] (const TimelineClipItem& clip)
-                             {
-                                 return clip.trackIndex == clampedTrackIndex
-                                     && clip.kind != requiredKind;
-                             });
+        auto& t = getTrackMixerState (i);
+        t.outputAssignment = s.trim();
+        if (t.outputAssignment.isEmpty()) t.outputAssignment = "Master";
     }
 
-    bool trySetTrackContentType (int trackIndex, TrackMixerState::ContentType contentType)
+    // Track FX slots
+    int getTrackFxSlotCount (int i) const { return (int) getTrackMixerState (i).fxSlots.size(); }
+
+    void addTrackFxSlot (int i)
     {
-        if (! canTrackUseContentType (trackIndex, contentType))
-            return false;
-
-        auto& track = getTrackMixerState (trackIndex);
-        track.contentType = contentType;
-        return true;
+        auto& t = getTrackMixerState (i);
+        if ((int) t.fxSlots.size() < maxFxSlots) t.fxSlots.emplace_back();
     }
 
-    bool canTrackAcceptTimelineKind (int trackIndex, TimelineClipItem::ContentKind kind) const
+    void removeTrackFxSlot (int i, int slot)
     {
-        return getTimelineContentKindForTrackType (getTrackContentType (trackIndex)) == kind;
+        auto& t = getTrackMixerState (i);
+        if ((int) t.fxSlots.size() <= minFxSlots) return;
+        int s = juce::jlimit (0, (int) t.fxSlots.size() - 1, slot);
+        t.fxSlots.erase (t.fxSlots.begin() + s);
     }
 
-    void selectTrack (int trackIndex)
+    TrackMixerState::FxSlotState& getTrackFxSlot (int i, int slot)
     {
-        selectedTrackIndex = juce::jlimit (0, trackCount - 1, trackIndex);
+        auto& t = getTrackMixerState (i);
+        ensureFxSlots (t.fxSlots);
+        return t.fxSlots[juce::jlimit (0, (int) t.fxSlots.size() - 1, slot)];
     }
 
-    void showMasterMixerFocus()
+    const TrackMixerState::FxSlotState& getTrackFxSlot (int i, int slot) const
     {
-        focusedMixerShowsMaster = true;
+        auto& t = getTrackMixerState (i);
+        return t.fxSlots[juce::jlimit (0, (int) t.fxSlots.size() - 1, slot)];
     }
 
-    void showSelectedTrackMixerFocus()
+    void loadTrackPluginIntoFxSlot (int i, int slot, const juce::String& name)
     {
-        focusedMixerShowsMaster = false;
-        selectedTrackIndex = juce::jlimit (0, trackCount - 1, selectedTrackIndex);
+        auto& s = getTrackFxSlot (i, slot);
+        s.hasPlugin = true; s.bypassed = false; s.name = name;
     }
 
-    bool isMasterMixerFocused() const
+    void toggleTrackFxSlotBypassed (int i, int slot)
     {
-        return focusedMixerShowsMaster;
+        auto& s = getTrackFxSlot (i, slot);
+        if (s.hasPlugin) s.bypassed = ! s.bypassed;
     }
 
-    bool isTrackSelected (int trackIndex) const
-    {
-        return juce::jlimit (0, trackCount - 1, selectedTrackIndex) == trackIndex;
-    }
+    void clearTrackFxSlot (int i, int slot) { getTrackFxSlot (i, slot) = {}; }
 
-    bool anyTrackSoloed() const
-    {
-        return std::any_of(trackMixerStates.begin(), trackMixerStates.begin() + trackCount,
-                           [] (const TrackMixerState& track) { return track.soloed; });
-    }
-
-    bool isTrackAudible (int trackIndex) const
-    {
-        const auto& track = getTrackMixerState (trackIndex);
-        if (track.muted)
-            return false;
-
-        return ! anyTrackSoloed() || track.soloed;
-    }
-
-    juce::String getTrackName (int trackIndex) const
-    {
-        const auto& track = getTrackMixerState (trackIndex);
-        return track.name.isNotEmpty() ? track.name : "Track " + juce::String (trackIndex + 1);
-    }
-
-    void setTrackName (int trackIndex, juce::String newName)
-    {
-        auto& track = getTrackMixerState (trackIndex);
-        track.name = newName.trim();
-        if (track.name.isEmpty())
-            track.name = "Track " + juce::String (trackIndex + 1);
-    }
-
-    juce::String getTrackIoAssignment (int trackIndex) const
-    {
-        const auto& track = getTrackMixerState (trackIndex);
-        return track.inputAssignment + " -> " + track.outputAssignment;
-    }
-
-    void setTrackIoAssignment (int trackIndex, juce::String newAssignment)
-    {
-        auto& track = getTrackMixerState (trackIndex);
-        const auto parts = juce::StringArray::fromTokens (newAssignment, "->", "");
-        if (parts.size() >= 2)
-        {
-            setTrackInputAssignment (trackIndex, parts[0].trim());
-            setTrackOutputAssignment (trackIndex, parts[1].trim());
-        }
-    }
-
-    juce::String getTrackInputAssignment (int trackIndex) const
-    {
-        const auto& track = getTrackMixerState (trackIndex);
-        return track.inputAssignment.isNotEmpty() ? track.inputAssignment : "Input channel 1";
-    }
-
-    juce::String getTrackOutputAssignment (int trackIndex) const
-    {
-        const auto& track = getTrackMixerState (trackIndex);
-        return track.outputAssignment.isNotEmpty() ? track.outputAssignment : "Output channel 1";
-    }
-
-    void setTrackInputAssignment (int trackIndex, juce::String newAssignment)
-    {
-        auto& track = getTrackMixerState (trackIndex);
-        track.inputAssignment = newAssignment.trim();
-        if (track.inputAssignment.isEmpty())
-            track.inputAssignment = "Input channel 1";
-    }
-
-    void setTrackOutputAssignment (int trackIndex, juce::String newAssignment)
-    {
-        auto& track = getTrackMixerState (trackIndex);
-        track.outputAssignment = newAssignment.trim();
-        if (track.outputAssignment.isEmpty())
-            track.outputAssignment = "Output channel 1";
-    }
-
-    int getTrackFxSlotCount (int trackIndex) const
-    {
-        return static_cast<int> (getTrackMixerState (trackIndex).fxSlots.size());
-    }
-
-    bool canAddTrackFxSlot (int trackIndex) const
-    {
-        return getTrackFxSlotCount (trackIndex) < getMaxFxSlotCount();
-    }
-
-    bool canRemoveTrackFxSlot (int trackIndex) const
-    {
-        return getTrackFxSlotCount (trackIndex) > getMinFxSlotCount();
-    }
-
-    void addTrackFxSlot (int trackIndex)
-    {
-        auto& track = getTrackMixerState (trackIndex);
-        if (static_cast<int> (track.fxSlots.size()) < getMaxFxSlotCount())
-            track.fxSlots.emplace_back();
-    }
-
-    void removeTrackFxSlot (int trackIndex, int slotIndex)
-    {
-        auto& track = getTrackMixerState (trackIndex);
-        if (static_cast<int> (track.fxSlots.size()) <= getMinFxSlotCount())
-            return;
-
-        const int clampedIndex = juce::jlimit (0, static_cast<int> (track.fxSlots.size()) - 1, slotIndex);
-        track.fxSlots.erase (track.fxSlots.begin() + clampedIndex);
-    }
-
-    TrackMixerState::FxSlotState& getTrackFxSlot (int trackIndex, int slotIndex)
-    {
-        auto& track = getTrackMixerState (trackIndex);
-        ensureFxSlotCount (track.fxSlots);
-        return track.fxSlots[juce::jlimit (0, static_cast<int> (track.fxSlots.size()) - 1, slotIndex)];
-    }
-
-    const TrackMixerState::FxSlotState& getTrackFxSlot (int trackIndex, int slotIndex) const
-    {
-        const auto& track = getTrackMixerState (trackIndex);
-        return track.fxSlots[juce::jlimit (0, static_cast<int> (track.fxSlots.size()) - 1, slotIndex)];
-    }
-
-    void addDummyPluginToTrackFxSlot (int trackIndex, int slotIndex)
-    {
-        auto& slot = getTrackFxSlot (trackIndex, slotIndex);
-        slot.hasPlugin = true;
-        slot.bypassed = false;
-        slot.name = "Dummy FX " + juce::String (slotIndex + 1);
-    }
-
-    void loadTrackPluginIntoFxSlot (int trackIndex, int slotIndex, const juce::String& pluginName)
-    {
-        auto& slot = getTrackFxSlot (trackIndex, slotIndex);
-        slot.hasPlugin = true;
-        slot.bypassed = false;
-        slot.name = pluginName;
-    }
-
-    void toggleTrackFxSlotBypassed (int trackIndex, int slotIndex)
-    {
-        auto& slot = getTrackFxSlot (trackIndex, slotIndex);
-        if (slot.hasPlugin)
-            slot.bypassed = ! slot.bypassed;
-    }
-
-    void clearTrackFxSlot (int trackIndex, int slotIndex)
-    {
-        auto& slot = getTrackFxSlot (trackIndex, slotIndex);
-        slot = {};
-    }
-
-    TrackMixerState::InstrumentSlotState& getTrackInstrumentSlot (int trackIndex)
-    {
-        return getTrackMixerState (trackIndex).instrumentSlot;
-    }
-
-    const TrackMixerState::InstrumentSlotState& getTrackInstrumentSlot (int trackIndex) const
-    {
-        return getTrackMixerState (trackIndex).instrumentSlot;
-    }
-
-    void loadTrackInstrumentPlugin (int trackIndex, const juce::String& pluginName)
-    {
-        auto& slot = getTrackInstrumentSlot (trackIndex);
-        slot.hasPlugin = true;
-        slot.bypassed = false;
-        slot.name = pluginName;
-    }
-
-    void toggleTrackInstrumentBypassed (int trackIndex)
-    {
-        auto& slot = getTrackInstrumentSlot (trackIndex);
-        if (slot.hasPlugin)
-            slot.bypassed = ! slot.bypassed;
-    }
-
-    void clearTrackInstrumentSlot (int trackIndex)
-    {
-        getTrackInstrumentSlot (trackIndex) = {};
-    }
-
-    void toggleMasterMuted()
-    {
-        masterMixerState.muted = ! masterMixerState.muted;
-    }
-
-    void toggleMasterSoloed()
-    {
-        masterMixerState.soloed = ! masterMixerState.soloed;
-    }
-
-    void toggleMasterArmed()
-    {
-        masterMixerState.armed = ! masterMixerState.armed;
-    }
+    // Master
+    void toggleMasterMuted()  { masterMixerState.muted  = ! masterMixerState.muted; }
 
     juce::String getMasterOutputAssignment() const
     {
         return masterOutputAssignment.isNotEmpty() ? masterOutputAssignment : "Output channel 1";
     }
 
-    void setMasterOutputAssignment(juce::String newAssignment)
+    void setMasterOutputAssignment (juce::String s)
     {
-        masterOutputAssignment = newAssignment.trim();
-        if (masterOutputAssignment.isEmpty())
-            masterOutputAssignment = "Output channel 1";
+        masterOutputAssignment = s.trim();
+        if (masterOutputAssignment.isEmpty()) masterOutputAssignment = "Output channel 1";
     }
 
-    int getMasterFxSlotCount() const
-    {
-        return static_cast<int> (masterMixerState.fxSlots.size());
-    }
-
-    bool canAddMasterFxSlot() const
-    {
-        return getMasterFxSlotCount() < getMaxFxSlotCount();
-    }
-
-    bool canRemoveMasterFxSlot() const
-    {
-        return getMasterFxSlotCount() > getMinFxSlotCount();
-    }
+    int getMasterFxSlotCount() const { return (int) masterMixerState.fxSlots.size(); }
 
     void addMasterFxSlot()
     {
-        ensureFxSlotCount (masterMixerState.fxSlots);
-        if (static_cast<int> (masterMixerState.fxSlots.size()) < getMaxFxSlotCount())
+        ensureFxSlots (masterMixerState.fxSlots);
+        if ((int) masterMixerState.fxSlots.size() < maxFxSlots)
             masterMixerState.fxSlots.emplace_back();
     }
 
-    void removeMasterFxSlot (int slotIndex)
+    void removeMasterFxSlot (int slot)
     {
-        ensureFxSlotCount (masterMixerState.fxSlots);
-        if (static_cast<int> (masterMixerState.fxSlots.size()) <= getMinFxSlotCount())
-            return;
-
-        const int clampedIndex = juce::jlimit (0, static_cast<int> (masterMixerState.fxSlots.size()) - 1, slotIndex);
-        masterMixerState.fxSlots.erase (masterMixerState.fxSlots.begin() + clampedIndex);
+        ensureFxSlots (masterMixerState.fxSlots);
+        if ((int) masterMixerState.fxSlots.size() <= minFxSlots) return;
+        int s = juce::jlimit (0, (int) masterMixerState.fxSlots.size() - 1, slot);
+        masterMixerState.fxSlots.erase (masterMixerState.fxSlots.begin() + s);
     }
 
-    TrackMixerState::FxSlotState& getMasterFxSlot (int slotIndex)
+    TrackMixerState::FxSlotState& getMasterFxSlot (int slot)
     {
-        ensureFxSlotCount (masterMixerState.fxSlots);
-        return masterMixerState.fxSlots[juce::jlimit (0, static_cast<int> (masterMixerState.fxSlots.size()) - 1, slotIndex)];
+        ensureFxSlots (masterMixerState.fxSlots);
+        return masterMixerState.fxSlots[juce::jlimit (0, (int) masterMixerState.fxSlots.size() - 1, slot)];
     }
 
-    const TrackMixerState::FxSlotState& getMasterFxSlot (int slotIndex) const
+    const TrackMixerState::FxSlotState& getMasterFxSlot (int slot) const
     {
-        return masterMixerState.fxSlots[juce::jlimit (0, static_cast<int> (masterMixerState.fxSlots.size()) - 1, slotIndex)];
+        return masterMixerState.fxSlots[juce::jlimit (0, (int) masterMixerState.fxSlots.size() - 1, slot)];
     }
 
-    void addDummyPluginToMasterFxSlot (int slotIndex)
+    void loadMasterPluginIntoFxSlot (int slot, const juce::String& name)
     {
-        auto& slot = getMasterFxSlot (slotIndex);
-        slot.hasPlugin = true;
-        slot.bypassed = false;
-        slot.name = "Master FX " + juce::String (slotIndex + 1);
+        auto& s = getMasterFxSlot (slot);
+        s.hasPlugin = true; s.bypassed = false; s.name = name;
     }
 
-    void loadMasterPluginIntoFxSlot (int slotIndex, const juce::String& pluginName)
+    void toggleMasterFxSlotBypassed (int slot)
     {
-        auto& slot = getMasterFxSlot (slotIndex);
-        slot.hasPlugin = true;
-        slot.bypassed = false;
-        slot.name = pluginName;
+        auto& s = getMasterFxSlot (slot);
+        if (s.hasPlugin) s.bypassed = ! s.bypassed;
     }
 
-    void toggleMasterFxSlotBypassed (int slotIndex)
-    {
-        auto& slot = getMasterFxSlot (slotIndex);
-        if (slot.hasPlugin)
-            slot.bypassed = ! slot.bypassed;
-    }
-
-    void clearMasterFxSlot (int slotIndex)
-    {
-        auto& slot = getMasterFxSlot (slotIndex);
-        slot = {};
-    }
-
-    void tick (double dt)
-    {
-        if (transportState == TransportState::playing)
-        {
-            playhead += dt;
-
-            constexpr double visibleLengthSeconds = 10.0;
-            if (playhead > visibleLengthSeconds)
-                playhead = 0.0;
-        }
-    }
+    void clearMasterFxSlot (int slot) { getMasterFxSlot (slot) = {}; }
 
 private:
-    static constexpr int getMinFxSlotCount() { return 1; }
-    static constexpr int getMaxFxSlotCount() { return 2; }
+    static constexpr int minFxSlots = 1;
+    static constexpr int maxFxSlots = 5;
 
-    static void ensureFxSlotCount (std::vector<TrackMixerState::FxSlotState>& slots)
+    static void ensureFxSlots (std::vector<TrackMixerState::FxSlotState>& slots)
     {
-        if (static_cast<int> (slots.size()) < getMinFxSlotCount())
-            slots.resize (getMinFxSlotCount());
-        else if (static_cast<int> (slots.size()) > getMaxFxSlotCount())
-            slots.resize (getMaxFxSlotCount());
+        if ((int) slots.size() < minFxSlots) slots.resize (minFxSlots);
+        else if ((int) slots.size() > maxFxSlots) slots.resize (maxFxSlots);
     }
 
-    void ensureTrackMixerStateCount()
+    void ensureTrackCount()
     {
-        if (trackCount < 1)
-            trackCount = 1;
+        trackCount = juce::jmax (1, trackCount);
+        trackMixerStates.resize (trackCount);
+        trackPatternStates.resize (trackCount);
 
-        if (static_cast<int> (trackMixerStates.size()) < trackCount)
-            trackMixerStates.resize (trackCount);
-        else if (static_cast<int> (trackMixerStates.size()) > trackCount)
-            trackMixerStates.resize (trackCount);
-
-        if (static_cast<int> (trackPatternStates.size()) < trackCount)
-            trackPatternStates.resize (trackCount);
-        else if (static_cast<int> (trackPatternStates.size()) > trackCount)
-            trackPatternStates.resize (trackCount);
-
-        for (auto& track : trackMixerStates)
+        for (int i = 0; i < trackCount; ++i)
         {
-            ensureFxSlotCount (track.fxSlots);
-            if (track.name.isEmpty())
-                track.name = "Track " + juce::String (static_cast<int> (&track - trackMixerStates.data()) + 1);
+            auto& t = trackMixerStates[i];
+            ensureFxSlots (t.fxSlots);
+            if (t.name.isEmpty()) t.name = "Track " + juce::String (i + 1);
         }
 
-        for (auto& pattern : trackPatternStates)
-            if (pattern.name.isEmpty())
-                pattern.name = "Pattern 1";
+        for (auto& p : trackPatternStates)
+            if (p.name.isEmpty()) p.name = "Pattern 1";
 
-        ensureFxSlotCount (masterMixerState.fxSlots);
+        ensureFxSlots (masterMixerState.fxSlots);
         selectedTrackIndex = juce::jlimit (0, trackCount - 1, selectedTrackIndex);
     }
 };

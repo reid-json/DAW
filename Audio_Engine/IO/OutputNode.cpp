@@ -1,11 +1,6 @@
 #include "OutputNode.h"
 #include <cstring>
 
-void OutputNode::prepare(double sr, int blockSize)
-{
-    juce::ignoreUnused(sr, blockSize);
-}
-
 void OutputNode::processOutput(float* const* outputChannels, int numOutputChannels, const float* left, const float* right, int numSamples)
 {
     if (numOutputChannels > 0 && left != nullptr)

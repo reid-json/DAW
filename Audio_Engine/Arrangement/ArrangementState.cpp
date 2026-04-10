@@ -15,6 +15,30 @@ void ArrangementState::initialiseDefaults(int numMixerTracks, int numTimelineTra
         timelineTracks.push_back({ i + 1, "Timeline " + juce::String(i + 1) });
 }
 
+void ArrangementState::loadFromSavedData(std::vector<SourceAsset> savedAssets,
+                                         std::vector<TimelineTrack> savedTracks,
+                                         std::vector<TimelineClipPlacement> savedPlacements,
+                                         std::vector<MixerTrack> savedMixerTracks,
+                                         MasterTrack savedMaster,
+                                         int savedNextAssetId,
+                                         int savedNextPlacementId)
+{
+    assets = std::move(savedAssets);
+    timelineTracks = std::move(savedTracks);
+    timelinePlacements = std::move(savedPlacements);
+    mixerTracks = std::move(savedMixerTracks);
+    masterTrack = savedMaster;
+    nextAssetId = savedNextAssetId;
+    nextPlacementId = savedNextPlacementId;
+
+    recentAssetIds.clear();
+    for (const auto& a : assets)
+        recentAssetIds.push_back(a.assetId);
+
+    activePatternNotesByTrack.clear();
+    lastPatternRenderEndSample = -1;
+}
+
 SourceAsset* ArrangementState::addAsset(const juce::String& name, AssetKind kind, const RecordedClip& clip)
 {
     SourceAsset asset;
@@ -55,67 +79,6 @@ bool ArrangementState::updateAssetClip(int assetId, const RecordedClip& clip)
     return true;
 }
 
-CentralTrackSlot* ArrangementState::createCentralTrackSlot()
-{
-    CentralTrackSlot slot;
-    slot.slotId = nextCentralTrackSlotId++;
-    slot.name = "Central Track " + juce::String(slot.slotId);
-    if (!timelineTracks.empty())
-        slot.timelineTrackId = timelineTracks.front().timelineTrackId;
-
-    centralTrackSlots.push_back(slot);
-    return &centralTrackSlots.back();
-}
-
-bool ArrangementState::assignRecentAssetToCentralTrack(int assetId, int slotId)
-{
-    return assignAssetToCentralTrack(assetId, slotId);
-}
-
-bool ArrangementState::assignAssetToCentralTrack(int assetId, int slotId)
-{
-    auto* asset = findAsset(assetId);
-    auto* slot = const_cast<CentralTrackSlot*>(findCentralTrackSlot(slotId));
-    if (asset == nullptr || slot == nullptr)
-        return false;
-
-    slot->sourceAssetId = assetId;
-    return true;
-}
-
-bool ArrangementState::placeCentralTrackOnTimeline(int slotId, int timelineTrackId, juce::int64 startSample)
-{
-    auto* slot = const_cast<CentralTrackSlot*>(findCentralTrackSlot(slotId));
-    if (slot == nullptr || slot->sourceAssetId < 0 || findTimelineTrack(timelineTrackId) == nullptr)
-        return false;
-
-    slot->timelineTrackId = timelineTrackId;
-
-    auto it = std::find_if(timelinePlacements.begin(), timelinePlacements.end(),
-        [slotId](const TimelineClipPlacement& placement) { return placement.centralTrackSlotId == slotId; });
-
-    if (it == timelinePlacements.end())
-    {
-        TimelineClipPlacement placement;
-        placement.placementId = nextPlacementId++;
-        placement.assetId = slot->sourceAssetId;
-        placement.timelineTrackId = timelineTrackId;
-        placement.startSample = startSample;
-        placement.centralTrackSlotId = slotId;
-        placement.directToMaster = false;
-        timelinePlacements.push_back(placement);
-    }
-    else
-    {
-        it->assetId = slot->sourceAssetId;
-        it->timelineTrackId = timelineTrackId;
-        it->startSample = startSample;
-        it->directToMaster = false;
-    }
-
-    return true;
-}
-
 bool ArrangementState::placeRecentAssetDirectToTimeline(int assetId, int timelineTrackId, juce::int64 startSample)
 {
     auto* asset = findAsset(assetId);
@@ -146,66 +109,10 @@ bool ArrangementState::moveTimelinePlacement(int placementId, int timelineTrackI
 
 bool ArrangementState::removeTimelinePlacement(int placementId)
 {
-    const auto originalSize = timelinePlacements.size();
     auto it = std::remove_if(timelinePlacements.begin(), timelinePlacements.end(),
-        [placementId](const TimelineClipPlacement& placement) { return placement.placementId == placementId; });
-
-    if (it == timelinePlacements.end())
-        return false;
-
+        [placementId](auto& p) { return p.placementId == placementId; });
+    if (it == timelinePlacements.end()) return false;
     timelinePlacements.erase(it, timelinePlacements.end());
-    return timelinePlacements.size() != originalSize;
-}
-
-bool ArrangementState::setCentralTrackMixerTrack(int slotId, int mixerTrackId)
-{
-    auto* slot = const_cast<CentralTrackSlot*>(findCentralTrackSlot(slotId));
-    if (slot == nullptr)
-        return false;
-
-    slot->mixerTrackId = mixerTrackId;
-    return true;
-}
-
-bool ArrangementState::setCentralTrackTimelineTrack(int slotId, int timelineTrackId)
-{
-    auto* slot = const_cast<CentralTrackSlot*>(findCentralTrackSlot(slotId));
-    if (slot == nullptr || findTimelineTrack(timelineTrackId) == nullptr)
-        return false;
-
-    slot->timelineTrackId = timelineTrackId;
-    return true;
-}
-
-bool ArrangementState::setCentralTrackOutputToMaster(int slotId)
-{
-    auto* slot = const_cast<CentralTrackSlot*>(findCentralTrackSlot(slotId));
-    if (slot == nullptr)
-        return false;
-
-    slot->outputTarget = CentralTrackSlot::OutputTarget::master;
-    slot->outputCentralTrackId = -1;
-    return true;
-}
-
-bool ArrangementState::setCentralTrackOutputToTrack(int slotId, int destinationSlotId)
-{
-    auto* slot = const_cast<CentralTrackSlot*>(findCentralTrackSlot(slotId));
-    if (slot == nullptr || findCentralTrackSlot(destinationSlotId) == nullptr || slotId == destinationSlotId)
-        return false;
-
-    slot->outputTarget = CentralTrackSlot::OutputTarget::centralTrack;
-    slot->outputCentralTrackId = destinationSlotId;
-    return true;
-}
-
-bool ArrangementState::setCentralTrackLiveInputArmed(int slotId, bool shouldArm)
-{
-    auto* slot = const_cast<CentralTrackSlot*>(findCentralTrackSlot(slotId));
-    if (slot == nullptr)
-        return false;
-
-    slot->liveInputArmed = shouldArm;
     return true;
 }
 
@@ -215,6 +122,18 @@ void ArrangementState::setPatternTrackRenderer(PatternTrackRenderer renderer)
     activePatternNotesByTrack.clear();
     lastPatternRenderEndSample = -1;
 }
+
+void ArrangementState::setMixerTrackGain(int i, float gain)
+{
+    if (i >= 0 && i < (int) mixerTracks.size()) mixerTracks[(size_t) i].gainLinear = gain;
+}
+
+void ArrangementState::setMixerTrackPan(int i, float pan)
+{
+    if (i >= 0 && i < (int) mixerTracks.size()) mixerTracks[(size_t) i].panLinear = juce::jlimit(-1.0f, 1.0f, pan);
+}
+
+void ArrangementState::setMasterGain(float gain) { masterTrack.gainLinear = gain; }
 
 void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 playbackStartSample) const
 {
@@ -226,6 +145,7 @@ void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 play
 
     std::map<int, juce::MidiBuffer> midiByTrack;
     std::map<int, float> gainByTrack;
+    std::map<int, float> panByTrack;
     std::map<int, double> sampleRateByTrack;
     std::map<int, bool> trackHasPatternFallback;
 
@@ -252,16 +172,16 @@ void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 play
             continue;
 
         float gain = masterTrack.gainLinear;
-        if (!placement.directToMaster && placement.centralTrackSlotId >= 0)
-        {
-            std::vector<int> visitedSlotIds;
-            gain *= resolveRouteGainForSlot(placement.centralTrackSlotId, visitedSlotIds);
-        }
+        const int mixTrackIdx = juce::jmax(0, placement.timelineTrackId - 1);
+        if (mixTrackIdx >= 0 && mixTrackIdx < static_cast<int>(mixerTracks.size()))
+            gain *= mixerTracks[static_cast<size_t>(mixTrackIdx)].gainLinear;
 
         if (asset->kind == AssetKind::pianoRollPattern && !asset->patternNotes.empty())
         {
             const int trackIndex = juce::jmax(0, placement.timelineTrackId - 1);
             gainByTrack.emplace(trackIndex, gain);
+            if (mixTrackIdx >= 0 && mixTrackIdx < static_cast<int>(mixerTracks.size()))
+                panByTrack.emplace(trackIndex, mixerTracks[static_cast<size_t>(mixTrackIdx)].panLinear);
             sampleRateByTrack.emplace(trackIndex, asset->clip.sampleRate > 0.0 ? asset->clip.sampleRate : 44100.0);
 
             auto& midi = midiByTrack[trackIndex];
@@ -303,8 +223,13 @@ void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 play
             continue;
         }
 
-        buffer.addFrom(0, bufferOffset, clip.leftChannel.data() + clipOffset, overlapLength, gain);
-        buffer.addFrom(1, bufferOffset, clip.rightChannel.data() + clipOffset, overlapLength, gain);
+        float trackPan = 0.0f;
+        if (mixTrackIdx >= 0 && mixTrackIdx < static_cast<int>(mixerTracks.size()))
+            trackPan = mixerTracks[static_cast<size_t>(mixTrackIdx)].panLinear;
+        const float gainL = gain * juce::jmin(1.0f, 1.0f - trackPan);
+        const float gainR = gain * juce::jmin(1.0f, 1.0f + trackPan);
+        buffer.addFrom(0, bufferOffset, clip.leftChannel.data() + clipOffset, overlapLength, gainL);
+        buffer.addFrom(1, bufferOffset, clip.rightChannel.data() + clipOffset, overlapLength, gainR);
     }
 
     for (auto& [trackIndex, midi] : midiByTrack)
@@ -319,7 +244,11 @@ void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 play
 
         if (renderedByPlugin)
         {
-            tempBuffer.applyGain(gain);
+            const float pan = panByTrack.count(trackIndex) > 0 ? panByTrack[trackIndex] : 0.0f;
+            const float gL = gain * juce::jmin(1.0f, 1.0f - pan);
+            const float gR = gain * juce::jmin(1.0f, 1.0f + pan);
+            tempBuffer.applyGain(0, 0, tempBuffer.getNumSamples(), gL);
+            tempBuffer.applyGain(1, 0, tempBuffer.getNumSamples(), gR);
             buffer.addFrom(0, 0, tempBuffer, 0, 0, buffer.getNumSamples());
             buffer.addFrom(1, 0, tempBuffer, 1, 0, buffer.getNumSamples());
             trackHasPatternFallback[trackIndex] = false;
@@ -338,11 +267,8 @@ void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 play
             continue;
 
         float gain = masterTrack.gainLinear;
-        if (!placement.directToMaster && placement.centralTrackSlotId >= 0)
-        {
-            std::vector<int> visitedSlotIds;
-            gain *= resolveRouteGainForSlot(placement.centralTrackSlotId, visitedSlotIds);
-        }
+        if (trackIndex >= 0 && trackIndex < static_cast<int>(mixerTracks.size()))
+            gain *= mixerTracks[static_cast<size_t>(trackIndex)].gainLinear;
 
         renderPatternAsset(*asset, placement, buffer, playbackStartSample, gain);
     }
@@ -350,64 +276,28 @@ void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 play
     lastPatternRenderEndSample = blockEndSample;
 }
 
-const SourceAsset* ArrangementState::findAsset(int assetId) const
+const SourceAsset* ArrangementState::findAsset(int id) const
 {
-    auto it = std::find_if(assets.begin(), assets.end(),
-        [assetId](const SourceAsset& asset) { return asset.assetId == assetId; });
+    auto it = std::find_if(assets.begin(), assets.end(), [id](auto& a) { return a.assetId == id; });
     return it != assets.end() ? &(*it) : nullptr;
 }
 
-SourceAsset* ArrangementState::findAsset(int assetId)
+SourceAsset* ArrangementState::findAsset(int id)
 {
-    auto it = std::find_if(assets.begin(), assets.end(),
-        [assetId](const SourceAsset& asset) { return asset.assetId == assetId; });
+    auto it = std::find_if(assets.begin(), assets.end(), [id](auto& a) { return a.assetId == id; });
     return it != assets.end() ? &(*it) : nullptr;
 }
 
-const CentralTrackSlot* ArrangementState::findCentralTrackSlot(int slotId) const
+const TimelineTrack* ArrangementState::findTimelineTrack(int id) const
 {
-    auto it = std::find_if(centralTrackSlots.begin(), centralTrackSlots.end(),
-        [slotId](const CentralTrackSlot& slot) { return slot.slotId == slotId; });
-    return it != centralTrackSlots.end() ? &(*it) : nullptr;
-}
-
-const TimelineTrack* ArrangementState::findTimelineTrack(int timelineTrackId) const
-{
-    auto it = std::find_if(timelineTracks.begin(), timelineTracks.end(),
-        [timelineTrackId](const TimelineTrack& track) { return track.timelineTrackId == timelineTrackId; });
+    auto it = std::find_if(timelineTracks.begin(), timelineTracks.end(), [id](auto& t) { return t.timelineTrackId == id; });
     return it != timelineTracks.end() ? &(*it) : nullptr;
 }
 
-const TimelineClipPlacement* ArrangementState::findTimelinePlacement(int placementId) const
+const TimelineClipPlacement* ArrangementState::findTimelinePlacement(int id) const
 {
-    auto it = std::find_if(timelinePlacements.begin(), timelinePlacements.end(),
-        [placementId](const TimelineClipPlacement& placement) { return placement.placementId == placementId; });
+    auto it = std::find_if(timelinePlacements.begin(), timelinePlacements.end(), [id](auto& p) { return p.placementId == id; });
     return it != timelinePlacements.end() ? &(*it) : nullptr;
-}
-
-float ArrangementState::resolveRouteGainForSlot(int slotId, std::vector<int>& visitedSlotIds) const
-{
-    if (std::find(visitedSlotIds.begin(), visitedSlotIds.end(), slotId) != visitedSlotIds.end())
-        return 1.0f;
-
-    visitedSlotIds.push_back(slotId);
-    const auto* slot = findCentralTrackSlot(slotId);
-    if (slot == nullptr)
-        return 1.0f;
-
-    float gain = 1.0f;
-    if (slot->mixerTrackId > 0)
-    {
-        auto mixerIt = std::find_if(mixerTracks.begin(), mixerTracks.end(),
-            [slot](const MixerTrack& track) { return track.mixerTrackId == slot->mixerTrackId; });
-        if (mixerIt != mixerTracks.end())
-            gain *= mixerIt->gainLinear;
-    }
-
-    if (slot->outputTarget == CentralTrackSlot::OutputTarget::centralTrack && slot->outputCentralTrackId > 0)
-        gain *= resolveRouteGainForSlot(slot->outputCentralTrackId, visitedSlotIds);
-
-    return gain;
 }
 
 void ArrangementState::renderPatternAsset(const SourceAsset& asset,

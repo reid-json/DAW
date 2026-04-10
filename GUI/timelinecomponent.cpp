@@ -40,10 +40,6 @@ void TimelineComponent::paint (juce::Graphics& g)
     g.fillEllipse (playheadX - 4.0f, 2.0f, 8.0f, 8.0f);
 }
 
-void TimelineComponent::resized()
-{
-}
-
 void TimelineComponent::mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails& wheel)
 {
     const float horizontalDelta = std::abs(wheel.deltaX) > 0.0f ? wheel.deltaX : wheel.deltaY;

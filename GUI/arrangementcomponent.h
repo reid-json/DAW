@@ -28,7 +28,7 @@ private:
     static constexpr float clipTopInset = 12.0f;
     static constexpr float clipHeight = 40.0f;
     static constexpr float deleteButtonSize = 18.0f;
-    static constexpr int rowHeight = 64;
+    static constexpr int rowHeight = 92;
     static constexpr int rowGap = 8;
     static constexpr int scrollbarWidth = 10;
     static constexpr int horizontalScrollbarHeight = 10;
@@ -53,7 +53,6 @@ private:
 
     DAWState& state;
     int draggingPlacementId = -1;
-    int scrollOffset = 0;
     bool draggingScrollbar = false;
     bool draggingHorizontalScrollbar = false;
     float scrollbarDragOffset = 0.0f;

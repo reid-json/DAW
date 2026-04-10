@@ -20,7 +20,7 @@ void ArrangementComponent::paint(juce::Graphics& g)
 
     for (int i = 0; i < state.trackCount; ++i)
     {
-        const float y = static_cast<float>(i * (rowHeight + rowGap) - scrollOffset);
+        const float y = static_cast<float>(i * (rowHeight + rowGap) - state.verticalScrollOffset);
         if (y + rowHeight < 0.0f || y > bounds.getHeight())
             continue;
 
@@ -221,7 +221,7 @@ TimelineClipItem* ArrangementComponent::findClipAt(juce::Point<float> point)
 
 juce::Rectangle<float> ArrangementComponent::getClipBounds(const TimelineClipItem& clip) const
 {
-    const float y = static_cast<float>(clip.trackIndex * (rowHeight + rowGap)) + clipTopInset - static_cast<float>(scrollOffset);
+    const float y = static_cast<float>(clip.trackIndex * (rowHeight + rowGap)) + clipTopInset - static_cast<float>(state.verticalScrollOffset);
     const float clipX = clipLeftInset + static_cast<float>(clip.startSeconds * pixelsPerSecond) - static_cast<float>(state.horizontalScrollOffset);
     const float clipWidth = static_cast<float>(clip.lengthSeconds * pixelsPerSecond);
     return { clipX, y, clipWidth, clipHeight };
@@ -253,7 +253,7 @@ int ArrangementComponent::getMaxScroll() const
 
 float ArrangementComponent::toContentY(float y) const
 {
-    return y + static_cast<float>(scrollOffset);
+    return y + static_cast<float>(state.verticalScrollOffset);
 }
 
 juce::Rectangle<float> ArrangementComponent::getScrollbarTrackBounds() const
@@ -269,20 +269,23 @@ juce::Rectangle<float> ArrangementComponent::getScrollbarThumbBounds() const
 
     const float visibleRatio = static_cast<float>(getHeight()) / static_cast<float>(getContentHeight());
     const float thumbHeight = juce::jlimit(28.0f, trackBounds.getHeight(), trackBounds.getHeight() * visibleRatio);
-    const float scrollRatio = static_cast<float>(scrollOffset) / static_cast<float>(getMaxScroll());
+    const float scrollRatio = static_cast<float>(state.verticalScrollOffset) / static_cast<float>(getMaxScroll());
     const float thumbY = trackBounds.getY() + (trackBounds.getHeight() - thumbHeight) * scrollRatio;
     return { trackBounds.getX(), thumbY, trackBounds.getWidth(), thumbHeight };
 }
 
 void ArrangementComponent::setScrollOffset(int newOffset)
 {
-    scrollOffset = juce::jlimit(0, getMaxScroll(), newOffset);
-    repaint();
+    state.verticalScrollOffset = juce::jlimit(0, getMaxScroll(), newOffset);
+    if (auto* top = getTopLevelComponent())
+        top->repaint();
+    else
+        repaint();
 }
 
 void ArrangementComponent::scrollBy(float deltaY)
 {
-    setScrollOffset(scrollOffset + static_cast<int>(std::round(deltaY)));
+    setScrollOffset(state.verticalScrollOffset + static_cast<int>(std::round(deltaY)));
 }
 
 float ArrangementComponent::getMaxHorizontalScroll() const

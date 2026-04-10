@@ -21,32 +21,31 @@ public:
     juce::StringArray getAvailableTrackPlugins() const;
     juce::StringArray getAvailableMasterPlugins() const;
     juce::StringArray getAvailableTrackInstrumentPlugins() const;
-    void setProcessingConfig(double sampleRate, int blockSize);
-    void rescanExternalPlugins();
 
     bool loadTrackPlugin(const juce::String& pluginName, int trackIndex, int slotIndex);
-    bool hasTrackPlugin(int trackIndex, int slotIndex) const;
     bool removeTrackPlugin(int trackIndex, int slotIndex);
-    bool loadTrackInstrumentPlugin(const juce::String& pluginName, int trackIndex);
-    bool hasTrackInstrumentPlugin(int trackIndex) const;
-    bool removeTrackInstrumentPlugin(int trackIndex);
-    void removeTrackPluginSlot(int trackIndex, int slotIndex);
-    void removeTrack(int trackIndex);
-    bool setTrackPluginBypassed(int trackIndex, int slotIndex, bool shouldBeBypassed);
     bool showTrackPluginEditor(int trackIndex, int slotIndex);
-    bool setTrackInstrumentPluginBypassed(int trackIndex, bool shouldBeBypassed);
-    bool showTrackInstrumentPluginEditor(int trackIndex);
-    bool renderTrackInstrument(int trackIndex,
-                               juce::AudioBuffer<float>& buffer,
-                               juce::MidiBuffer& midi,
-                               double sampleRate);
+
+    bool loadTrackInstrumentPlugin(const juce::String& pluginName, int trackIndex);
+    bool renderTrackInstrument(int trackIndex, juce::AudioBuffer<float>& buffer,
+                               juce::MidiBuffer& midi, double sampleRate);
+
+    void removeTrack(int trackIndex);
+
+    juce::String getTrackPluginName(int trackIndex, int slotIndex) const;
+    juce::String getMasterPluginName(int slotIndex) const;
 
     bool loadMasterPlugin(const juce::String& pluginName, int slotIndex);
-    bool hasMasterPlugin(int slotIndex) const;
     bool removeMasterPlugin(int slotIndex);
-    void removeMasterPluginSlot(int slotIndex);
-    bool setMasterPluginBypassed(int slotIndex, bool shouldBeBypassed);
     bool showMasterPluginEditor(int slotIndex);
+
+    void processTrackEffects(int trackIndex, juce::AudioBuffer<float>& buffer);
+    void processMasterEffects(juce::AudioBuffer<float>& buffer);
+    void rescanExternalPlugins();
+
+    bool loadPianoRollInstrument(const juce::String& pluginName);
+    juce::String getPianoRollInstrumentName() const;
+    bool renderPianoRollInstrument(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi, double sampleRate);
 
 private:
     class PluginEditorWindow : public juce::DocumentWindow
@@ -89,7 +88,6 @@ private:
 
     static juce::StringArray getBuiltInPluginNames(PluginRole role);
     juce::StringArray getAvailablePluginsForRole(PluginRole role) const;
-    static void ensureProcessorPrepared(HostedPlugin& hostedPlugin, double sampleRate, int blockSize);
     std::unique_ptr<juce::AudioProcessor> createProcessor(const juce::String& pluginName) const;
     juce::File findExternalPluginsDirectory() const;
     static juce::String makeExternalPluginMenuName(const juce::PluginDescription& description);

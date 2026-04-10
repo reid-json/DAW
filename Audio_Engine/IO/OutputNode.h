@@ -8,7 +8,5 @@ public:
     OutputNode() = default;
     ~OutputNode() = default;
 
-    void prepare(double sampleRate, int blockSize);
-    
     void processOutput(float* const* outputChannels, int numOutputChannels, const float* left, const float* right, int numSamples);
 };

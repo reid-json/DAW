@@ -1,5 +1,5 @@
 #include "MainComponent.h"
-#include <algorithm>
+#include "ProjectFile.h"
 #include <cmath>
 
 namespace
@@ -11,23 +11,16 @@ TimelineClipItem::ContentKind toTimelineContentKind(AssetKind assetKind)
         : TimelineClipItem::ContentKind::recording;
 }
 
-std::vector<PatternNote> toPatternNotes(const DAWState& state, const TrackPatternState& pattern)
+std::vector<PatternNote> toPatternNotes(const TrackPatternState& pattern)
 {
-    std::vector<PatternNote> patternNotes;
-    patternNotes.reserve(pattern.notes.size());
-
-    const auto secondsPerBeat = 60.0 / juce::jmax(1.0, state.tempoBpm);
-    for (const auto& note : pattern.notes)
-    {
-        PatternNote patternNote;
-        patternNote.startSeconds = juce::jmax(0.0, note.startBeat * secondsPerBeat);
-        patternNote.lengthSeconds = juce::jmax(0.01, note.lengthBeats * secondsPerBeat);
-        patternNote.midiNote = note.midiNote;
-        patternNote.velocity = 0.85f;
-        patternNotes.push_back(patternNote);
-    }
-
-    return patternNotes;
+    constexpr double spb = 0.5; // 120 BPM fixed
+    std::vector<PatternNote> out;
+    out.reserve(pattern.notes.size());
+    for (auto& n : pattern.notes)
+        out.push_back({ juce::jmax(0.0, n.startBeat * spb),
+                         juce::jmax(0.01, n.lengthBeats * spb),
+                         n.midiNote, 0.85f });
+    return out;
 }
 }
 
@@ -36,17 +29,31 @@ MainComponent::MainComponent()
     engine.initialise(2, 2);
 
     gui = std::make_unique<GUIComponent>(engine.getDeviceManager());
-    engine.setPatternTrackRenderer([this] (int trackIndex,
+    engine.setPatternTrackRenderer([this] (int /*trackIndex*/,
                                            juce::AudioBuffer<float>& buffer,
                                            juce::MidiBuffer& midi,
                                            double sampleRate)
     {
         return gui != nullptr
-            && gui->getPluginHostManager().renderTrackInstrument(trackIndex, buffer, midi, sampleRate);
+            && gui->getPluginHostManager().renderPianoRollInstrument(buffer, midi, sampleRate);
+    });
+    engine.getIODeviceManager().setFxProcessCallback([this] (juce::AudioBuffer<float>& buffer)
+    {
+        if (gui == nullptr) return;
+        auto& phm = gui->getPluginHostManager();
+        int trackCount = gui->getState().trackCount;
+
+        for (int i = 0; i < trackCount; ++i)
+            phm.processTrackEffects(i, buffer);
+
+        phm.processMasterEffects(buffer);
     });
     gui->onRecordToggleRequested = [this] { handleRecordToggle(); };
     gui->onMonitoringToggleRequested = [this] { handleMonitoringToggle(); };
     gui->onImportAudioRequested = [this] { handleImportAudio(); };
+    gui->onSaveProjectRequested = [this] { handleSaveProject(); };
+    gui->onOpenProjectRequested = [this] { handleOpenProject(); };
+    gui->onExportWavRequested = [this] { handleExportWav(); };
     gui->onPlayRequested = [this] { handlePlay(); };
     gui->onStopRequested = [this] { handleStop(); };
     gui->onPauseRequested = [this] { handlePause(); };
@@ -66,6 +73,14 @@ MainComponent::MainComponent()
     gui->onTimelineClipDeleteRequested = [this] (int placementId)
     {
         handleTimelineClipRemoved(placementId);
+    };
+    gui->onSavePatternRequested = [this] (const std::vector<PianoRoll::Note>& notes)
+    {
+        handleSavePattern(notes);
+    };
+    gui->onPianoRollInstrumentChangeRequested = [this] (const juce::String& name)
+    {
+        handlePianoRollInstrumentChange(name);
     };
 
     addAndMakeVisible(gui.get());
@@ -88,7 +103,52 @@ void MainComponent::resized()
 
 void MainComponent::timerCallback()
 {
+    syncMixerStateToEngine();
     syncStateFromEngine();
+}
+
+void MainComponent::syncMixerStateToEngine()
+{
+    if (gui == nullptr) return;
+
+    const auto& guiState = gui->getState();
+    juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
+    auto& arrangement = engine.getArrangementState();
+
+    float masterGain = guiState.masterMixerState.muted ? 0.0f : guiState.masterMixerState.level;
+    arrangement.setMasterGain(masterGain);
+
+    for (int i = 0; i < guiState.trackCount; ++i)
+    {
+        float gain = resolveRoutedGain(guiState, i, 0);
+        arrangement.setMixerTrackGain(i, gain);
+        arrangement.setMixerTrackPan(i, guiState.getTrackMixerState(i).pan);
+    }
+}
+
+float MainComponent::resolveRoutedGain(const DAWState& dawState, int trackIndex, int depth) const
+{
+    if (depth > 8 || trackIndex < 0 || trackIndex >= dawState.trackCount)
+        return 0.0f;
+
+    const auto& ts = dawState.getTrackMixerState(trackIndex);
+    float gain = ts.muted ? 0.0f : ts.level;
+
+    const auto& output = dawState.getTrackOutputAssignment(trackIndex);
+    if (!output.containsIgnoreCase("Master"))
+    {
+        for (int dest = 0; dest < dawState.trackCount; ++dest)
+        {
+            if (dest == trackIndex) continue;
+            if (dawState.getTrackName(dest) == output)
+            {
+                gain *= resolveRoutedGain(dawState, dest, depth + 1);
+                break;
+            }
+        }
+    }
+
+    return gain;
 }
 
 void MainComponent::syncStateFromEngine()
@@ -123,7 +183,10 @@ void MainComponent::syncStateFromEngine()
             if (const auto* asset = arrangement.findAsset(assetId))
             {
                 if (asset->kind == AssetKind::pianoRollPattern)
+                {
+                    savedPatterns.push_back({ asset->assetId, -1, asset->name, asset->clip.getLengthSeconds() });
                     continue;
+                }
 
                 recentClips.push_back({ asset->assetId, asset->name, asset->clip.getLengthSeconds() });
             }
@@ -150,16 +213,6 @@ void MainComponent::syncStateFromEngine()
     }
 
     auto& state = gui->getState();
-    savedPatterns.reserve(state.trackPatternStates.size());
-    for (int trackIndex = 0; trackIndex < state.trackCount; ++trackIndex)
-    {
-        if (! state.isTrackPatternMode(trackIndex))
-            continue;
-
-        const auto& pattern = state.getTrackPatternState(trackIndex);
-        if (pattern.assetId > 0 && ! pattern.notes.empty())
-            savedPatterns.push_back({ pattern.assetId, trackIndex, state.getTrackName(trackIndex), getPatternLengthSeconds(state, pattern) });
-    }
 
     const auto previousTransportState = state.transportState;
     const auto previousRecordingState = state.isRecording;
@@ -189,7 +242,7 @@ void MainComponent::syncStateFromEngine()
         gui->repaintDynamicViews();
 }
 
-void MainComponent::placeNewestRecentAssetOnNextEmptyTrack()
+void MainComponent::placeRecordingOnArmedTrack()
 {
     if (gui == nullptr)
         return;
@@ -198,36 +251,31 @@ void MainComponent::placeNewestRecentAssetOnNextEmptyTrack()
     if (newestAssetId <= 0)
         return;
 
-    auto& state = gui->getState();
-    int nextTrackIndex = state.trackCount;
-    for (int trackIndex = 0; trackIndex < state.trackCount; ++trackIndex)
-    {
-        const bool isEmpty = std::none_of(state.timelineClips.begin(), state.timelineClips.end(),
-                                          [trackIndex](const TimelineClipItem& clip) { return clip.trackIndex == trackIndex; });
-        if (isEmpty && state.getTrackContentType(trackIndex) == TrackMixerState::ContentType::recording)
-        {
-            nextTrackIndex = trackIndex;
-            break;
-        }
-    }
+    const auto& guiState = gui->getState();
+    const int armedTrack = guiState.getFirstArmedTrackIndex();
+    if (armedTrack < 0)
+        return;
 
-    if (nextTrackIndex >= state.trackCount)
-        nextTrackIndex = state.findNextEmptyTrackIndex();
-
-    engine.placeRecentAssetDirectToTimeline(newestAssetId, nextTrackIndex + 1, 0);
+    engine.placeRecentAssetDirectToTimeline(newestAssetId, armedTrack + 1, 0);
 }
 
 void MainComponent::handleRecordToggle()
 {
     if (!engine.isRecording())
+    {
+        const auto& guiState = gui->getState();
+        if (guiState.getFirstArmedTrackIndex() < 0)
+            return;
+
         engine.startRecording();
+    }
 
     syncStateFromEngine();
 }
 
 void MainComponent::handleMonitoringToggle()
 {
-    engine.setInputMonitoringEnabled(!engine.isInputMonitoringEnabled());
+    engine.setInputMonitoringEnabled(! engine.isInputMonitoringEnabled());
     syncStateFromEngine();
 }
 
@@ -254,32 +302,135 @@ void MainComponent::handleImportAudio()
         });
 }
 
-void MainComponent::handlePlay()
+void MainComponent::handleSaveProject()
 {
-    engine.startPlayback();
-    syncStateFromEngine();
+    projectFileChooser = std::make_unique<juce::FileChooser>(
+        "Save Project", juce::File(), "*.dawproj");
+
+    projectFileChooser->launchAsync(
+        juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
+        [this](const juce::FileChooser& chooser)
+        {
+            auto file = chooser.getResult();
+            if (file != juce::File())
+            {
+                if (!file.hasFileExtension(".dawproj"))
+                    file = file.withFileExtension("dawproj");
+
+                syncTrackPatternsToAssets();
+                juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
+                saveProject(file, gui->getState(), engine.getArrangementState());
+            }
+            projectFileChooser.reset();
+        });
 }
+
+void MainComponent::handleOpenProject()
+{
+    projectFileChooser = std::make_unique<juce::FileChooser>(
+        "Open Project", juce::File(), "*.dawproj");
+
+    projectFileChooser->launchAsync(
+        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [this](const juce::FileChooser& chooser)
+        {
+            auto file = chooser.getResult();
+            if (file.existsAsFile())
+            {
+                engine.stopPlayback();
+                juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
+                loadProject(file, gui->getState(), engine.getArrangementState());
+            }
+            projectFileChooser.reset();
+            syncStateFromEngine();
+        });
+}
+
+void MainComponent::handleExportWav()
+{
+    projectFileChooser = std::make_unique<juce::FileChooser>(
+        "Export as WAV", juce::File(), "*.wav");
+
+    projectFileChooser->launchAsync(
+        juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
+        [this](const juce::FileChooser& chooser)
+        {
+            auto file = chooser.getResult();
+            if (file == juce::File()) { projectFileChooser.reset(); return; }
+
+            if (!file.hasFileExtension(".wav"))
+                file = file.withFileExtension("wav");
+
+            // Find total length of the arrangement
+            juce::int64 totalSamples = 0;
+            {
+                juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
+                const auto& arr = engine.getArrangementState();
+                for (const auto& placement : arr.getTimelinePlacements())
+                {
+                    const auto* asset = arr.findAsset(placement.assetId);
+                    if (asset != nullptr)
+                    {
+                        auto end = placement.startSample + asset->clip.getNumSamples();
+                        if (end > totalSamples) totalSamples = end;
+                    }
+                }
+            }
+
+            if (totalSamples <= 0) { projectFileChooser.reset(); return; }
+
+            double sampleRate = engine.getTimelineSampleRate();
+            juce::AudioBuffer<float> fullBuffer(2, static_cast<int>(totalSamples));
+            fullBuffer.clear();
+
+            // Render the arrangement in blocks
+            constexpr int blockSize = 4096;
+            {
+                juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
+                const auto& arr = engine.getArrangementState();
+                for (juce::int64 pos = 0; pos < totalSamples; pos += blockSize)
+                {
+                    int thisBlock = static_cast<int>(juce::jmin(static_cast<juce::int64>(blockSize),
+                                                                totalSamples - pos));
+                    juce::AudioBuffer<float> block(2, thisBlock);
+                    block.clear();
+                    arr.render(block, pos);
+
+                    for (int ch = 0; ch < 2; ++ch)
+                        fullBuffer.copyFrom(ch, static_cast<int>(pos), block, ch, 0, thisBlock);
+                }
+            }
+
+            // Write WAV file
+            file.deleteFile();
+            auto stream = std::unique_ptr<juce::FileOutputStream>(file.createOutputStream());
+            if (stream != nullptr)
+            {
+                juce::WavAudioFormat wav;
+                auto* writer = wav.createWriterFor(stream.get(), sampleRate, 2, 16, {}, 0);
+                if (writer != nullptr)
+                {
+                    stream.release(); // writer takes ownership of the stream
+                    writer->writeFromAudioSampleBuffer(fullBuffer, 0, fullBuffer.getNumSamples());
+                    delete writer;
+                }
+            }
+
+            projectFileChooser.reset();
+        });
+}
+
+void MainComponent::handlePlay()    { engine.startPlayback();        syncStateFromEngine(); }
+void MainComponent::handlePause()   { engine.togglePlaybackPause();  syncStateFromEngine(); }
+void MainComponent::handleRestart() { engine.stopPlayback();         syncStateFromEngine(); }
 
 void MainComponent::handleStop()
 {
     if (engine.isRecording())
     {
         engine.stopRecording();
-        placeNewestRecentAssetOnNextEmptyTrack();
+        placeRecordingOnArmedTrack();
     }
-
-    engine.stopPlayback();
-    syncStateFromEngine();
-}
-
-void MainComponent::handlePause()
-{
-    engine.togglePlaybackPause();
-    syncStateFromEngine();
-}
-
-void MainComponent::handleRestart()
-{
     engine.stopPlayback();
     syncStateFromEngine();
 }
@@ -289,10 +440,6 @@ void MainComponent::handleRecentClipDropped(int assetId, int trackIndex, double 
     const auto& arrangement = engine.getArrangementState();
     const auto* asset = arrangement.findAsset(assetId);
     if (asset == nullptr)
-        return;
-
-    const auto& state = gui->getState();
-    if (! state.canTrackAcceptTimelineKind(trackIndex, toTimelineContentKind(asset->kind)))
         return;
 
     const auto sampleRate = engine.getTimelineSampleRate();
@@ -316,7 +463,7 @@ void MainComponent::handleAssetRenamed(int assetId, const juce::String& newName)
         {
             state.setTrackName(trackIndex, trimmedName);
             state.setTrackPatternName(trackIndex, trimmedName);
-            engine.updatePatternAsset(assetId, trimmedName, getPatternLengthSeconds(state, pattern), toPatternNotes(state, pattern));
+            engine.updatePatternAsset(assetId, trimmedName, getPatternLengthSeconds(pattern), toPatternNotes(pattern));
             syncStateFromEngine();
             return;
         }
@@ -335,9 +482,6 @@ void MainComponent::syncTrackPatternsToAssets()
 
     for (int trackIndex = 0; trackIndex < state.trackCount; ++trackIndex)
     {
-        if (! state.isTrackPatternMode(trackIndex))
-            continue;
-
         auto& pattern = state.getTrackPatternState(trackIndex);
 
         if (pattern.notes.empty())
@@ -345,8 +489,8 @@ void MainComponent::syncTrackPatternsToAssets()
 
         const auto patternName = state.getTrackName(trackIndex);
         state.setTrackPatternName(trackIndex, patternName);
-        const auto lengthSeconds = getPatternLengthSeconds(state, pattern);
-        auto patternNotes = toPatternNotes(state, pattern);
+        const auto lengthSeconds = getPatternLengthSeconds(pattern);
+        auto patternNotes = toPatternNotes(pattern);
 
         if (pattern.assetId <= 0)
             pattern.assetId = engine.createPatternAsset(patternName, lengthSeconds, std::move(patternNotes));
@@ -355,15 +499,12 @@ void MainComponent::syncTrackPatternsToAssets()
     }
 }
 
-double MainComponent::getPatternLengthSeconds(const DAWState& state, const TrackPatternState& pattern)
+double MainComponent::getPatternLengthSeconds(const TrackPatternState& pattern)
 {
     double endBeat = 1.0;
-
-    for (const auto& note : pattern.notes)
-        endBeat = juce::jmax(endBeat, note.startBeat + note.lengthBeats);
-
-    const auto secondsPerBeat = 60.0 / juce::jmax(1.0, state.tempoBpm);
-    return juce::jmax(0.25, endBeat * secondsPerBeat);
+    for (auto& n : pattern.notes)
+        endBeat = juce::jmax(endBeat, n.startBeat + n.lengthBeats);
+    return juce::jmax(0.25, endBeat * 0.5); // 120 BPM fixed
 }
 
 void MainComponent::handleTimelineClipMoved(int placementId, int trackIndex, double startSeconds)
@@ -372,10 +513,6 @@ void MainComponent::handleTimelineClipMoved(int placementId, int trackIndex, dou
     const auto* placement = arrangement.findTimelinePlacement(placementId);
     const auto* asset = placement != nullptr ? arrangement.findAsset(placement->assetId) : nullptr;
     if (asset == nullptr)
-        return;
-
-    const auto& state = gui->getState();
-    if (! state.canTrackAcceptTimelineKind(trackIndex, toTimelineContentKind(asset->kind)))
         return;
 
     const auto sampleRate = engine.getTimelineSampleRate();
@@ -391,8 +528,37 @@ void MainComponent::handleTimelineClipRemoved(int placementId)
     syncStateFromEngine();
 }
 
-int MainComponent::getNewestRecentAssetId() const
+void MainComponent::handleSavePattern(const std::vector<PianoRoll::Note>& pianoNotes)
 {
-    const auto& recent = engine.getArrangementState().getRecentAssetIds();
-    return recent.empty() ? -1 : recent.back();
+    if (pianoNotes.empty()) return;
+
+    // Convert piano roll notes to engine PatternNotes
+    constexpr double spb = 0.5; // 120 BPM
+    std::vector<PatternNote> patternNotes;
+    double endBeat = 1.0;
+    for (auto& n : pianoNotes)
+    {
+        patternNotes.push_back({ juce::jmax(0.0, n.startBeat * spb),
+                                  juce::jmax(0.01, n.lengthBeats * spb),
+                                  n.midiNote, 0.85f });
+        endBeat = juce::jmax(endBeat, n.startBeat + n.lengthBeats);
+    }
+
+    double lengthSeconds = juce::jmax(0.25, endBeat * spb);
+    juce::String name = "Pattern " + juce::String((int) gui->getState().savedPatterns.size() + 1);
+
+    juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
+    engine.createPatternAsset(name, lengthSeconds, std::move(patternNotes));
+    syncStateFromEngine();
+}
+
+void MainComponent::handlePianoRollInstrumentChange(const juce::String& pluginName)
+{
+    juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
+    gui->getPluginHostManager().loadPianoRollInstrument(pluginName);
+}
+
+int MainComponent::getNewestRecentAssetId() const {
+    auto& ids = engine.getArrangementState().getRecentAssetIds();
+    return ids.empty() ? -1 : ids.back();
 }

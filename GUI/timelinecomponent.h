@@ -9,7 +9,6 @@ public:
     explicit TimelineComponent (DAWState& stateIn);
 
     void paint (juce::Graphics& g) override;
-    void resized() override;
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
 
 private:

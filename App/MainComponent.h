@@ -18,10 +18,15 @@ public:
 private:
     void timerCallback() override;
     void syncStateFromEngine();
-    void placeNewestRecentAssetOnNextEmptyTrack();
+    void syncMixerStateToEngine();
+    float resolveRoutedGain(const DAWState& dawState, int trackIndex, int depth) const;
+    void placeRecordingOnArmedTrack();
     void handleRecordToggle();
     void handleMonitoringToggle();
     void handleImportAudio();
+    void handleSaveProject();
+    void handleOpenProject();
+    void handleExportWav();
     void handlePlay();
     void handleStop();
     void handlePause();
@@ -29,12 +34,15 @@ private:
     void handleRecentClipDropped(int assetId, int trackIndex, double startSeconds);
     void handleAssetRenamed(int assetId, const juce::String& newName);
     void syncTrackPatternsToAssets();
-    static double getPatternLengthSeconds(const DAWState& state, const TrackPatternState& pattern);
+    static double getPatternLengthSeconds(const TrackPatternState& pattern);
     void handleTimelineClipMoved(int placementId, int trackIndex, double startSeconds);
     void handleTimelineClipRemoved(int placementId);
+    void handleSavePattern(const std::vector<PianoRoll::Note>& notes);
+    void handlePianoRollInstrumentChange(const juce::String& pluginName);
     int getNewestRecentAssetId() const;
 
     std::unique_ptr<GUIComponent> gui;
     AudioEngine engine;
     std::unique_ptr<juce::FileChooser> audioFileChooser;
+    std::unique_ptr<juce::FileChooser> projectFileChooser;
 };

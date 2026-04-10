@@ -1,5 +1,4 @@
 add_library(Plugin_Hosting STATIC
-    hosting.cpp
     pluginhostmanager.cpp
     pluginhostmanager.h
 )

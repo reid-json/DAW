@@ -36,7 +36,6 @@ private:
     std::optional<ItemRef> getItemAt(juce::Point<float> point) const;
     int getContentHeight() const;
     int getMaxScroll() const;
-    int toContentY(float y) const;
     juce::Rectangle<float> getScrollbarTrackBounds() const;
     juce::Rectangle<float> getScrollbarThumbBounds() const;
     void setScrollOffset(int newOffset);
