@@ -6,11 +6,10 @@
 #include "../IO/DeviceManager.h"
 #include "../Recording/PlaybackManager.h"
 #include "../Recording/RecordingManager.h"
-#include "../Tracks/TrackInputRouter.h"
-#include <memory>
+#include "../Tracks/RecordedClip.h"
 #include <vector>
 
-class AudioEngine : public juce::MidiInputCallback
+class AudioEngine
 {
 public:
     AudioEngine();
@@ -19,12 +18,8 @@ public:
     void initialise(int inputChannels, int outputChannels);
     void shutdown();
 
-    void handleIncomingMidiMessage(juce::MidiInput* source, const juce::MidiMessage& message) override;
-
-    juce::MidiMessageCollector& getMidiCollector() { return ioDeviceManager.getMidiCollector(); }
     juce::AudioDeviceManager& getDeviceManager() { return deviceManager; }
-
-    void sendDiscoveryHandshake(juce::MidiOutput* output);
+    DeviceManager& getIODeviceManager() { return ioDeviceManager; }
 
     bool startRecording();
     bool stopRecording();
@@ -36,40 +31,32 @@ public:
     void stopPlayback();
     bool isPlaying() const { return playbackManager.isPlaying(); }
     bool isPlaybackPaused() const { return playbackManager.isPaused(); }
-    double getCurrentPlaybackPositionSeconds() const { return playbackManager.getCurrentPositionSeconds(); }
     double getCurrentTransportPositionSeconds() const;
     double getTimelineSampleRate() const;
 
     void setInputMonitoringEnabled(bool shouldMonitor);
     bool isInputMonitoringEnabled() const { return inputMonitoringEnabled; }
 
-    CentralTrackSlot* addCentralTrackSlot();
-    bool assignRecentAssetToCentralTrack(int assetId, int slotId);
-    bool placeCentralTrackOnTimeline(int slotId, int timelineTrackId);
-    bool placeRecentAssetDirectToTimeline(int assetId, int timelineTrackId);
-    bool placeRecentAssetDirectToTimeline(int assetId, int timelineTrackId, juce::int64 startSample);
+    bool placeRecentAssetDirectToTimeline(int assetId, int timelineTrackId, juce::int64 startSample = 0);
     bool moveTimelinePlacement(int placementId, int timelineTrackId, juce::int64 startSample);
     bool removeTimelinePlacement(int placementId);
-    bool setCentralTrackMixerTrack(int slotId, int mixerTrackId);
-    bool setCentralTrackTimelineTrack(int slotId, int timelineTrackId);
-    bool setCentralTrackOutputToMaster(int slotId);
-    bool setCentralTrackOutputToTrack(int slotId, int destinationSlotId);
-    bool setCentralTrackLiveInputArmed(int slotId, bool shouldArm);
 
     int importAudioFileAsRecentAsset(const juce::File& file);
-    int createMidiPatternAsset();
-    int createLiveInputAsset(const juce::String& name);
+    int createPatternAsset(const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes = {});
+    bool updatePatternAsset(int assetId, const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes = {});
+    bool renameAsset(int assetId, const juce::String& newName);
+    void setPatternTrackRenderer(ArrangementState::PatternTrackRenderer renderer);
 
     const ArrangementState& getArrangementState() const { return arrangementState; }
+    ArrangementState& getArrangementState() { return arrangementState; }
 
 private:
+    RecordedClip makePatternClip(const juce::String& name, double lengthSeconds) const;
+
     juce::AudioDeviceManager deviceManager;
     DeviceManager ioDeviceManager;
     ArrangementState arrangementState;
     PlaybackManager playbackManager;
     RecordingManager recordingManager;
     bool inputMonitoringEnabled = false;
-
-    std::vector<std::unique_ptr<juce::MidiInput>> activeMidiInputs;
-    std::vector<std::unique_ptr<juce::MidiOutput>> activeMidiOutputs;
 };

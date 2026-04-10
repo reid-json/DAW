@@ -18,18 +18,37 @@ namespace jive
     {
     }
 
-    void LookAndFeel::drawScrollbar(juce::Graphics& /* g */,
+    void LookAndFeel::drawScrollbar(juce::Graphics& g,
                                     juce::ScrollBar& /* scrollbar */,
-                                    int /* x */,
-                                    int /* y */,
-                                    int /* width */,
-                                    int /* height */,
-                                    bool /* isScrollbarVertical */,
-                                    int /* thumbStartPosition */,
-                                    int /* thumbSize */,
-                                    bool /* isMouseOver */,
-                                    bool /* isMouseDown */)
+                                    int x,
+                                    int y,
+                                    int width,
+                                    int height,
+                                    bool isScrollbarVertical,
+                                    int thumbStartPosition,
+                                    int thumbSize,
+                                    bool isMouseOver,
+                                    bool isMouseDown)
     {
+        auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat();
+
+        g.setColour (juce::Colour (0x1cffffff));
+        g.fillRoundedRectangle (bounds.reduced (1.0f), 4.0f);
+
+        juce::Rectangle<float> thumbBounds;
+        if (isScrollbarVertical)
+            thumbBounds = { static_cast<float> (x + 2), static_cast<float> (thumbStartPosition), static_cast<float> (width - 4), static_cast<float> (thumbSize) };
+        else
+            thumbBounds = { static_cast<float> (thumbStartPosition), static_cast<float> (y + 2), static_cast<float> (thumbSize), static_cast<float> (height - 4) };
+
+        auto thumbColour = juce::Colour (0xff4c88ff);
+        if (isMouseDown)
+            thumbColour = thumbColour.brighter (0.2f);
+        else if (isMouseOver)
+            thumbColour = thumbColour.withMultipliedBrightness (1.1f);
+
+        g.setColour (thumbColour.withAlpha (0.9f));
+        g.fillRoundedRectangle (thumbBounds, 4.0f);
     }
 
     juce::ImageEffectFilter* LookAndFeel::getScrollbarEffect()
@@ -39,12 +58,12 @@ namespace jive
 
     int LookAndFeel::getMinimumScrollbarThumbSize(juce::ScrollBar&)
     {
-        return 0;
+        return 24;
     }
 
     int LookAndFeel::getDefaultScrollbarWidth()
     {
-        return 0;
+        return 12;
     }
 
     int LookAndFeel::getScrollbarButtonSize(juce::ScrollBar&)

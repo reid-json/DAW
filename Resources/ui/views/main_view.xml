@@ -15,33 +15,16 @@
              flex-grow="0"
              flex-shrink="0"
              min-width="0"
-             min-height="96"
+             min-height="88"
              padding="10"
              row-gap="8">
-
-    <Component id="headerTopRow"
-               display="flex"
-               flex-direction="row"
-               align-items="center"
-               min-width="0"
-               min-height="28">
-
-      <Component flex-grow="1"/>
-
-      <Button id="monitorBtn"
-              class="btn btn-monitor-off"
-              width="124"
-              height="28">
-        <Text id="monitorBtnLabel" text="Monitor Off"/>
-      </Button>
-    </Component>
 
     <Component id="headerMainRow"
                display="flex"
                flex-direction="row"
                align-items="center"
                min-width="0"
-               min-height="40"
+               min-height="52"
                row-gap="8"
                column-gap="8">
 
@@ -51,49 +34,52 @@
         <Text id="fileBtnLabel" text="File"/>
       </Button>
 
-      <Button id="restartBtn"
-              class="btn"
-              width="80">
-        <Text id="restartBtnLabel" text="Restart"/>
-      </Button>
+      <Component flex-grow="1"/>
 
-      <Button id="stopBtn"
-              class="btn"
-              width="72">
-        <Text id="stopBtnLabel" text="Stop"/>
-      </Button>
+      <Component id="transportGroup"
+                 display="flex"
+                 flex-direction="row"
+                 align-items="center"
+                 justify-content="center"
+                 column-gap="8">
+        <Button id="restartBtn"
+                class="btn"
+                width="80">
+          <Text id="restartBtnLabel" text="Restart"/>
+        </Button>
 
-      <Button id="playBtn"
-              class="btn btn-primary"
-              width="72">
-        <Text id="playBtnLabel" text="Play"/>
-      </Button>
+        <Button id="playBtn"
+                class="btn btn-primary"
+                width="72">
+          <Text id="playBtnLabel" text="Play"/>
+        </Button>
 
-      <Button id="pauseBtn"
-              class="btn"
-              width="72">
-        <Text id="pauseBtnLabel" text="Pause"/>
-      </Button>
+        <Button id="pauseBtn"
+                class="btn"
+                width="72">
+          <Text id="pauseBtnLabel" text="Pause"/>
+        </Button>
 
-      <Button id="recordBtn"
-              class="btn btn-record"
-              width="90">
-        <Text id="recordBtnLabel" text="Record"/>
-      </Button>
+        <Button id="recordBtn"
+                class="btn btn-record"
+                width="90">
+          <Text id="recordBtnLabel" text="Record"/>
+        </Button>
 
-      <Button id="pianoRollBtn"
-              class="btn"
-              width="96">
-        <Text id="pianoRollBtnLabel" text="Piano Roll"/>
-      </Button>
+        <Button id="pianoRollBtn"
+                class="btn"
+                width="96">
+          <Text id="pianoRollBtnLabel" text="Piano Roll"/>
+        </Button>
+      </Component>
+
+      <Component flex-grow="1"/>
 
       <Button id="settingsBtn"
               class="btn"
               width="88">
         <Text id="settingsBtnLabel" text="Settings"/>
       </Button>
-
-      <Component flex-grow="1"/>
     </Component>
   </Component>
 
@@ -104,40 +90,71 @@
              min-width="0"
              min-height="0">
 
-    <Component id="sidebarContent"
-               class="sidebar"
+    <Component id="workspaceContent"
+               class="workspace"
                display="flex"
                flex-direction="column"
-               flex-grow="0"
-               flex-shrink="0"
-               width="240"
-               min-width="180"
-               max-width="420"
-               padding="10"
-               row-gap="10">
+               align-items="stretch"
+               flex-grow="1"
+               min-width="0"
+               min-height="0"
+               padding="0"
+               row-gap="0">
 
-      <Button id="newTrackBtn"
-              class="btn"
-              width="140"
-              height="32">
-        <Text id="newTrackBtnLabel" text="New Track (5)"/>
-      </Button>
-
-      <Component id="trackList"
+      <Component id="trackArea"
                  display="flex"
-                 flex-direction="column"
-                 row-gap="8"
+                 flex-direction="row"
+                 align-self="stretch"
                  flex-grow="1"
                  min-width="0"
                  min-height="0">
-      </Component>
-    </Component>
 
-    <Component id="sidebarResizer"
-               class="sidebar-resizer"
-               width="10"
-               flex-grow="0"
-               flex-shrink="0"/>
+        <!-- Mixer strips: master row 0, then track rows -->
+        <TrackListView id="trackList"
+                       min-width="0"
+                       min-height="0"/>
+
+        <!-- Timeline ruler + arrangement stacked vertically -->
+        <Component id="timelineArrangementStack"
+                   display="flex"
+                   flex-direction="column"
+                   flex-grow="1"
+                   min-width="0"
+                   min-height="0">
+
+          <Component id="timelinePanel"
+                     class="panel"
+                     display="flex"
+                     flex-direction="column"
+                     align-self="stretch"
+                     min-width="0"
+                     min-height="0"
+                     padding="8">
+            <TimelineView id="timelineView"
+                          flex-grow="1"
+                          min-width="0"
+                          min-height="0"/>
+          </Component>
+
+          <Component id="arrangementPanel"
+                     class="panel"
+                     display="flex"
+                     flex-direction="column"
+                     align-self="stretch"
+                     flex-grow="1"
+                     min-width="0"
+                     min-height="0"
+                     padding="0">
+            <ArrangementView id="arrangementView"
+                             flex-grow="1"
+                             min-width="0"
+                             min-height="0"/>
+          </Component>
+        </Component>
+      </Component>
+
+      <!-- Right sidebar: clip browser -->
+    </Component>
 
     <Component id="clipSidebarContent"
                class="sidebar clipSidebar"
@@ -152,25 +169,10 @@
                padding="10"
                row-gap="10">
 
-      <Button id="toggleClipSidebarBtn"
-              class="btn clipToggleBtn"
-              width="28"
-              height="32">
-        <Text id="toggleClipSidebarBtnLabel" text="&lt;"/>
-      </Button>
-
-      <Component id="clipBrowserHeader"
-                 display="flex"
-                 flex-direction="column"
-                 align-self="stretch"
-                 row-gap="4">
-        <Text id="clipBrowserTitle"
-              class="label"
-              text="Recorded Clips"/>
-        <Text id="clipBrowserSubTitle"
-              class="secondary-label"
-              text="Recent recordings"/>
-      </Component>
+      <Text id="clipBrowserTitle"
+            class="label"
+            align-self="stretch"
+            text="Saved Clips &amp; Patterns"/>
 
       <Component id="clipSidebarSpacer"
                  height="4"/>
@@ -180,43 +182,7 @@
                        flex-grow="1"
                        min-width="0"
                        min-height="0"/>
-    </Component>
 
-    <Component id="workspaceContent"
-               class="workspace"
-               display="flex"
-               flex-direction="column"
-               flex-grow="1"
-               min-width="0"
-               min-height="0"
-               padding="12"
-               row-gap="12">
-
-      <Component id="timelinePanel"
-                 class="panel"
-                 display="flex"
-                 flex-direction="column"
-                 height="90"
-                 padding="8">
-        <TimelineView id="timelineView"
-                      flex-grow="1"
-                      min-width="0"
-                      min-height="0"/>
-      </Component>
-
-      <Component id="arrangementPanel"
-                 class="panel"
-                 display="flex"
-                 flex-direction="column"
-                 flex-grow="1"
-                 min-width="0"
-                 min-height="0"
-                 padding="16">
-        <ArrangementView id="arrangementView"
-                         flex-grow="1"
-                         min-width="0"
-                         min-height="0"/>
-      </Component>
     </Component>
   </Component>
 </Component>

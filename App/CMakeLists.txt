@@ -1,5 +1,7 @@
 juce_add_gui_app(DAW
     PRODUCT_NAME "DAW"
+    ICON_BIG "${CMAKE_SOURCE_DIR}/Resources/ui/sprites/chroma_logo.png"
+    ICON_SMALL "${CMAKE_SOURCE_DIR}/Resources/ui/sprites/chroma_logo.png"
 )
 
 
@@ -8,8 +10,8 @@ target_sources(DAW PRIVATE
     Main.cpp
     MainComponent.cpp
     MainComponent.h
-    App.cpp
-    App.h
+    ProjectFile.cpp
+    ProjectFile.h
 )
 
 target_link_libraries(DAW PRIVATE

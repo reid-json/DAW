@@ -1,5 +1,7 @@
 #pragma once
 
+#include <map>
+
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <jive_layouts/jive_layouts.h>
@@ -7,9 +9,11 @@
 #include "dawstate.h"
 #include "timelinecomponent.h"
 #include "arrangementcomponent.h"
+#include "tracklistcomponent.h"
 #include "recentclipscomponent.h"
 #include "pianoRoll.h"
 #include "settingswindow.h"
+#include "../Plugin_Hosting/pluginhostmanager.h"
 
 class GUIComponent : public juce::Component,
                      public juce::DragAndDropContainer
@@ -22,69 +26,55 @@ public:
 
     DAWState& getState() noexcept                     { return state; }
     const DAWState& getState() const noexcept         { return state; }
+    PluginHostManager& getPluginHostManager() noexcept { return pluginHostManager; }
     void refreshExternalState(bool shouldRefreshControls, bool shouldRebuildTrackList);
     void repaintDynamicViews();
-    juce::ValueTree getUITree() const                 { return uiTree; }
-    juce::Component* getRenderedRootComponent() const noexcept
-    {
-        return root != nullptr ? root->getComponent().get() : nullptr;
-    }
 
     std::function<void()> onRecordToggleRequested;
     std::function<void()> onMonitoringToggleRequested;
     std::function<void()> onImportAudioRequested;
+    std::function<void()> onSaveProjectRequested;
+    std::function<void()> onOpenProjectRequested;
+    std::function<void()> onExportWavRequested;
     std::function<void()> onPlayRequested;
     std::function<void()> onStopRequested;
     std::function<void()> onPauseRequested;
     std::function<void()> onRestartRequested;
     std::function<void(int assetId, int trackIndex, double startSeconds)> onRecentClipDropped;
+    std::function<void(int assetId, const juce::String& newName)> onAssetRenameRequested;
     std::function<void(int placementId, int trackIndex, double startSeconds)> onTimelineClipMoved;
     std::function<void(int placementId)> onTimelineClipDeleteRequested;
+    std::function<void(const std::vector<PianoRoll::Note>&)> onSavePatternRequested;
+    std::function<void(const juce::String&)> onPianoRollInstrumentChangeRequested;
 
 private:
     jive::Interpreter viewInterpreter;
+    jive::LookAndFeel lookAndFeel;
     std::unique_ptr<jive::GuiItem> root;
     juce::ValueTree uiTree;
     juce::var stylesheet;
+    std::map<juce::String, juce::var> spriteAssets;
 
     DAWState state;
+    PluginHostManager pluginHostManager;
     TimelineComponent* timelineComponent = nullptr;
     ArrangementComponent* arrangementComponent = nullptr;
+    TrackListComponent* trackListComponent = nullptr;
     RecentClipsComponent* recentClipsComponent = nullptr;
     std::unique_ptr<PianoRollWindow> pianoRollWindow;
     std::unique_ptr<SettingsWindow> settingsWindow;
 
     juce::AudioDeviceManager& deviceManager;
 
-    bool draggingSidebar = false;
-    int dragStartScreenX = 0;
-    int sidebarStartWidth = 240;
-
-    class SidebarResizerListener : public juce::MouseListener
-    {
-    public:
-        explicit SidebarResizerListener (GUIComponent& ownerIn) : owner (ownerIn) {}
-
-        void mouseDown (const juce::MouseEvent& e) override;
-        void mouseDrag (const juce::MouseEvent& e) override;
-        void mouseUp   (const juce::MouseEvent& e) override;
-
-    private:
-        GUIComponent& owner;
-    };
-
-    std::unique_ptr<SidebarResizerListener> resizerListener;
-
     static jive::GuiItem* findGuiItemById (jive::GuiItem& node, const juce::Identifier& id);
-    static int getIntProperty (const juce::ValueTree& v, const juce::Identifier& key, int fallback);
 
     void registerCustomComponentTypes();
-    void setSidebarWidth (int newWidth);
+    void applyManualBodyLayout();
+    void followTimelinePlayhead();
     void installCallbacks();
-    void bindDynamicTrackButtons();
     void refreshFromState();
-    void rebuildTrackList();
     void openSettingsWindow();
+    juce::StringArray getAvailableTrackInputs() const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GUIComponent)
 };

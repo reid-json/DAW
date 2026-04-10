@@ -60,25 +60,6 @@ void AudioEngine::initialise(int inputChannels, int outputChannels)
         playbackManager.prepare(device->getCurrentSampleRate());
     }
 
-    activeMidiInputs.clear();
-    for (const auto& devInfo : juce::MidiInput::getAvailableDevices())
-    {
-        if (auto input = juce::MidiInput::openDevice(devInfo.identifier, this))
-        {
-            input->start();
-            activeMidiInputs.push_back(std::move(input));
-        }
-    }
-
-    activeMidiOutputs.clear();
-    for (const auto& devInfo : juce::MidiOutput::getAvailableDevices())
-    {
-        if (auto output = juce::MidiOutput::openDevice(devInfo.identifier))
-        {
-            sendDiscoveryHandshake(output.get());
-            activeMidiOutputs.push_back(std::move(output));
-        }
-    }
 }
 
 void AudioEngine::shutdown()
@@ -86,42 +67,8 @@ void AudioEngine::shutdown()
     stopRecording();
     stopPlayback();
 
-    for (auto& input : activeMidiInputs)
-        input->stop();
-
-    activeMidiInputs.clear();
-    activeMidiOutputs.clear();
     ioDeviceManager.shutdown();
     deviceManager.closeAudioDevice();
-}
-
-void AudioEngine::handleIncomingMidiMessage(juce::MidiInput* source, const juce::MidiMessage& message)
-{
-    juce::ignoreUnused(source);
-
-    if (message.getChannel() == 16)
-        return;
-
-    if (!message.isNoteOn() && !message.isNoteOff() && !message.isController() && !message.isPitchWheel())
-        return;
-
-    auto msg = message;
-
-    msg.setTimeStamp(0);
-    ioDeviceManager.getMidiCollector().addMessageToQueue(msg);
-}
-
-void AudioEngine::sendDiscoveryHandshake(juce::MidiOutput* output)
-{
-    if (output == nullptr)
-        return;
-
-    const auto name = output->getName();
-    if (name.containsIgnoreCase("Launchkey") || name.containsIgnoreCase("Novation"))
-    {
-        juce::MidiMessage handshake = juce::MidiMessage::noteOn(16, 12, static_cast<juce::uint8>(127));
-        output->sendMessageNow(handshake);
-    }
 }
 
 bool AudioEngine::startRecording()
@@ -231,30 +178,6 @@ void AudioEngine::setInputMonitoringEnabled(bool shouldMonitor)
     ioDeviceManager.setInputMonitoringEnabled(shouldMonitor);
 }
 
-CentralTrackSlot* AudioEngine::addCentralTrackSlot()
-{
-    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
-    return arrangementState.createCentralTrackSlot();
-}
-
-bool AudioEngine::assignRecentAssetToCentralTrack(int assetId, int slotId)
-{
-    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
-    return arrangementState.assignRecentAssetToCentralTrack(assetId, slotId);
-}
-
-bool AudioEngine::placeCentralTrackOnTimeline(int slotId, int timelineTrackId)
-{
-    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
-    return arrangementState.placeCentralTrackOnTimeline(slotId, timelineTrackId);
-}
-
-bool AudioEngine::placeRecentAssetDirectToTimeline(int assetId, int timelineTrackId)
-{
-    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
-    return arrangementState.placeRecentAssetDirectToTimeline(assetId, timelineTrackId);
-}
-
 bool AudioEngine::placeRecentAssetDirectToTimeline(int assetId, int timelineTrackId, juce::int64 startSample)
 {
     juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
@@ -271,36 +194,6 @@ bool AudioEngine::removeTimelinePlacement(int placementId)
 {
     juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
     return arrangementState.removeTimelinePlacement(placementId);
-}
-
-bool AudioEngine::setCentralTrackMixerTrack(int slotId, int mixerTrackId)
-{
-    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
-    return arrangementState.setCentralTrackMixerTrack(slotId, mixerTrackId);
-}
-
-bool AudioEngine::setCentralTrackTimelineTrack(int slotId, int timelineTrackId)
-{
-    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
-    return arrangementState.setCentralTrackTimelineTrack(slotId, timelineTrackId);
-}
-
-bool AudioEngine::setCentralTrackOutputToMaster(int slotId)
-{
-    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
-    return arrangementState.setCentralTrackOutputToMaster(slotId);
-}
-
-bool AudioEngine::setCentralTrackOutputToTrack(int slotId, int destinationSlotId)
-{
-    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
-    return arrangementState.setCentralTrackOutputToTrack(slotId, destinationSlotId);
-}
-
-bool AudioEngine::setCentralTrackLiveInputArmed(int slotId, bool shouldArm)
-{
-    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
-    return arrangementState.setCentralTrackLiveInputArmed(slotId, shouldArm);
 }
 
 int AudioEngine::importAudioFileAsRecentAsset(const juce::File& file)
@@ -338,33 +231,44 @@ int AudioEngine::importAudioFileAsRecentAsset(const juce::File& file)
     return asset != nullptr ? asset->assetId : -1;
 }
 
-int AudioEngine::createMidiPatternAsset()
+int AudioEngine::createPatternAsset(const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes)
 {
-    RecordedClip clip;
-    clip.name = "Pattern " + juce::String(juce::Time::getCurrentTime().toMilliseconds() % 10000);
-    clip.sampleRate = 44100.0;
-
-    const int samples = static_cast<int>(clip.sampleRate * 2.0);
-    clip.leftChannel.resize(static_cast<size_t>(samples), 0.0f);
-    clip.rightChannel.resize(static_cast<size_t>(samples), 0.0f);
-
-    for (int i = 0; i < samples; ++i)
-    {
-        const double time = static_cast<double>(i) / clip.sampleRate;
-        const bool gate = (static_cast<int>(time * 4.0) % 2) == 0;
-        const float sample = gate ? static_cast<float>(0.18 * std::sin(2.0 * juce::MathConstants<double>::pi * 220.0 * time)) : 0.0f;
-        clip.leftChannel[static_cast<size_t>(i)] = sample;
-        clip.rightChannel[static_cast<size_t>(i)] = sample;
-    }
-
+    auto clip = makePatternClip(name, lengthSeconds);
     juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
-    auto* asset = arrangementState.addAsset(clip.name, AssetKind::pianoRollPattern, clip);
+    auto* asset = arrangementState.addAsset(name, AssetKind::pianoRollPattern, clip);
+    if (asset != nullptr) asset->patternNotes = std::move(patternNotes);
     return asset != nullptr ? asset->assetId : -1;
 }
 
-int AudioEngine::createLiveInputAsset(const juce::String& name)
+bool AudioEngine::updatePatternAsset(int assetId, const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes)
+{
+    auto clip = makePatternClip(name, lengthSeconds);
+    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
+    bool ok = arrangementState.renameAsset(assetId, name) && arrangementState.updateAssetClip(assetId, clip);
+    if (auto* asset = arrangementState.findAsset(assetId))
+        asset->patternNotes = std::move(patternNotes);
+    return ok;
+}
+
+RecordedClip AudioEngine::makePatternClip(const juce::String& name, double lengthSeconds) const
+{
+    RecordedClip clip;
+    clip.name = name;
+    clip.sampleRate = getTimelineSampleRate();
+    int samples = static_cast<int>(std::round(clip.sampleRate * juce::jmax(0.1, lengthSeconds)));
+    clip.leftChannel.resize(static_cast<size_t>(samples), 0.0f);
+    clip.rightChannel.resize(static_cast<size_t>(samples), 0.0f);
+    return clip;
+}
+
+bool AudioEngine::renameAsset(int assetId, const juce::String& newName)
 {
     juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
-    auto* asset = arrangementState.addAsset(name, AssetKind::liveInput, {});
-    return asset != nullptr ? asset->assetId : -1;
+    return arrangementState.renameAsset(assetId, newName);
+}
+
+void AudioEngine::setPatternTrackRenderer(ArrangementState::PatternTrackRenderer renderer)
+{
+    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
+    arrangementState.setPatternTrackRenderer(std::move(renderer));
 }

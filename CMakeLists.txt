@@ -8,7 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Fetching JUCE
 include(FetchContent)
 
-# Make FetchContent less opaque + more reliable on unstable networks
+
 set(FETCHCONTENT_QUIET OFF)
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 
@@ -19,7 +19,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(juce)
 
-# --- IMPORTANT ---
+
 # Ensure stylesheet support is compiled in for anything that needs it (including JIVE sources)
 add_compile_definitions(JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS=1)
 
@@ -36,15 +36,12 @@ add_subdirectory(Plugin_Hosting)
 
 add_subdirectory(GUI)
 
-# copying resources to the build directory for both DAW and GUI_Test targets
+# copying resources to the build directory
 add_custom_target(CopyResources ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_SOURCE_DIR}/Resources
             $<TARGET_FILE_DIR:DAW>/Resources
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_SOURCE_DIR}/Resources
-            $<TARGET_FILE_DIR:GUI_Test>/Resources
-    COMMENT "Synchronizing Resources for DAW and GUI_Test"
+    COMMENT "Synchronizing Resources for DAW"
 )
 
 add_subdirectory(App)

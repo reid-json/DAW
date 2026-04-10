@@ -39,4 +39,3 @@ target_compile_definitions(Plugin PUBLIC
     "JucePlugin_PreferredChannelConfigurations={(1,1),(2,2)}"
 )
 
-add_subdirectory(Test)

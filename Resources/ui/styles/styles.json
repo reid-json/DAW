@@ -9,8 +9,14 @@
   },
 
   ".sidebar": {
-    "background": "#141821",
-    "border": "rgba(255,255,255,0.08)"
+    "background": "#23379b",
+    "border": "rgba(201,220,255,0.18)"
+  },
+
+  ".mixer-shell": {
+    "background": "rgba(20,31,94,0.26)",
+    "border": "rgba(214,227,255,0.12)",
+    "border-radius": 22
   },
 
   ".clipSidebar": {
@@ -41,11 +47,22 @@
     "border-radius": 8
   },
 
+  ".btn-icon": {
+    "border-radius": 23
+  },
+
   ".btn-primary": {
     "background": "#3a7afe",
     "foreground": "#ffffff",
     "border": "#3a7afe",
     "border-radius": 8
+  },
+
+  ".btn-mixer-add": {
+    "background": "#3249b7",
+    "foreground": "#f6f9ff",
+    "border": "rgba(255,255,255,0.7)",
+    "border-radius": 0
   },
 
   ".btn-record": {
@@ -108,7 +125,7 @@
   },
 
   ".sidebar-resizer": {
-    "background": "rgba(255,255,255,0.06)"
+    "background": "rgba(255,255,255,0.015)"
   },
 
   ".label": {

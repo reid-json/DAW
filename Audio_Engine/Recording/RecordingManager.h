@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Tracks/TrackInputRouter.h"
+#include "../Tracks/RecordedClip.h"
 
 class RecordingManager
 {
