@@ -1,5 +1,6 @@
 #include "MainComponent.h"
 #include "ProjectFile.h"
+#include <set>
 #include <cmath>
 
 namespace
@@ -9,18 +10,6 @@ TimelineClipItem::ContentKind toTimelineContentKind(AssetKind assetKind)
     return assetKind == AssetKind::pianoRollPattern
         ? TimelineClipItem::ContentKind::pattern
         : TimelineClipItem::ContentKind::recording;
-}
-
-std::vector<PatternNote> toPatternNotes(const TrackPatternState& pattern)
-{
-    constexpr double spb = 0.5; // 120 BPM fixed
-    std::vector<PatternNote> out;
-    out.reserve(pattern.notes.size());
-    for (auto& n : pattern.notes)
-        out.push_back({ juce::jmax(0.0, n.startBeat * spb),
-                         juce::jmax(0.01, n.lengthBeats * spb),
-                         n.midiNote, 0.85f });
-    return out;
 }
 }
 
@@ -155,6 +144,13 @@ void MainComponent::syncStateFromEngine()
 {
     if (gui == nullptr)
         return;
+
+    const auto currentTempoBpm = juce::jlimit(40.0, 240.0, gui->getState().tempoBpm);
+    if (std::abs(currentTempoBpm - lastSyncedTempoBpm) > 0.001)
+    {
+        rescaleStandalonePatternAssetsForTempoChange(lastSyncedTempoBpm, currentTempoBpm);
+        lastSyncedTempoBpm = currentTempoBpm;
+    }
 
     syncTrackPatternsToAssets();
 
@@ -342,6 +338,7 @@ void MainComponent::handleOpenProject()
                 loadProject(file, gui->getState(), engine.getArrangementState());
             }
             projectFileChooser.reset();
+            lastSyncedTempoBpm = gui->getState().tempoBpm;
             syncStateFromEngine();
         });
 }
@@ -499,12 +496,77 @@ void MainComponent::syncTrackPatternsToAssets()
     }
 }
 
-double MainComponent::getPatternLengthSeconds(const TrackPatternState& pattern)
+void MainComponent::rescaleStandalonePatternAssetsForTempoChange(double oldTempoBpm, double newTempoBpm)
+{
+    if (gui == nullptr)
+        return;
+
+    oldTempoBpm = juce::jlimit(40.0, 240.0, oldTempoBpm);
+    newTempoBpm = juce::jlimit(40.0, 240.0, newTempoBpm);
+
+    if (oldTempoBpm <= 0.0 || newTempoBpm <= 0.0 || std::abs(oldTempoBpm - newTempoBpm) <= 0.001)
+        return;
+
+    const double scale = oldTempoBpm / newTempoBpm;
+
+    std::set<int> trackPatternAssetIds;
+    const auto& state = gui->getState();
+    for (int trackIndex = 0; trackIndex < state.trackCount; ++trackIndex)
+    {
+        const auto assetId = state.getTrackPatternState(trackIndex).assetId;
+        if (assetId > 0)
+            trackPatternAssetIds.insert(assetId);
+    }
+
+    struct PatternAssetUpdate
+    {
+        int assetId = 0;
+        juce::String name;
+        double lengthSeconds = 0.0;
+        std::vector<PatternNote> notes;
+    };
+
+    std::vector<PatternAssetUpdate> updates;
+    {
+        juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
+        const auto& assets = engine.getArrangementState().getAssets();
+        updates.reserve(assets.size());
+
+        for (const auto& asset : assets)
+        {
+            if (asset.kind != AssetKind::pianoRollPattern || trackPatternAssetIds.count(asset.assetId) != 0)
+                continue;
+
+            PatternAssetUpdate update;
+            update.assetId = asset.assetId;
+            update.name = asset.name;
+            update.lengthSeconds = juce::jmax(0.25, asset.clip.getLengthSeconds() * scale);
+            update.notes.reserve(asset.patternNotes.size());
+
+            for (const auto& note : asset.patternNotes)
+            {
+                PatternNote scaledNote;
+                scaledNote.startSeconds = juce::jmax(0.0, note.startSeconds * scale);
+                scaledNote.lengthSeconds = juce::jmax(0.01, note.lengthSeconds * scale);
+                scaledNote.midiNote = note.midiNote;
+                scaledNote.velocity = note.velocity;
+                update.notes.push_back(scaledNote);
+            }
+
+            updates.push_back(std::move(update));
+        }
+    }
+
+    for (auto& update : updates)
+        engine.updatePatternAsset(update.assetId, update.name, update.lengthSeconds, std::move(update.notes));
+}
+
+double MainComponent::getPatternLengthSeconds(const TrackPatternState& pattern) const
 {
     double endBeat = 1.0;
     for (auto& n : pattern.notes)
         endBeat = juce::jmax(endBeat, n.startBeat + n.lengthBeats);
-    return juce::jmax(0.25, endBeat * 0.5); // 120 BPM fixed
+    return juce::jmax(0.25, endBeat * getSecondsPerBeat());
 }
 
 void MainComponent::handleTimelineClipMoved(int placementId, int trackIndex, double startSeconds)
@@ -532,19 +594,18 @@ void MainComponent::handleSavePattern(const std::vector<PianoRoll::Note>& pianoN
 {
     if (pianoNotes.empty()) return;
 
-    // Convert piano roll notes to engine PatternNotes
-    constexpr double spb = 0.5; // 120 BPM
+    const auto secondsPerBeat = getSecondsPerBeat();
     std::vector<PatternNote> patternNotes;
     double endBeat = 1.0;
     for (auto& n : pianoNotes)
     {
-        patternNotes.push_back({ juce::jmax(0.0, n.startBeat * spb),
-                                  juce::jmax(0.01, n.lengthBeats * spb),
+        patternNotes.push_back({ juce::jmax(0.0, n.startBeat * secondsPerBeat),
+                                  juce::jmax(0.01, n.lengthBeats * secondsPerBeat),
                                   n.midiNote, 0.85f });
         endBeat = juce::jmax(endBeat, n.startBeat + n.lengthBeats);
     }
 
-    double lengthSeconds = juce::jmax(0.25, endBeat * spb);
+    double lengthSeconds = juce::jmax(0.25, endBeat * secondsPerBeat);
     juce::String name = "Pattern " + juce::String((int) gui->getState().savedPatterns.size() + 1);
 
     juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
@@ -561,4 +622,27 @@ void MainComponent::handlePianoRollInstrumentChange(const juce::String& pluginNa
 int MainComponent::getNewestRecentAssetId() const {
     auto& ids = engine.getArrangementState().getRecentAssetIds();
     return ids.empty() ? -1 : ids.back();
+}
+
+double MainComponent::getSecondsPerBeat() const
+{
+    if (gui == nullptr)
+        return 0.5;
+
+    const auto bpm = juce::jlimit(40.0, 240.0, gui->getState().tempoBpm);
+    return 60.0 / bpm;
+}
+
+std::vector<PatternNote> MainComponent::toPatternNotes(const TrackPatternState& pattern) const
+{
+    const auto secondsPerBeat = getSecondsPerBeat();
+    std::vector<PatternNote> out;
+    out.reserve(pattern.notes.size());
+
+    for (auto& n : pattern.notes)
+        out.push_back({ juce::jmax(0.0, n.startBeat * secondsPerBeat),
+                        juce::jmax(0.01, n.lengthBeats * secondsPerBeat),
+                        n.midiNote, 0.85f });
+
+    return out;
 }

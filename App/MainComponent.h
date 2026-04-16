@@ -34,7 +34,10 @@ private:
     void handleRecentClipDropped(int assetId, int trackIndex, double startSeconds);
     void handleAssetRenamed(int assetId, const juce::String& newName);
     void syncTrackPatternsToAssets();
-    static double getPatternLengthSeconds(const TrackPatternState& pattern);
+    void rescaleStandalonePatternAssetsForTempoChange(double oldTempoBpm, double newTempoBpm);
+    double getSecondsPerBeat() const;
+    std::vector<PatternNote> toPatternNotes(const TrackPatternState& pattern) const;
+    double getPatternLengthSeconds(const TrackPatternState& pattern) const;
     void handleTimelineClipMoved(int placementId, int trackIndex, double startSeconds);
     void handleTimelineClipRemoved(int placementId);
     void handleSavePattern(const std::vector<PianoRoll::Note>& notes);
@@ -45,4 +48,5 @@ private:
     AudioEngine engine;
     std::unique_ptr<juce::FileChooser> audioFileChooser;
     std::unique_ptr<juce::FileChooser> projectFileChooser;
+    double lastSyncedTempoBpm = 120.0;
 };

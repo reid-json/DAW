@@ -28,11 +28,37 @@ namespace
         return v.isObject() ? v.getDynamicObject() : nullptr;
     }
 
-    void mergeProps (juce::DynamicObject& target, const juce::var& src)
+    juce::var resolveThemeReference (const juce::var& value, const juce::var& stylesheet)
+    {
+        if (! value.isString())
+            return value;
+
+        const auto text = value.toString().trim();
+        if (! text.startsWith ("$theme."))
+            return value;
+
+        juce::var current = stylesheet;
+        juce::StringArray path;
+        path.addTokens (text.fromFirstOccurrenceOf ("$", false, false), ".", "\"");
+        path.removeEmptyStrings();
+
+        for (const auto& segment : path)
+        {
+            auto* object = asObj (current);
+            if (object == nullptr)
+                return value;
+
+            current = object->getProperty (segment);
+        }
+
+        return current.isVoid() ? value : current;
+    }
+
+    void mergeProps (juce::DynamicObject& target, const juce::var& src, const juce::var& stylesheet)
     {
         if (auto* obj = asObj (src))
             for (auto& p : obj->getProperties())
-                target.setProperty (p.name, p.value);
+                target.setProperty (p.name, resolveThemeReference (p.value, stylesheet));
     }
 
     juce::var parseStyleString (const juce::String& text)
@@ -56,7 +82,7 @@ namespace
         auto merged = juce::var (new juce::DynamicObject());
         if (auto* sheet = asObj (stylesheet))
             for (auto& cls : splitClasses (classNames))
-                mergeProps (*merged.getDynamicObject(), sheet->getProperty ("." + cls));
+                mergeProps (*merged.getDynamicObject(), sheet->getProperty ("." + cls), stylesheet);
         return juce::JSON::toString (merged, false);
     }
 
@@ -69,13 +95,13 @@ namespace
         auto* obj = merged.getDynamicObject();
 
         for (auto& cls : splitClasses (node.getProperty ("class").toString()))
-            mergeProps (*obj, sheet->getProperty ("." + cls));
+            mergeProps (*obj, sheet->getProperty ("." + cls), stylesheet);
 
         auto id = node.getProperty ("id").toString();
         if (id.isNotEmpty())
-            mergeProps (*obj, sheet->getProperty ("#" + id));
+            mergeProps (*obj, sheet->getProperty ("#" + id), stylesheet);
 
-        mergeProps (*obj, parseStyleString (node.getProperty ("style").toString()));
+        mergeProps (*obj, parseStyleString (node.getProperty ("style").toString()), stylesheet);
         node.setProperty ("style", juce::JSON::toString (merged, false), nullptr);
 
         for (int i = 0; i < node.getNumChildren(); ++i)
@@ -214,11 +240,170 @@ namespace
     }
 }
 
+class GUIComponent::HeaderButtonOverlay final : public juce::Component
+{
+public:
+    HeaderButtonOverlay (ThemeData& themeIn, juce::String buttonIdIn)
+        : theme (themeIn), buttonId (std::move (buttonIdIn))
+    {
+        setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    }
+
+    void setTargetButton (juce::Button* button)
+    {
+        targetButton = button;
+        if (targetButton != nullptr)
+            setEnabled (targetButton->isEnabled());
+    }
+
+    void setText (juce::String newText)
+    {
+        text = std::move (newText);
+        repaint();
+    }
+
+    void setSprite (const juce::Image& newSprite)
+    {
+        sprite = newSprite;
+        repaint();
+    }
+
+    void setRecordActive (bool shouldBeActive)
+    {
+        recordActive = shouldBeActive;
+        repaint();
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto bounds = getLocalBounds().toFloat();
+        if (bounds.isEmpty())
+            return;
+
+        const auto baseFill = getBaseFillColour();
+        auto fill = baseFill;
+        if (pressed)
+            fill = fill.darker (0.34f);
+        else if (hovered)
+            fill = fill.brighter (0.24f);
+
+        const bool isFileButton = buttonId == "fileBtn";
+        const float ringThickness = isFileButton ? 2.5f : 3.0f;
+        const float corner = isFileButton ? 10.0f : bounds.getHeight() * 0.5f;
+
+        g.setColour (juce::Colours::white.withAlpha (0.98f));
+        g.fillRoundedRectangle (bounds.reduced (0.5f), corner);
+
+        auto innerBounds = bounds.reduced (ringThickness);
+        g.setColour (fill);
+        g.fillRoundedRectangle (innerBounds, juce::jmax (0.0f, corner - ringThickness));
+
+        if (hovered && ! pressed)
+        {
+            g.setColour (juce::Colours::white.withAlpha (0.14f));
+            g.fillRoundedRectangle (innerBounds.reduced (1.0f),
+                                    juce::jmax (0.0f, corner - ringThickness - 1.0f));
+        }
+
+        if (sprite.isValid() && buttonId != "fileBtn")
+        {
+            if (pressed || hovered)
+            {
+                g.saveState();
+                auto clipPath = juce::Path();
+                clipPath.addRoundedRectangle (innerBounds, juce::jmax (0.0f, corner - ringThickness));
+                g.reduceClipRegion (clipPath);
+                g.setColour (baseFill);
+                g.fillRoundedRectangle (innerBounds, juce::jmax (0.0f, corner - ringThickness));
+                g.restoreState();
+
+                if (hovered && ! pressed)
+                {
+                    g.setColour (juce::Colours::white.withAlpha (0.14f));
+                    g.fillRoundedRectangle (innerBounds.reduced (1.0f),
+                                            juce::jmax (0.0f, corner - ringThickness - 1.0f));
+                }
+            }
+
+            const auto isSettingsButton = buttonId == "settingsBtn";
+            const float insetScale = isSettingsButton ? 0.08f : 0.12f;
+            const auto spriteBounds = innerBounds.reduced (innerBounds.getWidth() * insetScale,
+                                                           innerBounds.getHeight() * insetScale);
+            g.drawImageWithin (sprite,
+                               juce::roundToInt (spriteBounds.getX()),
+                               juce::roundToInt (spriteBounds.getY()),
+                               juce::roundToInt (spriteBounds.getWidth()),
+                               juce::roundToInt (spriteBounds.getHeight()),
+                               juce::RectanglePlacement::centred,
+                               false);
+            return;
+        }
+
+        g.setColour (theme.colour ("ui.button.foreground", juce::Colours::white));
+        g.setFont (juce::Font (13.0f, juce::Font::bold));
+        g.drawText (text, getLocalBounds(), juce::Justification::centred, false);
+    }
+
+    void mouseEnter (const juce::MouseEvent&) override
+    {
+        hovered = true;
+        repaint();
+    }
+
+    void mouseExit (const juce::MouseEvent&) override
+    {
+        hovered = false;
+        pressed = false;
+        repaint();
+    }
+
+    void mouseDown (const juce::MouseEvent&) override
+    {
+        pressed = true;
+        repaint();
+    }
+
+    void mouseUp (const juce::MouseEvent& e) override
+    {
+        const bool shouldTrigger = pressed && getLocalBounds().contains (e.getPosition());
+        pressed = false;
+        hovered = getLocalBounds().contains (e.getPosition());
+        repaint();
+
+        if (shouldTrigger && targetButton != nullptr)
+            targetButton->triggerClick();
+    }
+
+private:
+    juce::Colour getBaseFillColour() const
+    {
+        if (buttonId == "recordBtn")
+        {
+            const auto token = recordActive ? "ui.button-record-active.background"
+                                            : "ui.button-record.background";
+            const auto fallback = recordActive ? juce::Colour (0xffff4d4f)
+                                               : juce::Colour (0xffb42318);
+            return theme.colour (token, fallback);
+        }
+
+        return theme.colour ("ui.button.background", juce::Colour (0xffe68000));
+    }
+
+    ThemeData& theme;
+    juce::String buttonId;
+    juce::String text;
+    juce::Image sprite;
+    juce::Button* targetButton = nullptr;
+    bool hovered = false;
+    bool pressed = false;
+    bool recordActive = false;
+};
+
 void GUIComponent::registerCustomComponentTypes()
 {
     viewInterpreter.getComponentFactory().set ("TrackListView", [this]
     {
-        auto component = std::make_unique<TrackListComponent> (state);
+        auto component = std::make_unique<TrackListComponent> (state, themeData);
         component->onTrackSelected = [this] (int)
         {
             if (arrangementComponent != nullptr)
@@ -296,14 +481,14 @@ void GUIComponent::registerCustomComponentTypes()
 
     viewInterpreter.getComponentFactory().set ("TimelineView", [this]
     {
-        auto component = std::make_unique<TimelineComponent> (state);
+        auto component = std::make_unique<TimelineComponent> (state, themeData);
         timelineComponent = component.get();
         return component;
     });
 
     viewInterpreter.getComponentFactory().set ("ArrangementView", [this]
     {
-        auto component = std::make_unique<ArrangementComponent> (state);
+        auto component = std::make_unique<ArrangementComponent> (state, themeData);
 
         component->onRecentClipDropped = [this] (int assetId, int trackIndex, double startSeconds)
         {
@@ -337,13 +522,20 @@ void GUIComponent::registerCustomComponentTypes()
 
     viewInterpreter.getComponentFactory().set ("RecentClipsView", [this]
     {
-        auto component = std::make_unique<RecentClipsComponent> (state);
+        auto component = std::make_unique<RecentClipsComponent> (state, themeData);
         component->onAssetRenameRequested = [this] (int assetId, const juce::String& newName)
         {
             if (onAssetRenameRequested)
                 onAssetRenameRequested (assetId, newName);
         };
         recentClipsComponent = component.get();
+        return component;
+    });
+
+    viewInterpreter.getComponentFactory().set ("TempoControlView", [this]
+    {
+        auto component = std::make_unique<TempoControlComponent> (state, themeData);
+        tempoControlComponent = component.get();
         return component;
     });
 
@@ -379,7 +571,20 @@ GUIComponent::GUIComponent(juce::AudioDeviceManager& sharedDeviceManager)
     spriteAssets = loadSprites (spriteDir);
     replaceLabelsWithSprites (uiTree, spriteAssets);
 
+    if (auto headerSpiceNode = jive::findElementWithID (uiTree, juce::Identifier ("headerSpice")); headerSpiceNode.isValid())
+        if (auto* spice = findSprite (juce::StringArray { "headerspice" }, spriteAssets))
+            headerSpiceNode.setProperty ("source", *spice, nullptr);
+
+    if (auto headerLogoNode = jive::findElementWithID (uiTree, juce::Identifier ("headerLogo")); headerLogoNode.isValid())
+        if (auto* logo = findSprite (juce::StringArray { "chromalogotransparent", "chromalogo" }, spriteAssets))
+            headerLogoNode.setProperty ("source", *logo, nullptr);
+
+    if (auto bodySpiceSidebarNode = jive::findElementWithID (uiTree, juce::Identifier ("bodySpiceSidebar")); bodySpiceSidebarNode.isValid())
+        if (auto* spice = findSprite (juce::StringArray { "bodyspice" }, spriteAssets))
+            bodySpiceSidebarNode.setProperty ("source", *spice, nullptr);
+
     stylesheet = parseJsonFile (jsonStyleFile);
+    themeData.loadFromStylesheet (stylesheet);
     if (stylesheet.isObject())
         applyStyles (uiTree, stylesheet);
 
@@ -393,6 +598,7 @@ GUIComponent::GUIComponent(juce::AudioDeviceManager& sharedDeviceManager)
 
         viewInterpreter.listenTo (*root);
         installCallbacks();
+        createHeaderButtonOverlays();
     }
 
     refreshFromState();
@@ -422,6 +628,13 @@ void GUIComponent::resized()
 
     root->callLayoutChildrenWithRecursionLock();
     applyManualBodyLayout();
+    updateHeaderButtonOverlayBounds();
+}
+
+void GUIComponent::paintOverChildren(juce::Graphics& g)
+{
+    g.setColour(juce::Colours::white.withAlpha(0.75f));
+    g.fillRect(0, 98, getWidth(), 1);
 }
 
 jive::GuiItem* GUIComponent::findGuiItemById (jive::GuiItem& node, const juce::Identifier& id)
@@ -473,7 +686,34 @@ void GUIComponent::applyManualBodyLayout()
     headerComp->setBounds (area.removeFromTop (98));
     bodyComp->setBounds (area);
 
-    setBoundsById ("headerMainRow", headerComp->getLocalBounds().reduced (10).removeFromTop (52));
+    setBoundsById ("headerSpice", headerComp->getLocalBounds());
+    auto headerInnerBounds = headerComp->getLocalBounds().reduced (10, 0);
+    setBoundsById ("headerMainRow", headerInnerBounds.removeFromTop (90));
+
+    if (auto* transportComp = getComp ("transportGroup"))
+    {
+        auto bounds = transportComp->getBounds();
+        bounds.setX (headerComp->getX() + (headerComp->getWidth() - bounds.getWidth()) / 2);
+        transportComp->setBounds (bounds);
+    }
+
+    if (auto* transportComp = getComp ("transportGroup"))
+        if (auto* settingsComp = getComp ("settingsBtn"))
+            if (auto* tempoComp = getComp ("tempoControlView"))
+            {
+                constexpr int gap = 16;
+                constexpr int sideInset = 28;
+                const int tempoX = transportComp->getRight() + gap + sideInset;
+                const int maxTempoRight = settingsComp->getX() - gap - sideInset;
+                const int availableWidth = juce::jmax (120, maxTempoRight - tempoX);
+                const int tempoHeight = 38;
+
+                auto tempoBounds = juce::Rectangle<int> (tempoX,
+                                                         transportComp->getY() + ((transportComp->getHeight() - tempoHeight) / 2),
+                                                         availableWidth,
+                                                         tempoHeight);
+                tempoComp->setBounds (tempoBounds);
+            }
 
     int sideW = state.clipSidebarCollapsed ? 44 : state.clipSidebarWidth;
     auto bodyArea = bodyComp->getLocalBounds();
@@ -485,10 +725,96 @@ void GUIComponent::applyManualBodyLayout()
     setBoundsById ("timelinePanel",    wsArea.removeFromTop (masterH));
     setBoundsById ("arrangementPanel", wsArea);
 
+    setBoundsById ("bodySpiceSidebar",
+                   juce::Rectangle<int> (0,
+                                         juce::roundToInt (sidebarComp->getHeight() * 0.28f),
+                                         sidebarComp->getWidth(),
+                                         sidebarComp->getHeight()));
+
     auto clipArea = sidebarComp->getLocalBounds().reduced (10);
-    setBoundsById ("clipBrowserTitle", clipArea.removeFromTop (24));
+    setBoundsById ("clipBrowserTitle", clipArea.removeFromTop (30));
     clipArea.removeFromTop (4);
     setBoundsById ("clipList", clipArea);
+
+    updateHeaderButtonOverlayBounds();
+}
+
+void GUIComponent::createHeaderButtonOverlays()
+{
+    auto getButton = [this] (const juce::String& id) -> juce::Button*
+    {
+        if (root == nullptr)
+            return nullptr;
+
+        if (auto* item = findGuiItemById (*root, juce::Identifier (id)))
+            if (auto comp = item->getComponent())
+                return dynamic_cast<juce::Button*> (comp.get());
+
+        return nullptr;
+    };
+
+    for (const auto& id : { juce::String ("fileBtn"),
+                            juce::String ("restartBtn"),
+                            juce::String ("playBtn"),
+                            juce::String ("pauseBtn"),
+                            juce::String ("recordBtn"),
+                            juce::String ("pianoRollBtn"),
+                            juce::String ("settingsBtn") })
+    {
+        auto* button = getButton (id);
+        if (button == nullptr)
+            continue;
+
+        auto overlay = std::make_unique<HeaderButtonOverlay> (themeData, id);
+        overlay->setTargetButton (button);
+
+        auto node = jive::findElementWithID (uiTree, juce::Identifier (id));
+        if (node.isValid() && id == "fileBtn")
+            for (int i = 0; i < node.getNumChildren(); ++i)
+                if (auto child = node.getChild (i); child.getType().toString().compareIgnoreCase ("Text") == 0)
+                {
+                    overlay->setText (child.getProperty ("text").toString());
+                    break;
+                }
+
+        if (node.isValid() && id != "fileBtn")
+            if (const auto* sprite = findSprite (buildSpriteKeys (node), spriteAssets))
+                if (! sprite->isVoid())
+                    overlay->setSprite (juce::VariantConverter<juce::Image>::fromVar (*sprite));
+
+        addAndMakeVisible (*overlay);
+        overlay->toFront (false);
+        headerButtonOverlays[id] = std::move (overlay);
+
+        button->setAlpha (0.0f);
+        button->setInterceptsMouseClicks (false, false);
+        enableClickThrough (*button);
+    }
+}
+
+void GUIComponent::updateHeaderButtonOverlayBounds()
+{
+    auto getButton = [this] (const juce::String& id) -> juce::Button*
+    {
+        if (root == nullptr)
+            return nullptr;
+
+        if (auto* item = findGuiItemById (*root, juce::Identifier (id)))
+            if (auto comp = item->getComponent())
+                return dynamic_cast<juce::Button*> (comp.get());
+
+        return nullptr;
+    };
+
+    for (auto& [id, overlay] : headerButtonOverlays)
+    {
+        auto* button = getButton (id);
+        if (button == nullptr || overlay == nullptr)
+            continue;
+
+        overlay->setBounds (getLocalArea (button->getParentComponent(), button->getBounds()));
+        overlay->toFront (false);
+    }
 }
 
 void GUIComponent::installCallbacks()
@@ -504,6 +830,24 @@ void GUIComponent::installCallbacks()
                     btn->onClick = std::move (fn);
                 }
     };
+
+    auto styleHeaderBtn = [this] (const juce::String& id)
+    {
+        if (root == nullptr) return;
+        if (auto* item = findGuiItemById (*root, juce::Identifier (id)))
+            if (auto comp = item->getComponent())
+                if (auto* btn = dynamic_cast<juce::Button*> (comp.get()))
+                    enableClickThrough (*btn);
+    };
+
+    for (const auto& id : { juce::String ("fileBtn"),
+                            juce::String ("restartBtn"),
+                            juce::String ("playBtn"),
+                            juce::String ("pauseBtn"),
+                            juce::String ("recordBtn"),
+                            juce::String ("pianoRollBtn"),
+                            juce::String ("settingsBtn") })
+        styleHeaderBtn (id);
 
     bindBtn ("playBtn",    [this] { if (onPlayRequested)    onPlayRequested(); });
     bindBtn ("pauseBtn",   [this] { if (onPauseRequested)   onPauseRequested(); });
@@ -649,7 +993,15 @@ void GUIComponent::refreshFromState()
                   state.isRecording ? "btn btn-record-active" : "btn btn-record");
 
     if (auto* recordSprite = findSprite (juce::StringArray{ state.isRecording ? "stop" : "record", "recordbtn" }, spriteAssets))
+    {
         setPropertyById ("recordBtnSprite", juce::Identifier ("source"), *recordSprite);
+        if (auto it = headerButtonOverlays.find ("recordBtn"); it != headerButtonOverlays.end())
+            if (! recordSprite->isVoid())
+                it->second->setSprite (juce::VariantConverter<juce::Image>::fromVar (*recordSprite));
+    }
+
+    if (auto it = headerButtonOverlays.find ("recordBtn"); it != headerButtonOverlays.end())
+        it->second->setRecordActive (state.isRecording);
     
     setTextById ("monitorBtnLabel",
              state.audioMonitoringEnabled ? "Monitor On" : "Monitor Off");
@@ -676,7 +1028,20 @@ void GUIComponent::refreshFromState()
     setPropertyById ("clipSidebarSpacer", juce::Identifier ("display"),
                      state.clipSidebarCollapsed ? "none" : "flex");
 
+    if (auto* item = findGuiItemById (*root, juce::Identifier ("clipBrowserTitle")))
+        if (auto comp = item->getComponent())
+            if (auto* label = dynamic_cast<juce::Label*> (comp.get()))
+            {
+                label->setFont (juce::Font (16.0f, juce::Font::bold));
+                label->setColour (juce::Label::textColourId, juce::Colours::white);
+                label->setJustificationType (juce::Justification::centredLeft);
+            }
+
     root->callLayoutChildrenWithRecursionLock();
+
+    if (tempoControlComponent != nullptr)
+        tempoControlComponent->refreshFromState();
+
     repaint();
 }
 

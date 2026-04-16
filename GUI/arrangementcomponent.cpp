@@ -1,17 +1,58 @@
 #include "arrangementcomponent.h"
 #include <cmath>
 
-ArrangementComponent::ArrangementComponent(DAWState& stateIn)
-    : state(stateIn)
+namespace
 {
+    constexpr int mixerFooterScrollPadding = 76;
+
+    juce::File findResourcesDir()
+    {
+        auto dir = juce::File::getSpecialLocation (juce::File::currentExecutableFile).getParentDirectory();
+        for (int i = 0; i < 4; ++i)
+        {
+            if (dir.getChildFile ("Resources").isDirectory())
+                return dir.getChildFile ("Resources");
+            dir = dir.getParentDirectory();
+        }
+
+        return dir.getChildFile ("Resources");
+    }
+
+    juce::Image loadBodySpiceImage()
+    {
+        return juce::ImageFileFormat::loadFrom (findResourcesDir().getChildFile ("ui")
+                                                                  .getChildFile ("sprites")
+                                                                  .getChildFile ("bodySpice.png"));
+    }
+}
+
+ArrangementComponent::ArrangementComponent(DAWState& stateIn, ThemeData& themeIn)
+    : state(stateIn), theme(themeIn)
+{
+    bodySpiceImage = loadBodySpiceImage();
 }
 
 void ArrangementComponent::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
-    g.fillAll(juce::Colour::fromRGB(15, 20, 30));
+    g.fillAll(theme.colour("arrangement.background", juce::Colour::fromRGB(15, 20, 30)));
+    if (bodySpiceImage.isValid())
+    {
+        const int imageYOffset = juce::roundToInt(getHeight() * 0.28f);
+        g.setOpacity(0.9f);
+        g.drawImage(bodySpiceImage,
+                    0,
+                    imageYOffset,
+                    getWidth(),
+                    getHeight(),
+                    0,
+                    0,
+                    bodySpiceImage.getWidth(),
+                    bodySpiceImage.getHeight());
+        g.setOpacity(1.0f);
+    }
 
-    g.setColour(juce::Colour::fromRGBA(255, 255, 255, 18));
+    g.setColour(theme.colour("arrangement.grid.minor", juce::Colour::fromRGBA(255, 255, 255, 18)));
     constexpr int gridSpacing = 40;
     const float gridOffset = std::fmod(clipLeftInset - static_cast<float>(state.horizontalScrollOffset), static_cast<float>(gridSpacing));
     for (float x = gridOffset; x < getWidth(); x += gridSpacing)
@@ -27,13 +68,13 @@ void ArrangementComponent::paint(juce::Graphics& g)
         const bool isSelectedTrack = !state.isMasterMixerFocused() && state.isTrackSelected(i);
         auto rowBounds = juce::Rectangle<float>(8.0f, y + 4.0f, bounds.getWidth() - scrollbarWidth - 18.0f, static_cast<float>(rowHeight));
 
-        g.setColour(isSelectedTrack ? juce::Colour(0xff24478d).withAlpha(0.52f)
-                                    : juce::Colour::fromRGBA(255, 255, 255, 10));
+        g.setColour(isSelectedTrack ? theme.colour("arrangement.row.selected", juce::Colour(0xff24478d).withAlpha(0.52f))
+                                    : theme.colour("arrangement.row.default", juce::Colour::fromRGBA(255, 255, 255, 10)));
         g.fillRoundedRectangle(rowBounds, 8.0f);
 
         if (isSelectedTrack)
         {
-            g.setColour(juce::Colour(0xffd7e3ff).withAlpha(0.42f));
+            g.setColour(theme.colour("arrangement.row.selected-border", juce::Colour(0xffd7e3ff).withAlpha(0.42f)));
             g.drawRoundedRectangle(rowBounds.reduced(1.0f), 8.0f, 1.4f);
         }
     }
@@ -41,15 +82,17 @@ void ArrangementComponent::paint(juce::Graphics& g)
     for (const auto& clip : state.timelineClips)
     {
         const auto clipBounds = getClipBounds(clip);
-        auto colour = juce::Colour::fromRGB(58, 122, 254);
+        auto colour = theme.colour("arrangement.clip.fill", juce::Colour::fromRGB(58, 122, 254));
         g.setColour(colour);
         g.fillRoundedRectangle(clipBounds, 8.0f);
+        g.setColour(theme.colour("arrangement.clip.outline", juce::Colours::white));
+        g.drawRoundedRectangle(clipBounds.reduced(0.5f), 8.0f, 1.2f);
 
         const auto deleteBounds = getDeleteButtonBounds(clip);
-        g.setColour(juce::Colour::fromRGBA(12, 17, 25, 190));
+        g.setColour(theme.colour("arrangement.clip.delete-background", juce::Colour::fromRGBA(12, 17, 25, 190)));
         g.fillEllipse(deleteBounds);
 
-        g.setColour(juce::Colours::white);
+        g.setColour(theme.colour("arrangement.clip.text", juce::Colours::white));
         g.drawText("x",
                    deleteBounds.toNearestInt(),
                    juce::Justification::centred,
@@ -62,23 +105,29 @@ void ArrangementComponent::paint(juce::Graphics& g)
     }
 
     const auto playheadX = juce::jlimit(0.0f, bounds.getWidth(), getPlayheadX());
-    g.setColour(juce::Colour::fromRGB(58, 122, 254));
+    g.setColour(theme.colour("arrangement.playhead", juce::Colour::fromRGB(58, 122, 254)));
     g.drawLine(playheadX, 0.0f, playheadX, bounds.getHeight(), 2.0f);
 
     if (getMaxScroll() > 0)
     {
-        g.setColour(juce::Colours::white.withAlpha(0.08f));
+        g.setColour(theme.colour("arrangement.scrollbar.track", juce::Colours::white.withAlpha(0.08f)));
         g.fillRoundedRectangle(getScrollbarTrackBounds(), 4.0f);
-        g.setColour(juce::Colour(0xff4c88ff).withAlpha(0.9f));
-        g.fillRoundedRectangle(getScrollbarThumbBounds(), 4.0f);
+        g.setColour(theme.colour("arrangement.scrollbar.thumb", juce::Colour(0xff4c88ff).withAlpha(0.9f)));
+        auto thumb = getScrollbarThumbBounds();
+        g.fillRoundedRectangle(thumb, 4.0f);
+        g.setColour(theme.colour("arrangement.scrollbar.outline", juce::Colours::white.withAlpha(0.75f)));
+        g.drawRoundedRectangle(thumb, 4.0f, 1.0f);
     }
 
     if (getMaxHorizontalScroll() > 0.0f)
     {
-        g.setColour(juce::Colours::white.withAlpha(0.08f));
+        g.setColour(theme.colour("arrangement.scrollbar.track", juce::Colours::white.withAlpha(0.08f)));
         g.fillRoundedRectangle(getHorizontalScrollbarTrackBounds(), 4.0f);
-        g.setColour(juce::Colour(0xff4c88ff).withAlpha(0.9f));
-        g.fillRoundedRectangle(getHorizontalScrollbarThumbBounds(), 4.0f);
+        g.setColour(theme.colour("arrangement.scrollbar.thumb", juce::Colour(0xff4c88ff).withAlpha(0.9f)));
+        auto thumb = getHorizontalScrollbarThumbBounds();
+        g.fillRoundedRectangle(thumb, 4.0f);
+        g.setColour(theme.colour("arrangement.scrollbar.outline", juce::Colours::white.withAlpha(0.75f)));
+        g.drawRoundedRectangle(thumb, 4.0f, 1.0f);
     }
 }
 
@@ -243,7 +292,11 @@ float ArrangementComponent::getPlayheadX() const
 
 int ArrangementComponent::getContentHeight() const
 {
-    return juce::jmax(rowHeight + 24, state.trackCount * rowHeight + juce::jmax(0, state.trackCount - 1) * rowGap + 24);
+    return juce::jmax(rowHeight + 24,
+                      state.trackCount * rowHeight
+                        + juce::jmax(0, state.trackCount - 1) * rowGap
+                        + 24
+                        + mixerFooterScrollPadding);
 }
 
 int ArrangementComponent::getMaxScroll() const

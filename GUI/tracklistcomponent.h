@@ -2,11 +2,12 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "dawstate.h"
+#include "theme.h"
 
 class TrackListComponent : public juce::Component
 {
 public:
-    explicit TrackListComponent(DAWState& stateIn);
+    TrackListComponent(DAWState& stateIn, ThemeData& themeIn);
 
     void paint(juce::Graphics& g) override;
     void mouseDown(const juce::MouseEvent& e) override;
@@ -52,9 +53,11 @@ private:
     // Drawing
     void drawStrip(juce::Graphics& g, int rowIndex);
     void drawIndicatorPill(juce::Graphics& g, juce::Rectangle<float> bounds,
-                           const char* label, bool active, juce::Colour activeColour) const;
-    void drawFader(juce::Graphics& g, juce::Rectangle<float> bounds, float level, bool active) const;
-    void drawPanKnob(juce::Graphics& g, juce::Rectangle<float> bounds, float pan, bool active) const;
+                           const char* label, bool active, juce::Colour activeColour,
+                           bool roundLeft, bool roundRight,
+                           const juce::Image* sprite = nullptr) const;
+    void drawFader(juce::Graphics& g, juce::Rectangle<float> bounds, float level, bool active, int rowIndex) const;
+    void drawPanKnob(juce::Graphics& g, juce::Rectangle<float> bounds, float pan, bool active, int rowIndex) const;
 
     void promptRenameTrack(int trackIndex);
     void showTrackContextMenu(int trackIndex);
@@ -70,10 +73,15 @@ private:
     void cancelInlineRename();
 
     DAWState& state;
+    ThemeData& theme;
     int draggingFaderRow = -1;
     int draggingPanRow = -1;
     std::unique_ptr<juce::TextEditor> inlineEditor;
     int editingTrackIndex = -1;
+    juce::Image mutedSprite;
+    juce::Image unmutedSprite;
+    juce::Image armSprite;
+    juce::Image bodySpiceImage;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TrackListComponent)
 };

@@ -2,12 +2,13 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "dawstate.h"
+#include "theme.h"
 
 class ArrangementComponent : public juce::Component,
                              public juce::DragAndDropTarget
 {
 public:
-    explicit ArrangementComponent(DAWState& stateIn);
+    ArrangementComponent(DAWState& stateIn, ThemeData& themeIn);
 
     void paint(juce::Graphics& g) override;
     void mouseDown(const juce::MouseEvent& e) override;
@@ -52,12 +53,14 @@ private:
     void setHorizontalScrollOffset(int newOffset);
 
     DAWState& state;
+    ThemeData& theme;
     int draggingPlacementId = -1;
     bool draggingScrollbar = false;
     bool draggingHorizontalScrollbar = false;
     float scrollbarDragOffset = 0.0f;
     float horizontalScrollbarDragOffset = 0.0f;
     juce::Point<float> dragOffset;
+    juce::Image bodySpiceImage;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ArrangementComponent)
 };

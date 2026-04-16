@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "dawstate.h"
+#include "theme.h"
 
 class RecentClipsComponent : public juce::Component
 {
@@ -18,7 +19,7 @@ public:
         int index = -1;
     };
 
-    explicit RecentClipsComponent(DAWState& stateIn);
+    RecentClipsComponent(DAWState& stateIn, ThemeData& themeIn);
 
     void paint(juce::Graphics& g) override;
     void mouseDown(const juce::MouseEvent& e) override;
@@ -43,6 +44,7 @@ private:
     void promptRenameItem(const ItemRef& item);
 
     DAWState& state;
+    ThemeData& theme;
     std::optional<ItemRef> dragItem;
     int scrollOffset = 0;
     bool draggingScrollbar = false;

@@ -7,7 +7,7 @@
 
 namespace PianoRoll
 {
-    static constexpr int toolbarH    = 46;
+    static constexpr int toolbarH    = 51;
     static constexpr int timelineH   = 34;
     static constexpr int headerH     = toolbarH + timelineH;
     static constexpr int keyWidth    = 96;
@@ -112,7 +112,8 @@ private:
     void paintNotes (juce::Graphics& g);
     void paintMarquee (juce::Graphics& g);
     void paintButton (juce::Graphics& g, juce::Rectangle<int> area,
-                      const juce::String& text, bool active = false, bool accent = false);
+                      const juce::String& text, bool active = false, bool accent = false,
+                      const juce::Image* icon = nullptr);
 
     // Layout / toolbar
     ButtonRects layoutButtons (juce::Rectangle<int> area) const;
@@ -163,6 +164,9 @@ private:
     juce::ScrollBar hScroll { false };
     juce::ScrollBar vScroll { true };
     ScrollListener scrollListener { *this };
+    juce::Image selectToolIcon;
+    juce::Image drawToolIcon;
+    juce::Image eraseToolIcon;
 
     // Layout rects (computed in resized)
     ButtonRects btnRects;

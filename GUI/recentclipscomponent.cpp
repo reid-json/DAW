@@ -15,8 +15,10 @@ juce::Image createDragPreviewImage(const juce::String& name, bool isPattern)
     juce::Graphics g(image);
 
     auto area = image.getBounds().reduced(4);
-    g.setColour(isPattern ? juce::Colour(0xff30415d) : juce::Colour(0xff223044));
+    g.setColour(juce::Colour(0xffE68000));
     g.fillRoundedRectangle(area.toFloat(), 8.0f);
+    g.setColour(juce::Colours::white.withAlpha(0.95f));
+    g.drawRoundedRectangle(area.toFloat(), 8.0f, 1.2f);
 
     g.setColour(juce::Colours::white);
     g.drawText(name, area.reduced(10, 8), juce::Justification::centredLeft, true);
@@ -30,8 +32,8 @@ juce::String getSectionTitle(RecentClipsComponent::ItemKind kind)
 }
 }
 
-RecentClipsComponent::RecentClipsComponent(DAWState& stateIn)
-    : state(stateIn)
+RecentClipsComponent::RecentClipsComponent(DAWState& stateIn, ThemeData& themeIn)
+    : state(stateIn), theme(themeIn)
 {
 }
 
@@ -61,8 +63,8 @@ void RecentClipsComponent::paint(juce::Graphics& g)
     if (! hasClips && ! hasPatterns)
     {
         auto emptyBounds = getLocalBounds().reduced(10, 20);
-        g.setColour(juce::Colours::white.withAlpha(0.92f));
-        g.setFont(16.0f);
+        g.setColour(theme.colour("recent-clips.empty.title", juce::Colours::white.withAlpha(0.92f)));
+        g.setFont(juce::Font(16.0f, juce::Font::bold));
         g.drawText("No clips or patterns",
                    emptyBounds.removeFromTop(28),
                    juce::Justification::centredTop,
@@ -77,8 +79,8 @@ void RecentClipsComponent::paint(juce::Graphics& g)
         auto header = juce::Rectangle<int>(0, y, getWidth() - scrollbarWidth, sectionHeaderHeight).reduced(4, 2);
         if (header.getBottom() >= 0 && header.getY() <= getHeight())
         {
-            g.setColour(juce::Colours::white.withAlpha(0.88f));
-            g.setFont(14.0f);
+            g.setColour(theme.colour("recent-clips.section-title", juce::Colours::white.withAlpha(0.88f)));
+            g.setFont(juce::Font(16.0f, juce::Font::bold));
             g.drawText(getSectionTitle(kind), header, juce::Justification::centredLeft, false);
         }
 
@@ -89,11 +91,11 @@ void RecentClipsComponent::paint(juce::Graphics& g)
             auto emptyArea = juce::Rectangle<int>(0, y, getWidth() - scrollbarWidth, emptyRowHeight).reduced(4);
             if (emptyArea.getBottom() >= 0 && emptyArea.getY() <= getHeight())
             {
-                g.setColour(juce::Colour(0xff1b2433));
+                g.setColour(theme.colour("recent-clips.empty-row.background", juce::Colour(0xff1b2433)));
                 g.fillRoundedRectangle(emptyArea.toFloat(), 8.0f);
 
-                g.setColour(juce::Colours::white.withAlpha(0.48f));
-                g.setFont(13.0f);
+                g.setColour(theme.colour("recent-clips.empty-row.text", juce::Colours::white.withAlpha(0.48f)));
+                g.setFont(juce::Font(13.0f, juce::Font::bold));
                 g.drawText(kind == ItemKind::clip ? "No audio files yet" : "No saved patterns yet",
                            emptyArea.reduced(10, 8),
                            juce::Justification::centredLeft,
@@ -111,13 +113,19 @@ void RecentClipsComponent::paint(juce::Graphics& g)
                 continue;
 
             const auto isPattern = kind == ItemKind::pattern;
-            const auto colour = isPattern ? juce::Colour(0xff30415d) : juce::Colour(0xff223044);
+            const auto colour = isPattern ? theme.colour("recent-clips.pattern-item.background", juce::Colour(0xffE68000))
+                                          : theme.colour("recent-clips.clip-item.background", juce::Colour(0xffE68000));
+            const auto outline = isPattern ? theme.colour("recent-clips.pattern-item.outline", juce::Colours::white)
+                                           : theme.colour("recent-clips.clip-item.outline", juce::Colours::white);
             const auto& name = isPattern ? state.savedPatterns[(size_t) i].name
                                          : state.recentClips[(size_t) i].name;
 
             g.setColour(colour);
             g.fillRoundedRectangle(area.toFloat(), 8.0f);
-            g.setColour(juce::Colours::white);
+            g.setColour(outline);
+            g.drawRoundedRectangle(area.toFloat().reduced(0.5f), 8.0f, 1.2f);
+            g.setColour(theme.colour("recent-clips.item.text", juce::Colours::white));
+            g.setFont(juce::Font(13.0f, juce::Font::bold));
             g.drawText(name, area.reduced(10, 8), juce::Justification::centredLeft, true);
         }
 
@@ -129,10 +137,13 @@ void RecentClipsComponent::paint(juce::Graphics& g)
 
     if (getMaxScroll() > 0)
     {
-        g.setColour(juce::Colours::white.withAlpha(0.08f));
+        g.setColour(theme.colour("recent-clips.scrollbar.track", juce::Colours::white.withAlpha(0.08f)));
         g.fillRoundedRectangle(getScrollbarTrackBounds(), 4.0f);
-        g.setColour(juce::Colour(0xff4c88ff).withAlpha(0.9f));
-        g.fillRoundedRectangle(getScrollbarThumbBounds(), 4.0f);
+        g.setColour(theme.colour("recent-clips.scrollbar.thumb", juce::Colour(0xff4c88ff).withAlpha(0.9f)));
+        auto thumb = getScrollbarThumbBounds();
+        g.fillRoundedRectangle(thumb, 4.0f);
+        g.setColour(theme.colour("recent-clips.scrollbar.outline", juce::Colours::white.withAlpha(0.75f)));
+        g.drawRoundedRectangle(thumb, 4.0f, 1.0f);
     }
 }
 

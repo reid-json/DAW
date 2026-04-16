@@ -33,6 +33,32 @@ namespace PianoRoll
     int rowToNote (int row)      { return topNote - row; }
 }
 
+namespace
+{
+    juce::File findResourcesDir()
+    {
+        auto exeFile = juce::File::getSpecialLocation (juce::File::currentExecutableFile);
+
+        auto resourcesDir = exeFile.getSiblingFile ("Resources");
+        if (! resourcesDir.exists())
+            resourcesDir = exeFile.getParentDirectory();
+        if (! resourcesDir.getChildFile ("Resources").exists())
+            resourcesDir = resourcesDir.getParentDirectory();
+        if (! resourcesDir.getChildFile ("Resources").exists())
+            resourcesDir = resourcesDir.getParentDirectory();
+
+        return resourcesDir.getChildFile ("Resources");
+    }
+
+    juce::Image loadSpriteImage (const juce::String& fileName)
+    {
+        const auto spriteFile = findResourcesDir().getChildFile ("ui")
+                                                  .getChildFile ("sprites")
+                                                  .getChildFile (fileName);
+        return spriteFile.existsAsFile() ? juce::ImageFileFormat::loadFrom (spriteFile) : juce::Image{};
+    }
+}
+
 // ScrollListener
 
 void PianoRollComponent::ScrollListener::scrollBarMoved (juce::ScrollBar* bar, double newStart)
@@ -48,6 +74,9 @@ void PianoRollComponent::ScrollListener::scrollBarMoved (juce::ScrollBar* bar, d
 // constructor
 
 PianoRollComponent::PianoRollComponent()
+    : selectToolIcon (loadSpriteImage ("selecticon.png"))
+    , drawToolIcon (loadSpriteImage ("drawicon.png"))
+    , eraseToolIcon (loadSpriteImage ("eraseicon.png"))
 {
     addAndMakeVisible (hScroll);
     addAndMakeVisible (vScroll);
@@ -273,9 +302,9 @@ void PianoRollComponent::paintToolbar (juce::Graphics& g, juce::Rectangle<int> a
     g.setColour (juce::Colour::fromRGB (18, 23, 33));
     g.fillRect (area);
 
-    paintButton (g, btnRects.select, "Select", tool == Tool::select);
-    paintButton (g, btnRects.draw,   "Draw",   tool == Tool::draw);
-    paintButton (g, btnRects.erase,  "Erase",  tool == Tool::erase);
+    paintButton (g, btnRects.select, "Select", tool == Tool::select, false, &selectToolIcon);
+    paintButton (g, btnRects.draw,   "Draw",   tool == Tool::draw, false, &drawToolIcon);
+    paintButton (g, btnRects.erase,  "Erase",  tool == Tool::erase, false, &eraseToolIcon);
 
     auto instLabel = instrumentName.isEmpty() ? juce::String ("No Instrument") : instrumentName;
     paintButton (g, btnRects.instrument, instLabel, instrumentName.isNotEmpty());
@@ -338,7 +367,8 @@ void PianoRollComponent::paintTimeline (juce::Graphics& g, juce::Rectangle<int> 
 }
 
 void PianoRollComponent::paintButton (juce::Graphics& g, juce::Rectangle<int> area,
-                                      const juce::String& text, bool active, bool accent)
+                                      const juce::String& text, bool active, bool accent,
+                                      const juce::Image* icon)
 {
     auto bg = active ? juce::Colour::fromRGB (58, 122, 254)
                      : accent ? juce::Colour::fromRGB (29, 56, 94)
@@ -351,6 +381,19 @@ void PianoRollComponent::paintButton (juce::Graphics& g, juce::Rectangle<int> ar
     g.fillRoundedRectangle (area.toFloat(), 7.0f);
     g.setColour (border);
     g.drawRoundedRectangle (area.toFloat(), 7.0f, 1.0f);
+
+    if (icon != nullptr && icon->isValid())
+    {
+        g.setOpacity (active ? 1.0f : 0.9f);
+        g.drawImageWithin (*icon,
+                           area.getX() + 6,
+                           area.getY() + 5,
+                           juce::jmax (1, area.getWidth() - 12),
+                           juce::jmax (1, area.getHeight() - 10),
+                           juce::RectanglePlacement::centred);
+        g.setOpacity (1.0f);
+        return;
+    }
 
     g.setColour (juce::Colours::white.withAlpha (active ? 0.96f : 0.86f));
     g.setFont (12.0f);
@@ -384,17 +427,17 @@ void PianoRollComponent::resized()
 PianoRollComponent::ButtonRects PianoRollComponent::layoutButtons (juce::Rectangle<int> area) const
 {
     ButtonRects r;
-    auto content = area.reduced (12, 8);
+    auto content = area.reduced (12, 9);
 
-    auto toolBtns = content.removeFromLeft (216);
-    r.select = toolBtns.removeFromLeft (68).reduced (2, 0);
-    r.draw   = toolBtns.removeFromLeft (64).reduced (2, 0);
-    r.erase  = toolBtns.removeFromLeft (64).reduced (2, 0);
+    auto toolBtns = content.removeFromLeft (228);
+    r.select = toolBtns.removeFromLeft (74).reduced (2, 0);
+    r.draw   = toolBtns.removeFromLeft (70).reduced (2, 0);
+    r.erase  = toolBtns.removeFromLeft (70).reduced (2, 0);
 
     content.removeFromLeft (10);
-    r.instrument = content.removeFromLeft (150).reduced (2, 0);
+    r.instrument = content.removeFromLeft (158).reduced (2, 0);
     content.removeFromLeft (10);
-    r.save = content.removeFromLeft (110).reduced (2, 0);
+    r.save = content.removeFromLeft (118).reduced (2, 0);
     return r;
 }
 

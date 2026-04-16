@@ -11,6 +11,8 @@
 #include "arrangementcomponent.h"
 #include "tracklistcomponent.h"
 #include "recentclipscomponent.h"
+#include "tempocontrolcomponent.h"
+#include "theme.h"
 #include "pianoRoll.h"
 #include "settingswindow.h"
 #include "../Plugin_Hosting/pluginhostmanager.h"
@@ -23,6 +25,7 @@ public:
     ~GUIComponent() override;
 
     void resized() override;
+    void paintOverChildren(juce::Graphics& g) override;
 
     DAWState& getState() noexcept                     { return state; }
     const DAWState& getState() const noexcept         { return state; }
@@ -48,19 +51,23 @@ public:
     std::function<void(const juce::String&)> onPianoRollInstrumentChangeRequested;
 
 private:
+    class HeaderButtonOverlay;
+
     jive::Interpreter viewInterpreter;
     jive::LookAndFeel lookAndFeel;
+    std::map<juce::String, std::unique_ptr<HeaderButtonOverlay>> headerButtonOverlays;
     std::unique_ptr<jive::GuiItem> root;
     juce::ValueTree uiTree;
     juce::var stylesheet;
+    ThemeData themeData;
     std::map<juce::String, juce::var> spriteAssets;
-
     DAWState state;
     PluginHostManager pluginHostManager;
     TimelineComponent* timelineComponent = nullptr;
     ArrangementComponent* arrangementComponent = nullptr;
     TrackListComponent* trackListComponent = nullptr;
     RecentClipsComponent* recentClipsComponent = nullptr;
+    TempoControlComponent* tempoControlComponent = nullptr;
     std::unique_ptr<PianoRollWindow> pianoRollWindow;
     std::unique_ptr<SettingsWindow> settingsWindow;
 
@@ -70,6 +77,8 @@ private:
 
     void registerCustomComponentTypes();
     void applyManualBodyLayout();
+    void createHeaderButtonOverlays();
+    void updateHeaderButtonOverlayBounds();
     void followTimelinePlayhead();
     void installCallbacks();
     void refreshFromState();
