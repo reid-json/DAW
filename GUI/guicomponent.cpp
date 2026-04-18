@@ -7,6 +7,8 @@
 
 namespace
 {
+    constexpr auto themeSettingsKey = "activeTheme";
+
     struct ThemePresetDefinition
     {
         juce::String headerSpiceKey;
@@ -51,6 +53,51 @@ namespace
             dir = dir.getParentDirectory();
         }
         return dir.getChildFile ("Resources");
+    }
+
+    juce::File getThemeSettingsFile()
+    {
+        auto settingsDir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                               .getChildFile ("DAW");
+        settingsDir.createDirectory();
+        return settingsDir.getChildFile ("theme.settings");
+    }
+
+    juce::String themePresetToString (GUIComponent::ThemePreset preset)
+    {
+        switch (preset)
+        {
+            case GUIComponent::ThemePreset::blue:   return "blue";
+            case GUIComponent::ThemePreset::green:  return "green";
+            case GUIComponent::ThemePreset::purple: return "purple";
+            case GUIComponent::ThemePreset::orange:
+            default:                                return "orange";
+        }
+    }
+
+    GUIComponent::ThemePreset themePresetFromString (juce::String value)
+    {
+        value = value.trim().toLowerCase();
+        if (value == "blue")
+            return GUIComponent::ThemePreset::blue;
+        if (value == "green")
+            return GUIComponent::ThemePreset::green;
+        if (value == "purple")
+            return GUIComponent::ThemePreset::purple;
+        return GUIComponent::ThemePreset::orange;
+    }
+
+    GUIComponent::ThemePreset loadSavedThemePreset()
+    {
+        juce::PropertiesFile settings (getThemeSettingsFile(), juce::PropertiesFile::Options {});
+        return themePresetFromString (settings.getValue (themeSettingsKey, "orange"));
+    }
+
+    void saveThemePreset (GUIComponent::ThemePreset preset)
+    {
+        juce::PropertiesFile settings (getThemeSettingsFile(), juce::PropertiesFile::Options {});
+        settings.setValue (themeSettingsKey, themePresetToString (preset));
+        settings.saveIfNeeded();
     }
 
     juce::var parseJsonFile (const juce::File& file)
@@ -872,6 +919,7 @@ GUIComponent::GUIComponent(juce::AudioDeviceManager& sharedDeviceManager)
         createHeaderButtonOverlays();
     }
 
+    currentTheme = loadSavedThemePreset();
     applyThemePreset (currentTheme);
     refreshFromState();
 
@@ -1232,6 +1280,7 @@ void GUIComponent::installCallbacks()
 void GUIComponent::applyThemePreset (ThemePreset preset)
 {
     currentTheme = preset;
+    saveThemePreset (preset);
 
     stylesheet = cloneVar (baseStylesheet);
     if (preset != ThemePreset::orange)

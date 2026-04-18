@@ -605,6 +605,20 @@ bool PianoRollComponent::isOverButton (juce::Point<int> pos) const
         || btnRects.instrument.contains (pos);
 }
 
+juce::String PianoRollComponent::getToolbarTooltip (juce::Point<int> pos) const
+{
+    if (btnRects.select.contains (pos))
+        return "Select notes, resize and move bars, and select multiple notes";
+
+    if (btnRects.draw.contains (pos))
+        return "Draw notes into the piano roll";
+
+    if (btnRects.erase.contains (pos))
+        return "Erase notes from the piano roll";
+
+    return {};
+}
+
 bool PianoRollComponent::handleButtonClick (juce::Point<int> pos)
 {
     auto toolBtnArea = btnRects.select.getUnion (btnRects.draw).getUnion (btnRects.erase);
@@ -678,11 +692,14 @@ void PianoRollComponent::mouseMove (const juce::MouseEvent& e)
     setMouseCursor (isOverButton (e.getPosition())
                         ? juce::MouseCursor::PointingHandCursor
                         : juce::MouseCursor::NormalCursor);
+
+    setTooltip (getToolbarTooltip (e.getPosition()));
 }
 
 void PianoRollComponent::mouseExit (const juce::MouseEvent&)
 {
     setMouseCursor (juce::MouseCursor::NormalCursor);
+    setTooltip ({});
 }
 
 void PianoRollComponent::mouseDown (const juce::MouseEvent& e)

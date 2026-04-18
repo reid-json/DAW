@@ -34,7 +34,8 @@ namespace PianoRoll
 }
 
 //==================================================
-class PianoRollComponent : public juce::Component
+class PianoRollComponent : public juce::Component,
+                           public juce::SettableTooltipClient
 {
 public:
     PianoRollComponent();
@@ -121,6 +122,7 @@ private:
     // Layout / toolbar
     ButtonRects layoutButtons (juce::Rectangle<int> area) const;
     bool isOverButton (juce::Point<int> pos) const;
+    juce::String getToolbarTooltip (juce::Point<int> pos) const;
     bool handleButtonClick (juce::Point<int> pos);
 
     // Grid mouse handlers
