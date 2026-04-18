@@ -10,6 +10,7 @@ class ThemeData
 public:
     void loadFromStylesheet (const juce::var& stylesheet);
     juce::Colour colour (const juce::String& token, juce::Colour fallback = juce::Colours::transparentBlack) const;
+    void setColour (const juce::String& token, juce::Colour colourValue);
 
 private:
     std::map<juce::String, juce::Colour> colours;

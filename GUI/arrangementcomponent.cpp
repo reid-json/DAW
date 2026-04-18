@@ -1,5 +1,6 @@
 #include "arrangementcomponent.h"
 #include <cmath>
+#include "recentclipscomponent.h"
 
 namespace
 {
@@ -30,6 +31,13 @@ ArrangementComponent::ArrangementComponent(DAWState& stateIn, ThemeData& themeIn
     : state(stateIn), theme(themeIn)
 {
     bodySpiceImage = loadBodySpiceImage();
+    popupMenuLookAndFeel = std::make_unique<SharedPopupMenuLookAndFeel> (theme);
+}
+
+void ArrangementComponent::setBodySpiceImage (juce::Image newImage)
+{
+    bodySpiceImage = std::move (newImage);
+    repaint();
 }
 
 void ArrangementComponent::paint(juce::Graphics& g)
@@ -150,6 +158,13 @@ void ArrangementComponent::mouseDown(const juce::MouseEvent& e)
 
     if (auto* clip = findClipAt(e.position))
     {
+        if (e.mods.isPopupMenu())
+        {
+            if (clip->kind == TimelineClipItem::ContentKind::pattern)
+                showClipMenu(*clip);
+            return;
+        }
+
         if (getDeleteButtonBounds(*clip).contains(e.position))
         {
             if (onTimelineClipDeleteRequested)
@@ -359,6 +374,66 @@ void ArrangementComponent::setHorizontalScrollOffset(int newOffset)
         top->repaint();
     else
         repaint();
+}
+
+void ArrangementComponent::showClipMenu(const TimelineClipItem& clip)
+{
+    juce::PopupMenu menu;
+    menu.setLookAndFeel (popupMenuLookAndFeel.get());
+    menu.addItem(1, "Rename");
+    menu.addItem(2, "Edit");
+
+    const auto target = getClipBounds(clip).toNearestInt();
+    juce::Component::SafePointer<ArrangementComponent> safeThis(this);
+    const auto assetId = clip.assetId;
+    const auto clipName = clip.name;
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(localAreaToGlobal(target)),
+                       [safeThis, assetId, clipName](int result)
+                       {
+                           if (safeThis == nullptr || result == 0)
+                               return;
+
+                           if (result == 1)
+                           {
+                               TimelineClipItem tempClip;
+                               tempClip.assetId = assetId;
+                               tempClip.name = clipName;
+                               safeThis->promptRenameClip(tempClip);
+                               return;
+                           }
+
+                           if (result == 2 && safeThis->onPatternEditRequested)
+                               safeThis->onPatternEditRequested(assetId);
+                       });
+}
+
+void ArrangementComponent::promptRenameClip(const TimelineClipItem& clip)
+{
+    if (clip.assetId <= 0)
+        return;
+
+    auto* renameWindow = new juce::AlertWindow("Rename Item", "Enter a new name", juce::AlertWindow::NoIcon);
+    renameWindow->addTextEditor("itemName", clip.name, "Name");
+    renameWindow->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    renameWindow->addButton("Rename", 1, juce::KeyPress(juce::KeyPress::returnKey));
+
+    juce::Component::SafePointer<ArrangementComponent> safeThis(this);
+    juce::Component::SafePointer<juce::AlertWindow> safeWindow(renameWindow);
+    const auto assetId = clip.assetId;
+    renameWindow->enterModalState(true,
+                                  juce::ModalCallbackFunction::create([safeThis, safeWindow, assetId](int result)
+                                  {
+                                      if (result != 1 || safeThis == nullptr || safeWindow == nullptr)
+                                          return;
+
+                                      if (auto* editor = safeWindow->getTextEditor("itemName"))
+                                      {
+                                          const auto renamed = editor->getText().trim();
+                                          if (renamed.isNotEmpty() && safeThis->onAssetRenameRequested)
+                                              safeThis->onAssetRenameRequested(assetId, renamed);
+                                      }
+                                  }),
+                                  true);
 }
 
 juce::Rectangle<float> ArrangementComponent::getHorizontalScrollbarTrackBounds() const

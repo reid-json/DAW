@@ -3,9 +3,44 @@
 #include <juce_core/juce_core.h>
 #include <jive_core/algorithms/jive_Find.h>
 #include "timelinecomponent.h"
+#include "sharedpopupmenulookandfeel.h"
 
 namespace
 {
+    struct ThemePresetDefinition
+    {
+        juce::String headerSpiceKey;
+        juce::String bodySpiceKey;
+        float accentHue = 0.0f;
+    };
+
+    juce::String getHeaderTooltipText (const juce::String& buttonId, const DAWState& state)
+    {
+        if (buttonId == "restartBtn")
+            return "Restart playback from the beginning";
+
+        if (buttonId == "playBtn")
+            return "Start playback";
+
+        if (buttonId == "pauseBtn")
+            return state.transportState == DAWState::TransportState::paused
+                ? "Resume playback"
+                : "Pause playback";
+
+        if (buttonId == "recordBtn")
+            return state.isRecording
+                ? "Stop recording"
+                : "Start recording on the armed track";
+
+        if (buttonId == "pianoRollBtn")
+            return "Open the piano roll editor";
+
+        if (buttonId == "settingsBtn")
+            return "Open audio and app settings";
+
+        return {};
+    }
+
     juce::File findResourcesDir()
     {
         auto dir = juce::File::getSpecialLocation (juce::File::currentExecutableFile).getParentDirectory();
@@ -26,6 +61,219 @@ namespace
     juce::DynamicObject* asObj (const juce::var& v)
     {
         return v.isObject() ? v.getDynamicObject() : nullptr;
+    }
+
+    bool setPathValue (juce::var& root, const juce::String& path, const juce::var& value)
+    {
+        juce::StringArray parts;
+        parts.addTokens (path, ".", "\"");
+        parts.removeEmptyStrings();
+        if (parts.isEmpty())
+            return false;
+
+        auto* current = asObj (root);
+        for (int i = 0; i < parts.size() - 1; ++i)
+        {
+            if (current == nullptr)
+                return false;
+
+            auto child = current->getProperty (parts[i]);
+            if (! child.isObject())
+                return false;
+
+            current = asObj (child);
+        }
+
+        if (current != nullptr)
+        {
+            current->setProperty (parts[parts.size() - 1], value);
+            return true;
+        }
+
+        return false;
+    }
+
+    juce::var cloneVar (const juce::var& value)
+    {
+        return juce::JSON::parse (juce::JSON::toString (value, false));
+    }
+
+    std::optional<juce::Colour> parseHexColour (juce::String text)
+    {
+        text = text.trim();
+        if (! text.startsWithChar ('#'))
+            return std::nullopt;
+
+        text = text.substring (1);
+        if (text.length() == 6)
+        {
+            const auto rgb = static_cast<juce::uint32> (text.getHexValue32());
+            return juce::Colour ((juce::uint8) ((rgb >> 16) & 0xff),
+                                 (juce::uint8) ((rgb >> 8) & 0xff),
+                                 (juce::uint8) (rgb & 0xff));
+        }
+
+        if (text.length() == 8)
+        {
+            const auto argb = static_cast<juce::uint32> (text.getHexValue32());
+            return juce::Colour ((juce::uint8) ((argb >> 24) & 0xff),
+                                 (juce::uint8) ((argb >> 16) & 0xff),
+                                 (juce::uint8) ((argb >> 8) & 0xff),
+                                 (juce::uint8) (argb & 0xff));
+        }
+
+        return std::nullopt;
+    }
+
+    std::optional<juce::Colour> parseRgbColour (juce::String text)
+    {
+        const auto open = text.indexOfChar ('(');
+        const auto close = text.lastIndexOfChar (')');
+        if (open < 0 || close <= open)
+            return std::nullopt;
+
+        const auto fn = text.substring (0, open).trim().toLowerCase();
+        const bool hasAlpha = fn == "rgba";
+        if (fn != "rgb" && ! hasAlpha)
+            return std::nullopt;
+
+        juce::StringArray parts;
+        parts.addTokens (text.substring (open + 1, close), ",", "\"");
+        parts.removeEmptyStrings();
+        parts.trim();
+
+        if (parts.size() != (hasAlpha ? 4 : 3))
+            return std::nullopt;
+
+        const auto red = (juce::uint8) juce::jlimit (0, 255, parts[0].getIntValue());
+        const auto green = (juce::uint8) juce::jlimit (0, 255, parts[1].getIntValue());
+        const auto blue = (juce::uint8) juce::jlimit (0, 255, parts[2].getIntValue());
+
+        if (! hasAlpha)
+            return juce::Colour (red, green, blue);
+
+        const auto alphaText = parts[3].trim();
+        const float alphaValue = alphaText.containsChar ('.')
+            ? juce::jlimit (0.0f, 1.0f, alphaText.getFloatValue())
+            : (float) juce::jlimit (0, 255, alphaText.getIntValue()) / 255.0f;
+
+        return juce::Colour (red, green, blue).withAlpha (alphaValue);
+    }
+
+    std::optional<juce::Colour> parseColourValue (const juce::var& value)
+    {
+        if (! value.isString())
+            return std::nullopt;
+
+        const auto text = value.toString().trim();
+        if (text.isEmpty())
+            return std::nullopt;
+
+        if (auto hex = parseHexColour (text))
+            return hex;
+
+        if (auto rgb = parseRgbColour (text))
+            return rgb;
+
+        if (text.equalsIgnoreCase ("white"))
+            return juce::Colours::white;
+
+        if (text.equalsIgnoreCase ("black"))
+            return juce::Colours::black;
+
+        if (text.equalsIgnoreCase ("transparent"))
+            return juce::Colours::transparentBlack;
+
+        return std::nullopt;
+    }
+
+    bool isOrangeAccentColour (juce::Colour colour)
+    {
+        float h = 0.0f, s = 0.0f, v = 0.0f;
+        colour.getHSB (h, s, v);
+        return s > 0.18f
+            && v > 0.15f
+            && ((h >= 0.02f && h <= 0.16f) || h >= 0.96f);
+    }
+
+    juce::String serialiseColourLike (juce::Colour colour, bool preserveAlphaString)
+    {
+        if (preserveAlphaString && colour.getFloatAlpha() < 0.999f)
+        {
+            return "rgba(" + juce::String ((int) colour.getRed()) + ","
+                           + juce::String ((int) colour.getGreen()) + ","
+                           + juce::String ((int) colour.getBlue()) + ","
+                           + juce::String (colour.getFloatAlpha(), 3) + ")";
+        }
+
+        return colour.toDisplayString (colour.getFloatAlpha() < 0.999f);
+    }
+
+    juce::String shiftColourString (const juce::String& source, float targetHue)
+    {
+        if (auto colour = parseColourValue (source))
+        {
+            float h = 0.0f, s = 0.0f, v = 0.0f;
+            colour->getHSB (h, s, v);
+            return serialiseColourLike (juce::Colour::fromHSV (targetHue, s, v, colour->getFloatAlpha()),
+                                        source.startsWithIgnoreCase ("rgba"));
+        }
+
+        return source;
+    }
+
+    bool shouldPreserveThemePath (const juce::String& path)
+    {
+        return path.startsWith ("theme.ui.button-record")
+            || path.startsWith ("theme.tracklist.arm")
+            || path.startsWith ("theme.arrangement.clip.delete-background");
+    }
+
+    void hueShiftOrangeAccents (juce::var& node, float targetHue, const juce::String& path = {})
+    {
+        if (shouldPreserveThemePath (path))
+            return;
+
+        if (node.isString())
+        {
+            if (auto colour = parseColourValue (node))
+            {
+                if (isOrangeAccentColour (*colour))
+                {
+                    float h = 0.0f, s = 0.0f, v = 0.0f;
+                    colour->getHSB (h, s, v);
+                    auto shifted = juce::Colour::fromHSV (targetHue, s, v, colour->getFloatAlpha());
+                    node = serialiseColourLike (shifted, node.toString().startsWithIgnoreCase ("rgba"));
+                }
+            }
+            return;
+        }
+
+        if (auto* object = asObj (node))
+            for (auto& property : object->getProperties())
+            {
+                auto value = property.value;
+                const auto childPath = path.isEmpty() ? property.name.toString()
+                                                      : path + "." + property.name.toString();
+                hueShiftOrangeAccents (value, targetHue, childPath);
+                object->setProperty (property.name, value);
+            }
+    }
+
+    ThemePresetDefinition getThemePresetDefinition (GUIComponent::ThemePreset preset)
+    {
+        switch (preset)
+        {
+            case GUIComponent::ThemePreset::blue:
+                return { "headerspiceblue", "bodyspiceblue", juce::Colour (0xff2f6fe6).getHue() };
+            case GUIComponent::ThemePreset::purple:
+                return { "headerspicepurple", "bodyspicepurple", juce::Colour (0xff8b5cf6).getHue() };
+            case GUIComponent::ThemePreset::green:
+                return { "headerspicegreen", "bodyspicegreen", juce::Colour (0xff22c55e).getHue() };
+            case GUIComponent::ThemePreset::orange:
+            default:
+                return { "headerspice", "bodyspice", juce::Colour (0xffe68000).getHue() };
+        }
     }
 
     juce::var resolveThemeReference (const juce::var& value, const juce::var& stylesheet)
@@ -240,7 +488,8 @@ namespace
     }
 }
 
-class GUIComponent::HeaderButtonOverlay final : public juce::Component
+class GUIComponent::HeaderButtonOverlay final : public juce::Component,
+                                                public juce::SettableTooltipClient
 {
 public:
     HeaderButtonOverlay (ThemeData& themeIn, juce::String buttonIdIn)
@@ -260,6 +509,11 @@ public:
     {
         text = std::move (newText);
         repaint();
+    }
+
+    void setTooltipText (juce::String newTooltip)
+    {
+        setTooltip (std::move (newTooltip));
     }
 
     void setSprite (const juce::Image& newSprite)
@@ -515,6 +769,16 @@ void GUIComponent::registerCustomComponentTypes()
             state.timelineClips.erase (it, state.timelineClips.end());
             repaintDynamicViews();
         };
+        component->onAssetRenameRequested = [this] (int assetId, const juce::String& newName)
+        {
+            if (onAssetRenameRequested)
+                onAssetRenameRequested (assetId, newName);
+        };
+        component->onPatternEditRequested = [this] (int assetId)
+        {
+            if (onPatternEditRequested)
+                onPatternEditRequested (assetId);
+        };
 
         arrangementComponent = component.get();
         return component;
@@ -527,6 +791,11 @@ void GUIComponent::registerCustomComponentTypes()
         {
             if (onAssetRenameRequested)
                 onAssetRenameRequested (assetId, newName);
+        };
+        component->onPatternEditRequested = [this] (int assetId)
+        {
+            if (onPatternEditRequested)
+                onPatternEditRequested (assetId);
         };
         recentClipsComponent = component.get();
         return component;
@@ -583,8 +852,10 @@ GUIComponent::GUIComponent(juce::AudioDeviceManager& sharedDeviceManager)
         if (auto* spice = findSprite (juce::StringArray { "bodyspice" }, spriteAssets))
             bodySpiceSidebarNode.setProperty ("source", *spice, nullptr);
 
-    stylesheet = parseJsonFile (jsonStyleFile);
+    baseStylesheet = parseJsonFile (jsonStyleFile);
+    stylesheet = cloneVar (baseStylesheet);
     themeData.loadFromStylesheet (stylesheet);
+    fileMenuLookAndFeel = std::make_unique<SharedPopupMenuLookAndFeel> (themeData);
     if (stylesheet.isObject())
         applyStyles (uiTree, stylesheet);
 
@@ -601,6 +872,7 @@ GUIComponent::GUIComponent(juce::AudioDeviceManager& sharedDeviceManager)
         createHeaderButtonOverlays();
     }
 
+    applyThemePreset (currentTheme);
     refreshFromState();
 
     setSize (1440, 700);
@@ -754,6 +1026,7 @@ void GUIComponent::createHeaderButtonOverlays()
     };
 
     for (const auto& id : { juce::String ("fileBtn"),
+                            juce::String ("themesBtn"),
                             juce::String ("restartBtn"),
                             juce::String ("playBtn"),
                             juce::String ("pauseBtn"),
@@ -769,7 +1042,12 @@ void GUIComponent::createHeaderButtonOverlays()
         overlay->setTargetButton (button);
 
         auto node = jive::findElementWithID (uiTree, juce::Identifier (id));
-        if (node.isValid() && id == "fileBtn")
+        if (node.isValid() && id != "fileBtn" && id != "themesBtn")
+            if (const auto* sprite = findSprite (buildSpriteKeys (node), spriteAssets))
+                if (! sprite->isVoid())
+                    overlay->setSprite (juce::VariantConverter<juce::Image>::fromVar (*sprite));
+
+        if (node.isValid() && (id == "fileBtn" || id == "themesBtn"))
             for (int i = 0; i < node.getNumChildren(); ++i)
                 if (auto child = node.getChild (i); child.getType().toString().compareIgnoreCase ("Text") == 0)
                 {
@@ -777,10 +1055,8 @@ void GUIComponent::createHeaderButtonOverlays()
                     break;
                 }
 
-        if (node.isValid() && id != "fileBtn")
-            if (const auto* sprite = findSprite (buildSpriteKeys (node), spriteAssets))
-                if (! sprite->isVoid())
-                    overlay->setSprite (juce::VariantConverter<juce::Image>::fromVar (*sprite));
+        if (id == "themesBtn")
+            overlay->setText ("Themes");
 
         addAndMakeVisible (*overlay);
         overlay->toFront (false);
@@ -790,6 +1066,8 @@ void GUIComponent::createHeaderButtonOverlays()
         button->setInterceptsMouseClicks (false, false);
         enableClickThrough (*button);
     }
+
+    refreshHeaderButtonTooltips();
 }
 
 void GUIComponent::updateHeaderButtonOverlayBounds()
@@ -817,6 +1095,38 @@ void GUIComponent::updateHeaderButtonOverlayBounds()
     }
 }
 
+void GUIComponent::refreshHeaderButtonTooltips()
+{
+    auto getButton = [this] (const juce::String& id) -> juce::Button*
+    {
+        if (root == nullptr)
+            return nullptr;
+
+        if (auto* item = findGuiItemById (*root, juce::Identifier (id)))
+            if (auto comp = item->getComponent())
+                return dynamic_cast<juce::Button*> (comp.get());
+
+        return nullptr;
+    };
+
+    for (const auto& id : { juce::String ("restartBtn"),
+                            juce::String ("playBtn"),
+                            juce::String ("pauseBtn"),
+                            juce::String ("recordBtn"),
+                            juce::String ("pianoRollBtn"),
+                            juce::String ("settingsBtn") })
+    {
+        const auto tooltip = getHeaderTooltipText (id, state);
+
+        if (auto* button = getButton (id))
+            button->setTooltip (tooltip);
+
+        if (auto it = headerButtonOverlays.find (id); it != headerButtonOverlays.end())
+            if (it->second != nullptr)
+                it->second->setTooltipText (tooltip);
+    }
+}
+
 void GUIComponent::installCallbacks()
 {
     auto bindBtn = [this] (const juce::String& id, std::function<void()> fn)
@@ -841,6 +1151,7 @@ void GUIComponent::installCallbacks()
     };
 
     for (const auto& id : { juce::String ("fileBtn"),
+                            juce::String ("themesBtn"),
                             juce::String ("restartBtn"),
                             juce::String ("playBtn"),
                             juce::String ("pauseBtn"),
@@ -872,35 +1183,13 @@ void GUIComponent::installCallbacks()
 
     bindBtn ("pianoRollBtn", [this]
     {
-        if (pianoRollWindow == nullptr)
-        {
-            pianoRollWindow = std::make_unique<PianoRollWindow>();
-            pianoRollWindow->setOnSavePattern ([this] (const std::vector<PianoRoll::Note>& notes)
-            {
-                if (onSavePatternRequested)
-                    onSavePatternRequested (notes);
-            });
-            pianoRollWindow->setOnGetAvailableInstruments ([this]
-            {
-                return pluginHostManager.getAvailableTrackInstrumentPlugins();
-            });
-            pianoRollWindow->setOnInstrumentChanged ([this] (const juce::String& name)
-            {
-                if (onPianoRollInstrumentChangeRequested)
-                    onPianoRollInstrumentChangeRequested (name);
-            });
-
-            auto currentInst = pluginHostManager.getPianoRollInstrumentName();
-            if (currentInst.isNotEmpty())
-                pianoRollWindow->setInstrumentName (currentInst);
-        }
-        pianoRollWindow->setVisible (true);
-        pianoRollWindow->toFront (true);
+        openPianoRollForPattern (getSelectedTrackPatternNotes(), getSelectedTrackPatternAssetId());
     });
 
     bindBtn ("fileBtn", [this]
     {
         juce::PopupMenu menu;
+        menu.setLookAndFeel (fileMenuLookAndFeel.get());
         menu.addItem (1, "Import Audio File...");
         menu.addItem (2, "Open Project...");
         menu.addSeparator();
@@ -916,12 +1205,222 @@ void GUIComponent::installCallbacks()
             else if (result == 4 && onExportWavRequested)      onExportWavRequested();
         });
     });
+
+    bindBtn ("themesBtn", [this]
+    {
+        juce::PopupMenu menu;
+        menu.setLookAndFeel (fileMenuLookAndFeel.get());
+        menu.addItem (1, "Orange", true, currentTheme == ThemePreset::orange);
+        menu.addItem (2, "Blue", true, currentTheme == ThemePreset::blue);
+        menu.addItem (3, "Green", true, currentTheme == ThemePreset::green);
+        menu.addItem (4, "Purple", true, currentTheme == ThemePreset::purple);
+
+        menu.showMenuAsync (juce::PopupMenu::Options(), [this] (int result)
+        {
+            if (result == 1)
+                applyThemePreset (ThemePreset::orange);
+            else if (result == 2)
+                applyThemePreset (ThemePreset::blue);
+            else if (result == 3)
+                applyThemePreset (ThemePreset::green);
+            else if (result == 4)
+                applyThemePreset (ThemePreset::purple);
+        });
+    });
+}
+
+void GUIComponent::applyThemePreset (ThemePreset preset)
+{
+    currentTheme = preset;
+
+    stylesheet = cloneVar (baseStylesheet);
+    if (preset != ThemePreset::orange)
+    {
+        const auto accentHue = getThemePresetDefinition (preset).accentHue;
+        hueShiftOrangeAccents (stylesheet, accentHue);
+
+        const std::pair<const char*, const char*> blueOverrides[] =
+        {
+            { "theme.ui.button.background", "#E68000" },
+            { "theme.ui.button-primary.background", "#E68000" },
+            { "theme.ui.button-mixer-add.background", "#E68000" },
+            { "theme.ui.button-monitor-off.background", "#E68000" },
+            { "theme.ui.button-monitor-on.background", "#E68000" },
+            { "theme.ui.button-danger.background", "#E68000" },
+            { "theme.ui.lane-accent.background", "#E68000" },
+            { "theme.arrangement.row.selected", "rgba(230,128,0,0.30)" },
+            { "theme.arrangement.clip.fill", "#E68000" },
+            { "theme.arrangement.scrollbar.track", "rgba(230,128,0,0.22)" },
+            { "theme.arrangement.scrollbar.thumb", "#E68000" },
+            { "theme.tracklist.panel", "#C34723" },
+            { "theme.tracklist.master-panel", "#C34723" },
+            { "theme.tracklist.remove-button.background", "#E68000" },
+            { "theme.tracklist.pill-off", "#E68000" },
+            { "theme.tracklist.mute", "#E68000" },
+            { "theme.tracklist.fx", "#E68000" },
+            { "theme.tracklist.input", "#E68000" },
+            { "theme.tracklist.routing.background", "#E68000" },
+            { "theme.tracklist.fader.fill-active", "#E68000" },
+            { "theme.tracklist.fader.fill-inactive", "rgba(230,128,0,0.32)" },
+            { "theme.tracklist.pan.ring-active", "#E68000" },
+            { "theme.tracklist.pan.ring-inactive", "#E68000" },
+            { "theme.tracklist.add-track.background", "#E68000" },
+            { "theme.recent-clips.clip-item.background", "#E68000" },
+            { "theme.recent-clips.pattern-item.background", "#E68000" },
+            { "theme.recent-clips.scrollbar.track", "rgba(230,128,0,0.22)" },
+            { "theme.recent-clips.scrollbar.thumb", "#E68000" },
+            { "theme.tempo.slider.track", "#E68000" },
+            { "theme.tempo.value.background", "#E68000" }
+        };
+
+        for (const auto& [path, sourceColour] : blueOverrides)
+            setPathValue (stylesheet, path, shiftColourString (sourceColour, accentHue));
+    }
+
+    themeData.loadFromStylesheet (stylesheet);
+
+    if (preset != ThemePreset::orange)
+    {
+        const auto accentHue = getThemePresetDefinition (preset).accentHue;
+        const auto forceAccent = [this, accentHue] (const juce::String& token, const juce::String& source)
+        {
+            if (auto shifted = parseColourValue (shiftColourString (source, accentHue)))
+                themeData.setColour (token, *shifted);
+        };
+
+        forceAccent ("ui.button.background", "#E68000");
+        forceAccent ("ui.button-primary.background", "#E68000");
+        forceAccent ("ui.button-mixer-add.background", "#E68000");
+        forceAccent ("ui.button-monitor-off.background", "#E68000");
+        forceAccent ("ui.button-monitor-on.background", "#E68000");
+        forceAccent ("ui.button-danger.background", "#E68000");
+        forceAccent ("ui.lane-accent.background", "#E68000");
+        forceAccent ("arrangement.row.selected", "rgba(230,128,0,0.30)");
+        forceAccent ("arrangement.clip.fill", "#E68000");
+        forceAccent ("arrangement.scrollbar.track", "rgba(230,128,0,0.22)");
+        forceAccent ("arrangement.scrollbar.thumb", "#E68000");
+        forceAccent ("tracklist.panel", "#C34723");
+        forceAccent ("tracklist.master-panel", "#C34723");
+        forceAccent ("tracklist.remove-button.background", "#E68000");
+        forceAccent ("tracklist.pill-off", "#E68000");
+        forceAccent ("tracklist.mute", "#E68000");
+        forceAccent ("tracklist.fx", "#E68000");
+        forceAccent ("tracklist.input", "#E68000");
+        forceAccent ("tracklist.routing.background", "#E68000");
+        forceAccent ("tracklist.fader.fill-active", "#E68000");
+        forceAccent ("tracklist.fader.fill-inactive", "rgba(230,128,0,0.32)");
+        forceAccent ("tracklist.pan.ring-active", "#E68000");
+        forceAccent ("tracklist.pan.ring-inactive", "#E68000");
+        forceAccent ("tracklist.add-track.background", "#E68000");
+        forceAccent ("recent-clips.clip-item.background", "#E68000");
+        forceAccent ("recent-clips.pattern-item.background", "#E68000");
+        forceAccent ("recent-clips.scrollbar.track", "rgba(230,128,0,0.22)");
+        forceAccent ("recent-clips.scrollbar.thumb", "#E68000");
+        forceAccent ("tempo.slider.track", "#E68000");
+        forceAccent ("tempo.value.background", "#E68000");
+    }
+
+    juce::Colour primaryAccent (0xffe68000);
+    juce::Colour deepAccent (0xffc34723);
+    switch (preset)
+    {
+        case ThemePreset::blue:
+            primaryAccent = juce::Colour (0xff4c88ff);
+            deepAccent = juce::Colour (0xff4258b8);
+            break;
+        case ThemePreset::green:
+            primaryAccent = juce::Colour (0xff22c55e);
+            deepAccent = juce::Colour (0xff1f8a46);
+            break;
+        case ThemePreset::purple:
+            primaryAccent = juce::Colour (0xff8b5cf6);
+            deepAccent = juce::Colour (0xff5b3aa8);
+            break;
+        case ThemePreset::orange:
+        default:
+            break;
+    }
+    const auto accentTrack = primaryAccent.withAlpha (0.22f);
+    const auto accentFillInactive = primaryAccent.withAlpha (0.32f);
+
+    themeData.setColour ("ui.button.background", primaryAccent);
+    themeData.setColour ("ui.button-primary.background", primaryAccent);
+    themeData.setColour ("ui.button-mixer-add.background", primaryAccent);
+    themeData.setColour ("ui.button-monitor-off.background", primaryAccent);
+    themeData.setColour ("ui.button-monitor-on.background", primaryAccent);
+    themeData.setColour ("ui.button-danger.background", primaryAccent);
+    themeData.setColour ("ui.lane-accent.background", primaryAccent);
+    themeData.setColour ("arrangement.clip.fill", primaryAccent);
+    themeData.setColour ("arrangement.scrollbar.track", accentTrack);
+    themeData.setColour ("arrangement.scrollbar.thumb", primaryAccent);
+    themeData.setColour ("tracklist.panel", deepAccent);
+    themeData.setColour ("tracklist.master-panel", deepAccent);
+    themeData.setColour ("tracklist.remove-button.background", primaryAccent);
+    themeData.setColour ("tracklist.pill-off", primaryAccent);
+    themeData.setColour ("tracklist.mute", primaryAccent);
+    themeData.setColour ("tracklist.fx", primaryAccent);
+    themeData.setColour ("tracklist.input", primaryAccent);
+    themeData.setColour ("tracklist.routing.background", primaryAccent);
+    themeData.setColour ("tracklist.fader.fill-active", primaryAccent);
+    themeData.setColour ("tracklist.fader.fill-inactive", accentFillInactive);
+    themeData.setColour ("tracklist.pan.ring-active", primaryAccent);
+    themeData.setColour ("tracklist.pan.ring-inactive", primaryAccent);
+    themeData.setColour ("tracklist.add-track.background", primaryAccent);
+    themeData.setColour ("recent-clips.clip-item.background", primaryAccent);
+    themeData.setColour ("recent-clips.pattern-item.background", primaryAccent);
+    themeData.setColour ("recent-clips.scrollbar.track", accentTrack);
+    themeData.setColour ("recent-clips.scrollbar.thumb", primaryAccent);
+    themeData.setColour ("tempo.slider.track", primaryAccent);
+    themeData.setColour ("tempo.value.background", primaryAccent);
+    themeData.setColour ("tracklist.inline-editor.outline", primaryAccent);
+
+    const auto presetDef = getThemePresetDefinition (preset);
+    const auto getSpriteImage = [this] (const juce::String& key) -> juce::Image
+    {
+        if (const auto* sprite = findSprite (juce::StringArray { key }, spriteAssets))
+            if (! sprite->isVoid())
+                return juce::VariantConverter<juce::Image>::fromVar (*sprite);
+
+        return {};
+    };
+
+    if (auto headerSpiceNode = jive::findElementWithID (uiTree, juce::Identifier ("headerSpice")); headerSpiceNode.isValid())
+        if (const auto* spice = findSprite (juce::StringArray { presetDef.headerSpiceKey }, spriteAssets))
+            headerSpiceNode.setProperty ("source", *spice, nullptr);
+
+    if (auto bodySpiceSidebarNode = jive::findElementWithID (uiTree, juce::Identifier ("bodySpiceSidebar")); bodySpiceSidebarNode.isValid())
+        if (const auto* spice = findSprite (juce::StringArray { presetDef.bodySpiceKey }, spriteAssets))
+            bodySpiceSidebarNode.setProperty ("source", *spice, nullptr);
+
+    const auto accentColour = primaryAccent;
+    const auto bodySpiceImage = getSpriteImage (presetDef.bodySpiceKey);
+    const auto headerSpiceImage = getSpriteImage (presetDef.headerSpiceKey);
+
+    if (trackListComponent != nullptr)
+        trackListComponent->setBodySpiceImage (bodySpiceImage);
+
+    if (arrangementComponent != nullptr)
+        arrangementComponent->setBodySpiceImage (bodySpiceImage);
+
+    if (settingsWindow != nullptr)
+        settingsWindow->setAccentColour (accentColour);
+
+    if (pianoRollWindow != nullptr)
+        pianoRollWindow->setThemeAssets (headerSpiceImage, bodySpiceImage, accentColour);
+
+    root->callLayoutChildrenWithRecursionLock();
+    applyManualBodyLayout();
+    refreshFromState();
+    repaintDynamicViews();
+    repaint();
 }
 
 void GUIComponent::openSettingsWindow()
 {
     if (settingsWindow == nullptr)
         settingsWindow = std::make_unique<SettingsWindow> (deviceManager);
+
+    settingsWindow->setAccentColour (themeData.colour ("ui.button.background", juce::Colour (0xffe68000)));
 
     settingsWindow->setVisible (true);
     settingsWindow->toFront (true);
@@ -946,6 +1445,82 @@ juce::StringArray GUIComponent::getAvailableTrackInputs() const
 
     inputs.removeDuplicates(false);
     return inputs;
+}
+
+void GUIComponent::openPianoRollForPattern(std::vector<PianoRoll::Note> notes, int assetId)
+{
+    ensurePianoRollWindow();
+    currentPianoRollAssetId = assetId;
+    pianoRollWindow->setNotes(std::move(notes));
+    pianoRollWindow->setVisible(true);
+    pianoRollWindow->toFront(true);
+}
+
+std::vector<PianoRoll::Note> GUIComponent::getSelectedTrackPatternNotes() const
+{
+    if (state.isMasterMixerFocused())
+        return {};
+
+    const auto trackIndex = juce::jlimit (0, state.trackCount - 1, state.selectedTrackIndex);
+    const auto& mixerState = state.getTrackMixerState (trackIndex);
+    if (mixerState.contentType != TrackMixerState::ContentType::pattern)
+        return {};
+
+    const auto& patternState = state.getTrackPatternState (trackIndex);
+    std::vector<PianoRoll::Note> notes;
+    notes.reserve (patternState.notes.size());
+
+    for (const auto& note : patternState.notes)
+        notes.push_back ({ note.id, note.startBeat, note.lengthBeats, note.midiNote, note.label });
+
+    return notes;
+}
+
+int GUIComponent::getSelectedTrackPatternAssetId() const
+{
+    if (state.isMasterMixerFocused())
+        return -1;
+
+    const auto trackIndex = juce::jlimit (0, state.trackCount - 1, state.selectedTrackIndex);
+    const auto& mixerState = state.getTrackMixerState (trackIndex);
+    if (mixerState.contentType != TrackMixerState::ContentType::pattern)
+        return -1;
+
+    return state.getTrackPatternState(trackIndex).assetId;
+}
+
+void GUIComponent::ensurePianoRollWindow()
+{
+    if (pianoRollWindow != nullptr)
+        return;
+
+    pianoRollWindow = std::make_unique<PianoRollWindow>();
+    pianoRollWindow->setOnSavePattern ([this] (const std::vector<PianoRoll::Note>& notes)
+    {
+        if (onSavePatternRequested)
+            onSavePatternRequested (currentPianoRollAssetId, notes);
+    });
+    pianoRollWindow->setOnGetAvailableInstruments ([this]
+    {
+        return pluginHostManager.getAvailableTrackInstrumentPlugins();
+    });
+    pianoRollWindow->setOnInstrumentChanged ([this] (const juce::String& name)
+    {
+        if (onPianoRollInstrumentChangeRequested)
+            onPianoRollInstrumentChangeRequested (name);
+    });
+
+    auto currentInst = pluginHostManager.getPianoRollInstrumentName();
+    if (currentInst.isNotEmpty())
+        pianoRollWindow->setInstrumentName (currentInst);
+
+    const auto presetDef = getThemePresetDefinition (currentTheme);
+    if (const auto* headerSpice = findSprite (juce::StringArray { presetDef.headerSpiceKey }, spriteAssets))
+        if (const auto* bodySpice = findSprite (juce::StringArray { presetDef.bodySpiceKey }, spriteAssets))
+            if (! headerSpice->isVoid() && ! bodySpice->isVoid())
+                pianoRollWindow->setThemeAssets (juce::VariantConverter<juce::Image>::fromVar (*headerSpice),
+                                                 juce::VariantConverter<juce::Image>::fromVar (*bodySpice),
+                                                 themeData.colour ("ui.button.background", juce::Colour (0xffe68000)));
 }
 
 void GUIComponent::refreshFromState()
@@ -1002,6 +1577,8 @@ void GUIComponent::refreshFromState()
 
     if (auto it = headerButtonOverlays.find ("recordBtn"); it != headerButtonOverlays.end())
         it->second->setRecordActive (state.isRecording);
+
+    refreshHeaderButtonTooltips();
     
     setTextById ("monitorBtnLabel",
              state.audioMonitoringEnabled ? "Monitor On" : "Monitor Off");

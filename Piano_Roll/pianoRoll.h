@@ -38,6 +38,7 @@ class PianoRollComponent : public juce::Component
 {
 public:
     PianoRollComponent();
+    ~PianoRollComponent() override;
 
     void paint (juce::Graphics& g) override;
     void resized() override;
@@ -54,8 +55,10 @@ public:
     void setOnGetAvailableInstruments (std::function<juce::StringArray()> cb);
     void setOnInstrumentChanged (std::function<void (const juce::String&)> cb);
     void setInstrumentName (const juce::String& name);
+    void setThemeAssets (juce::Image newHeaderSpiceImage, juce::Image newBodySpiceImage, juce::Colour newAccentColour);
 
 private:
+    class PianoRollLookAndFeel;
     enum class Tool { select, draw, erase };
     enum class Edge { left, right };
 
@@ -160,10 +163,15 @@ private:
     void refreshDisplay();
     double getStepBeats() const;
 
+    std::unique_ptr<PianoRollLookAndFeel> pianoRollLookAndFeel;
+
     // Child components (scrollbars only)
     juce::ScrollBar hScroll { false };
     juce::ScrollBar vScroll { true };
     ScrollListener scrollListener { *this };
+    juce::Colour accentColour { juce::Colour (0xffe68000) };
+    juce::Image headerSpiceImage;
+    juce::Image bodySpiceImage;
     juce::Image selectToolIcon;
     juce::Image drawToolIcon;
     juce::Image eraseToolIcon;
@@ -196,10 +204,12 @@ class PianoRollWindow : public juce::DocumentWindow
 {
 public:
     PianoRollWindow();
+    void setNotes (std::vector<PianoRoll::Note> notes);
     void setOnSavePattern (std::function<void (const std::vector<PianoRoll::Note>&)> cb);
     void setOnGetAvailableInstruments (std::function<juce::StringArray()> cb);
     void setOnInstrumentChanged (std::function<void (const juce::String&)> cb);
     void setInstrumentName (const juce::String& name);
+    void setThemeAssets (juce::Image newHeaderSpiceImage, juce::Image newBodySpiceImage, juce::Colour newAccentColour);
     void closeButtonPressed() override;
 
 private:

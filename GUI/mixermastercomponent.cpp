@@ -209,6 +209,96 @@ juce::Rectangle<float> MixerMasterComponent::getFaderBounds() const
     return stripArea.reduced(2.0f, 0.0f);
 }
 
+juce::String MixerMasterComponent::getTooltipForPosition(juce::Point<float> position) const
+{
+    if (!isShowingMaster() && getHeaderModeBounds().contains(position))
+        return "Choose whether this track uses audio clips or patterns";
+
+    if (!isShowingMaster() && state.isTrackPatternMode(getFocusedTrackIndex())
+        && getHeaderInstrumentBounds().contains(position))
+    {
+        const auto& instrumentSlot = state.getTrackInstrumentSlot(getFocusedTrackIndex());
+        if (instrumentSlot.hasPlugin)
+            return "Instrument: " + instrumentSlot.name;
+
+        return "Choose an instrument for this pattern track";
+    }
+
+    if (!isShowingMaster() && getHeaderMasterFocusBounds().contains(position))
+        return "Jump to the master mixer";
+
+    const int buttonCount = isShowingMaster() ? 3 : 4;
+    for (int buttonIndex = 0; buttonIndex < buttonCount; ++buttonIndex)
+    {
+        if (!getButtonBounds(buttonIndex).contains(position))
+            continue;
+
+        if (isShowingMaster())
+        {
+            if (buttonIndex == 0)
+                return "Mute the master output";
+            if (buttonIndex == 1)
+                return "Solo the master output";
+            return "Arm the master output";
+        }
+
+        if (buttonIndex == 0)
+            return "Mute this track";
+        if (buttonIndex == 1)
+            return "Solo this track";
+        if (buttonIndex == 2)
+            return "Toggle input monitoring for this track";
+        return "Arm this track for recording";
+    }
+
+    if (getIoButtonBounds().contains(position))
+        return isShowingMaster() ? "Choose the master output device"
+                                 : "Choose this track's input and output assignments";
+
+    if (getPanKnobBounds().contains(position))
+        return isShowingMaster() ? "Master pan" : "Track pan";
+
+    if (getPluginLaneBounds().contains(position))
+    {
+        const int slotCount = isShowingMaster() ? state.getMasterFxSlotCount() : state.getTrackFxSlotCount(getFocusedTrackIndex());
+        for (int slotIndex = 0; slotIndex < slotCount; ++slotIndex)
+        {
+            if (!getPluginSlotBounds(slotIndex).contains(position))
+                continue;
+
+            const auto& fxSlot = isShowingMaster() ? state.getMasterFxSlot(slotIndex)
+                                                   : state.getTrackFxSlot(getFocusedTrackIndex(), slotIndex);
+            if (fxSlot.hasPlugin)
+                return "FX slot " + juce::String(slotIndex + 1) + ": " + fxSlot.name;
+
+            return "Add a plugin to FX slot " + juce::String(slotIndex + 1);
+        }
+
+        const bool canAdd = isShowingMaster() ? state.canAddMasterFxSlot()
+                                              : state.canAddTrackFxSlot(getFocusedTrackIndex());
+        if (canAdd && getAddFxSlotBounds().contains(position))
+            return "Add another FX slot";
+    }
+
+    auto innerBounds = getInnerBounds();
+    innerBounds.removeFromTop(titleStripHeight + titleStripGap + headerControlHeight + titleStripGap);
+    innerBounds.removeFromTop(58.0f);
+    innerBounds.removeFromTop(8.0f);
+    innerBounds.removeFromTop(78.0f);
+    auto lowerArea = innerBounds;
+    lowerArea.removeFromTop(8.0f);
+    auto stripArea = lowerArea.withTrimmedBottom(4.0f);
+    auto meterBounds = stripArea.removeFromLeft(18.0f).reduced(0.0f, 2.0f);
+
+    if (meterBounds.contains(position))
+        return isShowingMaster() ? "Master level meter" : "Track level meter";
+
+    if (getFaderBounds().contains(position))
+        return isShowingMaster() ? "Master volume" : "Track volume";
+
+    return {};
+}
+
 void MixerMasterComponent::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colours::transparentBlack);
@@ -390,9 +480,19 @@ void MixerMasterComponent::mouseDrag(const juce::MouseEvent& e)
         updateLevelFromPosition(e.position);
 }
 
+void MixerMasterComponent::mouseMove(const juce::MouseEvent& e)
+{
+    setTooltip(getTooltipForPosition(e.position));
+}
+
 void MixerMasterComponent::mouseUp(const juce::MouseEvent&)
 {
     activeDragTarget = DragTarget::none;
+}
+
+void MixerMasterComponent::mouseExit(const juce::MouseEvent&)
+{
+    setTooltip({});
 }
 
 void MixerMasterComponent::paintMasterView(juce::Graphics& g, juce::Rectangle<float> innerBounds)

@@ -17,6 +17,7 @@ MainComponent::MainComponent()
 {
     engine.initialise(2, 2);
 
+    tooltipWindow = std::make_unique<juce::TooltipWindow> (this, 500);
     gui = std::make_unique<GUIComponent>(engine.getDeviceManager());
     engine.setPatternTrackRenderer([this] (int /*trackIndex*/,
                                            juce::AudioBuffer<float>& buffer,
@@ -55,6 +56,10 @@ MainComponent::MainComponent()
     {
         handleAssetRenamed(assetId, newName);
     };
+    gui->onPatternEditRequested = [this] (int assetId)
+    {
+        handlePatternEditRequested(assetId);
+    };
     gui->onTimelineClipMoved = [this] (int placementId, int trackIndex, double startSeconds)
     {
         handleTimelineClipMoved(placementId, trackIndex, startSeconds);
@@ -63,9 +68,9 @@ MainComponent::MainComponent()
     {
         handleTimelineClipRemoved(placementId);
     };
-    gui->onSavePatternRequested = [this] (const std::vector<PianoRoll::Note>& notes)
+    gui->onSavePatternRequested = [this] (int assetId, const std::vector<PianoRoll::Note>& notes)
     {
-        handleSavePattern(notes);
+        handleSavePattern(assetId, notes);
     };
     gui->onPianoRollInstrumentChangeRequested = [this] (const juce::String& name)
     {
@@ -470,6 +475,18 @@ void MainComponent::handleAssetRenamed(int assetId, const juce::String& newName)
         syncStateFromEngine();
 }
 
+void MainComponent::handlePatternEditRequested(int assetId)
+{
+    if (gui == nullptr || assetId <= 0)
+        return;
+
+    const auto* asset = engine.getArrangementState().findAsset(assetId);
+    if (asset == nullptr || asset->kind != AssetKind::pianoRollPattern)
+        return;
+
+    gui->openPianoRollForPattern(toPianoRollNotes(*asset), assetId);
+}
+
 void MainComponent::syncTrackPatternsToAssets()
 {
     if (gui == nullptr)
@@ -590,9 +607,37 @@ void MainComponent::handleTimelineClipRemoved(int placementId)
     syncStateFromEngine();
 }
 
-void MainComponent::handleSavePattern(const std::vector<PianoRoll::Note>& pianoNotes)
+void MainComponent::handleSavePattern(int assetId, const std::vector<PianoRoll::Note>& pianoNotes)
 {
     if (pianoNotes.empty()) return;
+
+    if (assetId > 0)
+    {
+        const auto secondsPerBeat = getSecondsPerBeat();
+        std::vector<PatternNote> patternNotes;
+        patternNotes.reserve(pianoNotes.size());
+        double endBeat = 1.0;
+
+        for (const auto& n : pianoNotes)
+        {
+            patternNotes.push_back({ juce::jmax(0.0, n.startBeat * secondsPerBeat),
+                                     juce::jmax(0.01, n.lengthBeats * secondsPerBeat),
+                                     n.midiNote, 0.85f });
+            endBeat = juce::jmax(endBeat, n.startBeat + n.lengthBeats);
+        }
+
+        const auto* asset = engine.getArrangementState().findAsset(assetId);
+        if (asset == nullptr || asset->kind != AssetKind::pianoRollPattern)
+            return;
+
+        const auto lengthSeconds = juce::jmax(0.25, endBeat * secondsPerBeat);
+        {
+            juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
+            engine.updatePatternAsset(assetId, asset->name, lengthSeconds, std::move(patternNotes));
+        }
+        syncStateFromEngine();
+        return;
+    }
 
     const auto secondsPerBeat = getSecondsPerBeat();
     std::vector<PatternNote> patternNotes;
@@ -643,6 +688,24 @@ std::vector<PatternNote> MainComponent::toPatternNotes(const TrackPatternState& 
         out.push_back({ juce::jmax(0.0, n.startBeat * secondsPerBeat),
                         juce::jmax(0.01, n.lengthBeats * secondsPerBeat),
                         n.midiNote, 0.85f });
+
+    return out;
+}
+
+std::vector<PianoRoll::Note> MainComponent::toPianoRollNotes(const SourceAsset& asset) const
+{
+    std::vector<PianoRoll::Note> out;
+    out.reserve(asset.patternNotes.size());
+
+    const auto secondsPerBeat = getSecondsPerBeat();
+    int nextId = 1;
+    for (const auto& note : asset.patternNotes)
+    {
+        const auto startBeat = juce::jmax(0.0, note.startSeconds / secondsPerBeat);
+        const auto lengthBeats = juce::jmax(0.25, note.lengthSeconds / secondsPerBeat);
+        out.push_back({ nextId, startBeat, lengthBeats, note.midiNote, PianoRoll::getNoteName(note.midiNote) });
+        ++nextId;
+    }
 
     return out;
 }

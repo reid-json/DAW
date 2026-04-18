@@ -35,6 +35,14 @@ namespace PianoRoll
 
 namespace
 {
+    const auto pianoRollBackground = juce::Colour (0xff18181b);
+    const auto pianoRollPanel = juce::Colour (0xff18181b);
+    const auto pianoRollGridDark = juce::Colour (0xff18181b);
+    const auto pianoRollGridLight = juce::Colour (0xff1f1f23);
+    const auto pianoRollTimeline = juce::Colour (0xff232329);
+    const auto pianoRollPlayhead = juce::Colours::white.withAlpha (0.96f);
+    const auto pianoRollText = juce::Colours::white;
+
     juce::File findResourcesDir()
     {
         auto exeFile = juce::File::getSpecialLocation (juce::File::currentExecutableFile);
@@ -57,7 +65,106 @@ namespace
                                                   .getChildFile (fileName);
         return spriteFile.existsAsFile() ? juce::ImageFileFormat::loadFrom (spriteFile) : juce::Image{};
     }
+
+    juce::Image createHorizontallyFlippedImage (const juce::Image& source)
+    {
+        if (! source.isValid())
+            return {};
+
+        juce::Image flipped (source.getFormat(), source.getWidth(), source.getHeight(), true);
+        juce::Graphics g (flipped);
+        g.drawImageTransformed (source,
+                                juce::AffineTransform (-1.0f, 0.0f, (float) source.getWidth(),
+                                                       0.0f, 1.0f, 0.0f),
+                                false);
+        return flipped;
+    }
+
 }
+
+class PianoRollComponent::PianoRollLookAndFeel final : public juce::LookAndFeel_V4
+{
+public:
+    explicit PianoRollLookAndFeel (PianoRollComponent& ownerIn) : owner (ownerIn) {}
+
+    void drawScrollbar (juce::Graphics& g,
+                        juce::ScrollBar& scrollbar,
+                        int x,
+                        int y,
+                        int width,
+                        int height,
+                        bool,
+                        int thumbStartPosition,
+                        int thumbSize,
+                        bool,
+                        bool) override
+    {
+        auto bounds = juce::Rectangle<float> ((float) x, (float) y, (float) width, (float) height);
+        g.setColour (juce::Colours::white.withAlpha (0.14f));
+        g.fillRoundedRectangle (bounds.reduced (1.0f), scrollbar.isVertical() ? width * 0.5f : height * 0.5f);
+
+        juce::Rectangle<float> thumbBounds;
+        if (scrollbar.isVertical())
+            thumbBounds = { (float) x + 1.0f, (float) thumbStartPosition + 1.0f, (float) width - 2.0f, (float) thumbSize - 2.0f };
+        else
+            thumbBounds = { (float) thumbStartPosition + 1.0f, (float) y + 1.0f, (float) thumbSize - 2.0f, (float) height - 2.0f };
+
+        const float radius = scrollbar.isVertical() ? (float) width * 0.5f : (float) height * 0.5f;
+        g.setColour (juce::Colours::white.withAlpha (0.98f));
+        g.fillRoundedRectangle (thumbBounds, radius);
+        g.setColour (owner.accentColour);
+        g.fillRoundedRectangle (thumbBounds.reduced (1.5f), juce::jmax (0.0f, radius - 1.5f));
+    }
+
+    void drawPopupMenuBackground (juce::Graphics& g, int width, int height) override
+    {
+        g.fillAll (pianoRollBackground);
+        g.setColour (juce::Colours::white.withAlpha (0.18f));
+        g.drawRect (0, 0, width, height, 1);
+    }
+
+    void drawPopupMenuItem (juce::Graphics& g,
+                            const juce::Rectangle<int>& area,
+                            bool isSeparator,
+                            bool isActive,
+                            bool isHighlighted,
+                            bool isTicked,
+                            bool,
+                            const juce::String& text,
+                            const juce::String&,
+                            const juce::Drawable*,
+                            const juce::Colour*) override
+    {
+        if (isSeparator)
+        {
+            g.setColour (juce::Colours::white.withAlpha (0.14f));
+            g.fillRect (area.reduced (10, area.getHeight() / 2).withHeight (1));
+            return;
+        }
+
+        auto itemArea = area.reduced (4, 2).toFloat();
+        if (isHighlighted && isActive)
+        {
+            g.setColour (juce::Colours::white.withAlpha (0.98f));
+            g.fillRoundedRectangle (itemArea, 7.0f);
+            g.setColour (owner.accentColour);
+            g.fillRoundedRectangle (itemArea.reduced (2.0f), 5.0f);
+        }
+
+        g.setColour (isActive ? pianoRollText : pianoRollText.withAlpha (0.45f));
+        g.setFont (juce::Font (13.0f, juce::Font::bold));
+        g.drawText (text, area.reduced (14, 0), juce::Justification::centredLeft, true);
+
+        if (isTicked)
+        {
+            auto tickArea = area.withTrimmedLeft (juce::jmax (0, area.getWidth() - 18));
+            g.drawText ("*", tickArea, juce::Justification::centred, false);
+        }
+    }
+
+private:
+    PianoRollComponent& owner;
+};
 
 // ScrollListener
 
@@ -74,18 +181,29 @@ void PianoRollComponent::ScrollListener::scrollBarMoved (juce::ScrollBar* bar, d
 // constructor
 
 PianoRollComponent::PianoRollComponent()
-    : selectToolIcon (loadSpriteImage ("selecticon.png"))
+    : headerSpiceImage (loadSpriteImage ("headerSpice.png"))
+    , bodySpiceImage (loadSpriteImage ("bodySpice.png"))
+    , selectToolIcon (loadSpriteImage ("selecticon.png"))
     , drawToolIcon (loadSpriteImage ("drawicon.png"))
     , eraseToolIcon (loadSpriteImage ("eraseicon.png"))
 {
+    pianoRollLookAndFeel = std::make_unique<PianoRollLookAndFeel> (*this);
     addAndMakeVisible (hScroll);
     addAndMakeVisible (vScroll);
     setOpaque (true);
     setWantsKeyboardFocus (true);
+    hScroll.setLookAndFeel (pianoRollLookAndFeel.get());
+    vScroll.setLookAndFeel (pianoRollLookAndFeel.get());
     hScroll.addListener (&scrollListener);
     vScroll.addListener (&scrollListener);
     hScroll.setAutoHide (false);
     vScroll.setAutoHide (false);
+}
+
+PianoRollComponent::~PianoRollComponent()
+{
+    hScroll.setLookAndFeel (nullptr);
+    vScroll.setLookAndFeel (nullptr);
 }
 
 // public setters
@@ -126,12 +244,22 @@ void PianoRollComponent::setInstrumentName (const juce::String& name)
     repaint();
 }
 
+void PianoRollComponent::setThemeAssets (juce::Image newHeaderSpiceImage,
+                                         juce::Image newBodySpiceImage,
+                                         juce::Colour newAccentColour)
+{
+    headerSpiceImage = std::move (newHeaderSpiceImage);
+    bodySpiceImage = std::move (newBodySpiceImage);
+    accentColour = newAccentColour;
+    repaint();
+}
+
 // painting
 
 void PianoRollComponent::paint (juce::Graphics& g)
 {
     using namespace PianoRoll;
-    g.fillAll (juce::Colour::fromRGB (15, 17, 22));
+    g.fillAll (pianoRollBackground);
 
     auto header = getLocalBounds().removeFromTop (headerH);
     paintToolbar (g, header.removeFromTop (toolbarH));
@@ -154,7 +282,7 @@ void PianoRollComponent::paint (juce::Graphics& g)
 
         // playhead
         int px = gridArea.getX() + 2 * beatWidth - scrollX;
-        g.setColour (juce::Colour::fromRGB (58, 122, 254));
+        g.setColour (pianoRollPlayhead);
         g.drawLine ((float) px, (float) gridArea.getY(), (float) px, (float) gridArea.getBottom(), 2.0f);
     }
 }
@@ -226,12 +354,29 @@ void PianoRollComponent::paintGrid (juce::Graphics& g)
         int y = gridArea.getY() + row * rowHeight - scrollY;
         if (y >= gridArea.getBottom() || y + rowHeight <= gridArea.getY()) continue;
 
-        g.setColour (isBlackKey (midi) ? juce::Colour::fromRGB (20, 24, 33)
-                                       : juce::Colour::fromRGB (24, 29, 40));
+        g.setColour (isBlackKey (midi) ? pianoRollGridDark
+                                       : pianoRollGridLight);
         g.fillRect (gx, y, gridArea.getWidth(), rowHeight);
 
         g.setColour (juce::Colours::white.withAlpha (0.05f));
         g.drawHorizontalLine (y, (float) gx, (float) gridArea.getRight());
+    }
+
+    if (bodySpiceImage.isValid())
+    {
+        juce::Graphics::ScopedSaveState state (g);
+        g.reduceClipRegion (gridArea);
+        g.setOpacity (0.92f);
+        g.drawImage (bodySpiceImage,
+                     gridArea.getX(),
+                     gridArea.getY() + juce::roundToInt (gridArea.getHeight() * 0.45f),
+                     gridArea.getWidth(),
+                     gridArea.getHeight(),
+                     0,
+                     0,
+                     bodySpiceImage.getWidth(),
+                     bodySpiceImage.getHeight());
+        g.setOpacity (1.0f);
     }
 
     // Beat lines
@@ -269,11 +414,11 @@ void PianoRollComponent::paintNotes (juce::Graphics& g)
                                                    (float) (gridArea.getY() - scrollY));
         bool selected = selectedIds.count (note.id) > 0;
 
-        g.setColour (selected ? juce::Colour::fromRGB (88, 150, 255)
-                              : juce::Colour::fromRGB (58, 122, 254));
+        g.setColour (selected ? accentColour.brighter (0.18f)
+                              : accentColour);
         g.fillRoundedRectangle (r, 6.0f);
 
-        g.setColour (juce::Colours::white.withAlpha (selected ? 0.50f : 0.18f));
+        g.setColour (juce::Colours::white.withAlpha (selected ? 0.60f : 0.24f));
         g.drawRoundedRectangle (r, 6.0f, selected ? 1.5f : 1.0f);
 
         if (r.getWidth() > 28.0f)
@@ -291,7 +436,7 @@ void PianoRollComponent::paintMarquee (juce::Graphics& g)
     auto rect = getMarqueeRect();
     if (! rect.has_value()) return;
 
-    g.setColour (juce::Colour::fromRGB (88, 150, 255).withAlpha (0.18f));
+    g.setColour (accentColour.withAlpha (0.18f));
     g.fillRect (*rect);
     g.setColour (juce::Colours::white.withAlpha (0.45f));
     g.drawRect (*rect, 1);
@@ -299,8 +444,28 @@ void PianoRollComponent::paintMarquee (juce::Graphics& g)
 
 void PianoRollComponent::paintToolbar (juce::Graphics& g, juce::Rectangle<int> area)
 {
-    g.setColour (juce::Colour::fromRGB (18, 23, 33));
+    g.setColour (pianoRollBackground);
     g.fillRect (area);
+
+    if (headerSpiceImage.isValid())
+    {
+        const float sourceAspect = (float) headerSpiceImage.getWidth() / (float) juce::jmax (1, headerSpiceImage.getHeight());
+        const float drawHeight = (float) area.getHeight();
+        const float drawWidth = drawHeight * sourceAspect;
+        const auto dest = juce::Rectangle<float> ((float) area.getX(),
+                                                  (float) area.getY(),
+                                                  drawWidth,
+                                                  drawHeight);
+        g.drawImage (headerSpiceImage,
+                     juce::roundToInt (dest.getX()),
+                     juce::roundToInt (dest.getY()),
+                     juce::roundToInt (dest.getWidth()),
+                     juce::roundToInt (dest.getHeight()),
+                     0,
+                     0,
+                     headerSpiceImage.getWidth(),
+                     headerSpiceImage.getHeight());
+    }
 
     paintButton (g, btnRects.select, "Select", tool == Tool::select, false, &selectToolIcon);
     paintButton (g, btnRects.draw,   "Draw",   tool == Tool::draw, false, &drawToolIcon);
@@ -320,19 +485,13 @@ void PianoRollComponent::paintTimeline (juce::Graphics& g, juce::Rectangle<int> 
 {
     using namespace PianoRoll;
 
-    g.setColour (juce::Colour::fromRGB (22, 27, 38));
+    g.setColour (pianoRollTimeline);
     g.fillRect (area);
 
     auto keyHeader = area.removeFromLeft (keyWidth);
-    g.setColour (juce::Colours::white.withAlpha (0.72f));
-    g.setFont (13.0f);
+    g.setColour (pianoRollText);
+    g.setFont (juce::Font (13.0f, juce::Font::bold));
     g.drawText ("Bars", keyHeader.reduced (12, 0), juce::Justification::centredLeft);
-
-    // Loop indicator
-    int loopX = area.getX() + 4 * beatWidth - scrollX;
-    g.setColour (juce::Colour::fromRGB (58, 122, 254).withAlpha (0.35f));
-    g.fillRoundedRectangle ((float) loopX + 2.0f, (float) area.getY() + 6.0f,
-                            (float) (8 * beatWidth) - 4.0f, 6.0f, 3.0f);
 
     // Beat numbers and lines
     for (int beat = 0; beat <= numBeats; ++beat)
@@ -349,8 +508,8 @@ void PianoRollComponent::paintTimeline (juce::Graphics& g, juce::Rectangle<int> 
             g.setColour (juce::Colours::white.withAlpha (0.04f));
             g.drawVerticalLine (x + beatWidth / 2, (float) area.getY() + 18.0f, (float) area.getBottom());
 
-            g.setColour (juce::Colours::white.withAlpha (0.72f));
-            g.setFont (12.0f);
+            g.setColour (pianoRollText);
+            g.setFont (juce::Font (13.0f, juce::Font::bold));
             g.drawText (juce::String (beat + 1), x + 4, area.getY() + 12, 28, 14,
                         juce::Justification::centredLeft);
         }
@@ -358,7 +517,7 @@ void PianoRollComponent::paintTimeline (juce::Graphics& g, juce::Rectangle<int> 
 
     // Playhead
     int px = area.getX() + 2 * beatWidth - scrollX;
-    g.setColour (juce::Colour::fromRGB (58, 122, 254));
+    g.setColour (pianoRollPlayhead);
     g.drawLine ((float) px, (float) area.getY(), (float) px, (float) area.getBottom(), 2.0f);
 
     g.setColour (juce::Colours::white.withAlpha (0.08f));
@@ -370,21 +529,19 @@ void PianoRollComponent::paintButton (juce::Graphics& g, juce::Rectangle<int> ar
                                       const juce::String& text, bool active, bool accent,
                                       const juce::Image* icon)
 {
-    auto bg = active ? juce::Colour::fromRGB (58, 122, 254)
-                     : accent ? juce::Colour::fromRGB (29, 56, 94)
-                              : juce::Colour::fromRGB (28, 34, 46);
-    auto border = active ? juce::Colours::white.withAlpha (0.28f)
-                         : accent ? juce::Colour::fromRGB (79, 127, 194).withAlpha (0.55f)
-                                  : juce::Colours::white.withAlpha (0.10f);
-
+    const auto disabledAccent = accentColour.darker (0.35f);
+    auto bg = active ? accentColour.brighter (0.12f)
+                     : accent ? accentColour
+                              : disabledAccent;
+    auto bounds = area.toFloat();
+    g.setColour (juce::Colours::white.withAlpha (0.98f));
+    g.fillRoundedRectangle (bounds, 8.0f);
     g.setColour (bg);
-    g.fillRoundedRectangle (area.toFloat(), 7.0f);
-    g.setColour (border);
-    g.drawRoundedRectangle (area.toFloat(), 7.0f, 1.0f);
+    g.fillRoundedRectangle (bounds.reduced (1.5f), 6.5f);
 
     if (icon != nullptr && icon->isValid())
     {
-        g.setOpacity (active ? 1.0f : 0.9f);
+        g.setOpacity (1.0f);
         g.drawImageWithin (*icon,
                            area.getX() + 6,
                            area.getY() + 5,
@@ -395,8 +552,8 @@ void PianoRollComponent::paintButton (juce::Graphics& g, juce::Rectangle<int> ar
         return;
     }
 
-    g.setColour (juce::Colours::white.withAlpha (active ? 0.96f : 0.86f));
-    g.setFont (12.0f);
+    g.setColour (pianoRollText);
+    g.setFont (juce::Font (13.0f, juce::Font::bold));
     g.drawText (text, area, juce::Justification::centred);
 }
 
@@ -477,6 +634,7 @@ bool PianoRollComponent::handleButtonClick (juce::Point<int> pos)
             instruments = onGetAvailableInstruments();
 
         juce::PopupMenu menu;
+        menu.setLookAndFeel (pianoRollLookAndFeel.get());
         if (instruments.isEmpty())
             menu.addItem (1, "No instruments found", false);
         else
@@ -1065,6 +1223,12 @@ PianoRollWindow::PianoRollWindow()
     centreWithSize (1100, 700);
 }
 
+void PianoRollWindow::setNotes (std::vector<PianoRoll::Note> notes)
+{
+    if (content != nullptr)
+        content->setNotes (std::move (notes));
+}
+
 void PianoRollWindow::setOnSavePattern (std::function<void (const std::vector<PianoRoll::Note>&)> cb)
 {
     if (content != nullptr)
@@ -1087,6 +1251,16 @@ void PianoRollWindow::setInstrumentName (const juce::String& name)
 {
     if (content != nullptr)
         content->setInstrumentName (name);
+}
+
+void PianoRollWindow::setThemeAssets (juce::Image newHeaderSpiceImage,
+                                      juce::Image newBodySpiceImage,
+                                      juce::Colour newAccentColour)
+{
+    if (content != nullptr)
+        content->setThemeAssets (std::move (newHeaderSpiceImage),
+                                 std::move (newBodySpiceImage),
+                                 newAccentColour);
 }
 
 void PianoRollWindow::closeButtonPressed()

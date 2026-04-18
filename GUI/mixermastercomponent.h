@@ -3,7 +3,8 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "dawstate.h"
 
-class MixerMasterComponent : public juce::Component
+class MixerMasterComponent : public juce::Component,
+                             public juce::SettableTooltipClient
 {
 public:
     explicit MixerMasterComponent(DAWState& stateIn);
@@ -11,7 +12,9 @@ public:
     void paint(juce::Graphics& g) override;
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseMove(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
 
     std::function<juce::StringArray()> getAvailableMasterPlugins;
     std::function<juce::StringArray()> getAvailableMasterOutputs;
@@ -63,6 +66,7 @@ private:
     void showFxSlotMenu(int slotIndex);
     void showInstrumentSlotMenu();
     void showTrackContentTypeMenu();
+    juce::String getTooltipForPosition(juce::Point<float> position) const;
     void paintMasterView(juce::Graphics& g, juce::Rectangle<float> innerBounds);
     void paintTrackView(juce::Graphics& g, juce::Rectangle<float> innerBounds, int trackIndex);
     void updatePanFromPosition(juce::Point<float> position);

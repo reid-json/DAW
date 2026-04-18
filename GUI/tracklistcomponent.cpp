@@ -64,6 +64,12 @@ TrackListComponent::TrackListComponent(DAWState& stateIn, ThemeData& themeIn) : 
     bodySpiceImage = loadBodySpiceImage();
 }
 
+void TrackListComponent::setBodySpiceImage (juce::Image newImage)
+{
+    bodySpiceImage = std::move (newImage);
+    repaint();
+}
+
 // geometry
 
 int TrackListComponent::getVisualRowCount() const { return state.trackCount + 1; }
@@ -168,6 +174,57 @@ juce::Rectangle<float> TrackListComponent::getRoutingButtonBounds(int rowIndex) 
     inner.removeFromTop(20.0f + 4.0f + 20.0f + 4.0f);
     auto controlRow = inner.removeFromTop(20.0f);
     return controlRow.removeFromRight(36.0f);
+}
+
+juce::String TrackListComponent::getTooltipForPosition(juce::Point<float> position) const
+{
+    if (getAddTrackButtonBounds().contains(position))
+        return "Add a new track";
+
+    const int rowIndex = getVisualRowAt(position);
+    if (rowIndex < 0)
+        return {};
+
+    const bool master = isMasterRow(rowIndex);
+    const int trackIdx = getTrackIndexForRow(rowIndex);
+
+    const int numIndicators = master ? 2 : 4;
+    for (int i = 0; i < numIndicators; ++i)
+    {
+        if (!getIndicatorBounds(rowIndex, i).contains(position))
+            continue;
+
+        if (master)
+        {
+            if (i == 0)
+                return "Mute master output";
+
+            return "Open the master FX slots";
+        }
+
+        if (i == 0)
+            return "Mute this track";
+        if (i == 1)
+            return "Arm this track for recording";
+        if (i == 2)
+            return "Open this track's FX slots";
+
+        return "Choose this track's input";
+    }
+
+    if (getFaderBounds(rowIndex).contains(position))
+        return master ? "Master volume" : "Track volume";
+
+    if (getPanKnobBounds(rowIndex).contains(position))
+        return master ? "Master pan" : "Track pan";
+
+    if (getRoutingButtonBounds(rowIndex).contains(position))
+        return master ? "Choose the master output" : "Choose this track's output routing";
+
+    if (!master && getRemoveButtonBounds(trackIdx).contains(position))
+        return "Remove this track";
+
+    return {};
 }
 
 // drawing
@@ -630,10 +687,20 @@ void TrackListComponent::mouseDrag(const juce::MouseEvent& e)
     }
 }
 
+void TrackListComponent::mouseMove(const juce::MouseEvent& e)
+{
+    setTooltip(getTooltipForPosition(e.position));
+}
+
 void TrackListComponent::mouseUp(const juce::MouseEvent&)
 {
     draggingFaderRow = -1;
     draggingPanRow = -1;
+}
+
+void TrackListComponent::mouseExit(const juce::MouseEvent&)
+{
+    setTooltip({});
 }
 
 void TrackListComponent::mouseDoubleClick(const juce::MouseEvent& e)

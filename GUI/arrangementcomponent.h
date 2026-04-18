@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "dawstate.h"
+#include "sharedpopupmenulookandfeel.h"
 #include "theme.h"
 
 class ArrangementComponent : public juce::Component,
@@ -9,6 +10,7 @@ class ArrangementComponent : public juce::Component,
 {
 public:
     ArrangementComponent(DAWState& stateIn, ThemeData& themeIn);
+    void setBodySpiceImage (juce::Image newImage);
 
     void paint(juce::Graphics& g) override;
     void mouseDown(const juce::MouseEvent& e) override;
@@ -22,6 +24,8 @@ public:
     std::function<void(int assetId, int trackIndex, double startSeconds)> onRecentClipDropped;
     std::function<void(int placementId, int trackIndex, double startSeconds)> onTimelineClipMoved;
     std::function<void(int placementId)> onTimelineClipDeleteRequested;
+    std::function<void(int assetId, const juce::String& newName)> onAssetRenameRequested;
+    std::function<void(int assetId)> onPatternEditRequested;
 
 private:
     static constexpr float pixelsPerSecond = 100.0f;
@@ -51,6 +55,8 @@ private:
     void scrollBy(float deltaY);
     float getMaxHorizontalScroll() const;
     void setHorizontalScrollOffset(int newOffset);
+    void showClipMenu(const TimelineClipItem& clip);
+    void promptRenameClip(const TimelineClipItem& clip);
 
     DAWState& state;
     ThemeData& theme;
@@ -61,6 +67,7 @@ private:
     float horizontalScrollbarDragOffset = 0.0f;
     juce::Point<float> dragOffset;
     juce::Image bodySpiceImage;
+    std::unique_ptr<SharedPopupMenuLookAndFeel> popupMenuLookAndFeel;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ArrangementComponent)
 };

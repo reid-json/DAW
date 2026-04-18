@@ -152,3 +152,8 @@ juce::Colour ThemeData::colour (const juce::String& token, juce::Colour fallback
 
     return fallback;
 }
+
+void ThemeData::setColour (const juce::String& token, juce::Colour colourValue)
+{
+    colours[token] = colourValue;
+}

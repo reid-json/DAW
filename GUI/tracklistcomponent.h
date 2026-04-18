@@ -4,16 +4,20 @@
 #include "dawstate.h"
 #include "theme.h"
 
-class TrackListComponent : public juce::Component
+class TrackListComponent : public juce::Component,
+                           public juce::SettableTooltipClient
 {
 public:
     TrackListComponent(DAWState& stateIn, ThemeData& themeIn);
+    void setBodySpiceImage (juce::Image newImage);
 
     void paint(juce::Graphics& g) override;
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseMove(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseDoubleClick(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
 
     std::function<void()> onAddTrackRequested;
@@ -64,6 +68,7 @@ private:
     void showRoutingMenu(int rowIndex);
     void showFxMenu(int rowIndex);
     void showInputMenu(int rowIndex);
+    juce::String getTooltipForPosition(juce::Point<float> position) const;
 
     int getContentHeight() const;
     int getMaxScroll() const;

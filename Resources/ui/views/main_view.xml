@@ -52,6 +52,14 @@
         <Text id="fileBtnLabel" text="File"/>
       </Button>
 
+      <Button id="themesBtn"
+              class="btn"
+              width="92"
+              justify-content="center"
+              align-items="center">
+        <Text id="themesBtnLabel" text="Themes"/>
+      </Button>
+
       <Component flex-grow="1"/>
 
       <Component id="transportGroup"
