@@ -2,8 +2,11 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "dawstate.h"
+#include "sharedpopupmenulookandfeel.h"
+#include "theme.h"
 
-class RecentClipsComponent : public juce::Component
+class RecentClipsComponent : public juce::Component,
+                             public juce::SettableTooltipClient
 {
 public:
     enum class ItemKind
@@ -18,22 +21,26 @@ public:
         int index = -1;
     };
 
-    explicit RecentClipsComponent(DAWState& stateIn);
+    RecentClipsComponent(DAWState& stateIn, ThemeData& themeIn);
 
     void paint(juce::Graphics& g) override;
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDoubleClick(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseMove(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
 
     std::function<void(int assetId, const juce::String& newName)> onAssetRenameRequested;
+    std::function<void(int assetId)> onPatternEditRequested;
 
 private:
     static constexpr int scrollbarWidth = 10;
 
     juce::Rectangle<int> getItemBounds(ItemKind kind, int index) const;
     std::optional<ItemRef> getItemAt(juce::Point<float> point) const;
+    juce::String getTooltipForItem(const ItemRef& item) const;
     int getContentHeight() const;
     int getMaxScroll() const;
     juce::Rectangle<float> getScrollbarTrackBounds() const;
@@ -41,12 +48,15 @@ private:
     void setScrollOffset(int newOffset);
     void scrollBy(float deltaY);
     void promptRenameItem(const ItemRef& item);
+    void showItemMenu(const ItemRef& item);
 
     DAWState& state;
+    ThemeData& theme;
     std::optional<ItemRef> dragItem;
     int scrollOffset = 0;
     bool draggingScrollbar = false;
     float scrollbarDragOffset = 0.0f;
+    std::unique_ptr<SharedPopupMenuLookAndFeel> popupMenuLookAndFeel;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RecentClipsComponent)
 };

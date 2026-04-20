@@ -19,19 +19,45 @@
              padding="10"
              row-gap="8">
 
+    <Image id="headerSpice"
+           width="1280"
+           height="98"
+           align-self="stretch"
+           min-width="0"
+           min-height="0"
+           placement="fill"
+           intercepts-mouse-clicks="false"/>
+
     <Component id="headerMainRow"
                display="flex"
                flex-direction="row"
                align-items="center"
                min-width="0"
-               min-height="52"
+               min-height="90"
                row-gap="8"
-               column-gap="8">
+               column-gap="12">
+
+      <Image id="headerLogo"
+             width="90"
+             height="90"
+             min-width="90"
+             min-height="90"
+             placement="centred"/>
 
       <Button id="fileBtn"
               class="btn"
-              width="72">
+              width="72"
+              justify-content="center"
+              align-items="center">
         <Text id="fileBtnLabel" text="File"/>
+      </Button>
+
+      <Button id="themesBtn"
+              class="btn"
+              width="92"
+              justify-content="center"
+              align-items="center">
+        <Text id="themesBtnLabel" text="Themes"/>
       </Button>
 
       <Component flex-grow="1"/>
@@ -41,7 +67,7 @@
                  flex-direction="row"
                  align-items="center"
                  justify-content="center"
-                 column-gap="8">
+                 column-gap="12">
         <Button id="restartBtn"
                 class="btn"
                 width="80">
@@ -73,7 +99,10 @@
         </Button>
       </Component>
 
-      <Component flex-grow="1"/>
+      <TempoControlView id="tempoControlView"
+                        width="260"
+                        min-width="260"
+                        max-width="260"/>
 
       <Button id="settingsBtn"
               class="btn"
@@ -169,8 +198,17 @@
                padding="10"
                row-gap="10">
 
+      <Image id="bodySpiceSidebar"
+             width="220"
+             height="622"
+             align-self="stretch"
+             min-width="0"
+             min-height="0"
+             placement="fill"
+             intercepts-mouse-clicks="false"/>
+
       <Text id="clipBrowserTitle"
-            class="label"
+            class="label sidebarTitle"
             align-self="stretch"
             text="Saved Clips &amp; Patterns"/>
 

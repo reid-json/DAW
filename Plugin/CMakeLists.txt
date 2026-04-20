@@ -1,10 +1,31 @@
 add_library(Plugin STATIC
-    LowpassHighpassFilter.cpp
-    LowpassHighpassFilter.h
-    PluginProcessor.cpp
-    PluginProcessor.h
-    PluginEditor.cpp
-    PluginEditor.h
+    LowHighFilter/LowpassHighpassFilter.cpp
+    LowHighFilter/LowpassHighpassFilter.h
+    LowHighFilter/PluginProcessor.cpp
+    LowHighFilter/PluginProcessor.h
+    LowHighFilter/PluginEditor.cpp
+    LowHighFilter/PluginEditor.h
+
+    Compressor/Compressor.cpp
+    Compressor/Compressor.h
+    Compressor/PluginProcessor.cpp
+    Compressor/PluginProcessor.h
+    Compressor/PluginEditor.cpp
+    Compressor/PluginEditor.h
+
+    SevenBandEQ/SevenBandEQ.cpp
+    SevenBandEQ/SevenBandEQ.h
+    SevenBandEQ/PluginProcessor.cpp
+    SevenBandEQ/PluginProcessor.h
+    SevenBandEQ/PluginEditor.cpp
+    SevenBandEQ/PluginEditor.h
+
+    GainPanFilter/GainPanFilter.cpp
+    GainPanFilter/GainPanFilter.h
+    GainPanFilter/PluginProcessor.cpp
+    GainPanFilter/PluginProcessor.h
+    GainPanFilter/PluginEditor.cpp
+    GainPanFilter/PluginEditor.h
 )
 
 target_include_directories(Plugin PUBLIC
@@ -38,4 +59,3 @@ target_compile_definitions(Plugin PUBLIC
     JucePlugin_VersionString="1.0.0"
     "JucePlugin_PreferredChannelConfigurations={(1,1),(2,2)}"
 )
-

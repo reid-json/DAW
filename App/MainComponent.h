@@ -33,16 +33,23 @@ private:
     void handleRestart();
     void handleRecentClipDropped(int assetId, int trackIndex, double startSeconds);
     void handleAssetRenamed(int assetId, const juce::String& newName);
+    void handlePatternEditRequested(int assetId);
     void syncTrackPatternsToAssets();
-    static double getPatternLengthSeconds(const TrackPatternState& pattern);
+    void rescalePatternsForTempo(double oldTempoBpm, double newTempoBpm);
+    double getSecondsPerBeat() const;
+    std::vector<PatternNote> toPatternNotes(const TrackPatternState& pattern) const;
+    std::vector<PianoRoll::Note> toPianoRollNotes(const SourceAsset& asset) const;
+    double getPatternLengthSeconds(const TrackPatternState& pattern) const;
     void handleTimelineClipMoved(int placementId, int trackIndex, double startSeconds);
     void handleTimelineClipRemoved(int placementId);
-    void handleSavePattern(const std::vector<PianoRoll::Note>& notes);
+    void handleSavePattern(int assetId, const std::vector<PianoRoll::Note>& notes);
     void handlePianoRollInstrumentChange(const juce::String& pluginName);
     int getNewestRecentAssetId() const;
 
     std::unique_ptr<GUIComponent> gui;
+    std::unique_ptr<juce::TooltipWindow> tooltipWindow;
     AudioEngine engine;
     std::unique_ptr<juce::FileChooser> audioFileChooser;
     std::unique_ptr<juce::FileChooser> projectFileChooser;
+    double lastSyncedTempoBpm = 120.0;
 };
