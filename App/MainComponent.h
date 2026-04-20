@@ -35,7 +35,7 @@ private:
     void handleAssetRenamed(int assetId, const juce::String& newName);
     void handlePatternEditRequested(int assetId);
     void syncTrackPatternsToAssets();
-    void rescaleStandalonePatternAssetsForTempoChange(double oldTempoBpm, double newTempoBpm);
+    void rescalePatternsForTempo(double oldTempoBpm, double newTempoBpm);
     double getSecondsPerBeat() const;
     std::vector<PatternNote> toPatternNotes(const TrackPatternState& pattern) const;
     std::vector<PianoRoll::Note> toPianoRollNotes(const SourceAsset& asset) const;

@@ -70,10 +70,7 @@ struct TrackMixerState
         bool bypassed = false;
     };
 
-    using InstrumentSlotState = FxSlotState;
-
     std::vector<FxSlotState> fxSlots;
-    InstrumentSlotState instrumentSlot;
 };
 
 struct TrackPatternNote
@@ -133,7 +130,6 @@ struct DAWState
     bool isDraggingHorizontalScrollbar = false;
 
     MasterMixerState masterMixerState;
-    juce::String masterOutputAssignment = "Output channel 1";
     std::vector<TrackMixerState> trackMixerStates;
     std::vector<TrackPatternState> trackPatternStates;
     std::vector<RecentClipItem> recentClips;
@@ -142,14 +138,12 @@ struct DAWState
 
     DAWState() { ensureTrackCount(); }
 
-    // Transport
     void play()    { transportState = TransportState::playing; }
     void pause()   { transportState = TransportState::paused; }
     void stop()    { transportState = TransportState::stopped; playhead = 0.0; isRecording = false; }
     void toggleAudioMonitoring() { audioMonitoringEnabled = ! audioMonitoringEnabled; }
     void setTempoBpm (double bpm) { tempoBpm = juce::jlimit (40.0, 240.0, bpm); }
 
-    // Track management
     void addTrack()
     {
         ++trackCount;
@@ -175,7 +169,6 @@ struct DAWState
 
     void toggleClipSidebar() { clipSidebarCollapsed = ! clipSidebarCollapsed; }
 
-    // Track state accessors
     TrackMixerState& getTrackMixerState (int i)
     {
         ensureTrackCount();
@@ -205,7 +198,6 @@ struct DAWState
         if (p.name.isEmpty()) p.name = "Pattern 1";
     }
 
-    // Track toggles
     void toggleTrackMuted  (int i) { getTrackMixerState (i).muted  = ! getTrackMixerState (i).muted; }
     void toggleTrackArmed  (int i) { getTrackMixerState (i).armed  = ! getTrackMixerState (i).armed; }
 
@@ -234,7 +226,6 @@ struct DAWState
     void setTrackPan   (int i, float v) { getTrackMixerState (i).pan   = juce::jlimit (-1.0f, 1.0f, v); }
     void setTrackLevel (int i, float v) { getTrackMixerState (i).level = juce::jlimit (0.0f, 1.0f, v); }
 
-    // Selection / focus
     void selectTrack (int i)               { selectedTrackIndex = juce::jlimit (0, trackCount - 1, i); }
     void showMasterMixerFocus()            { focusedMixerShowsMaster = true; }
     void showSelectedTrackMixerFocus()     { focusedMixerShowsMaster = false; selectTrack (selectedTrackIndex); }
@@ -246,7 +237,6 @@ struct DAWState
         return ! getTrackMixerState (i).muted;
     }
 
-    // Track naming
     juce::String getTrackName (int i) const
     {
         auto& t = getTrackMixerState (i);
@@ -260,7 +250,6 @@ struct DAWState
         if (t.name.isEmpty()) t.name = "Track " + juce::String (i + 1);
     }
 
-    // I/O assignments
     juce::String getTrackInputAssignment (int i) const
     {
         auto& t = getTrackMixerState (i);
@@ -287,23 +276,6 @@ struct DAWState
         if (t.outputAssignment.isEmpty()) t.outputAssignment = "Master";
     }
 
-    // Track FX slots
-    int getTrackFxSlotCount (int i) const { return (int) getTrackMixerState (i).fxSlots.size(); }
-
-    void addTrackFxSlot (int i)
-    {
-        auto& t = getTrackMixerState (i);
-        if ((int) t.fxSlots.size() < maxFxSlots) t.fxSlots.emplace_back();
-    }
-
-    void removeTrackFxSlot (int i, int slot)
-    {
-        auto& t = getTrackMixerState (i);
-        if ((int) t.fxSlots.size() <= minFxSlots) return;
-        int s = juce::jlimit (0, (int) t.fxSlots.size() - 1, slot);
-        t.fxSlots.erase (t.fxSlots.begin() + s);
-    }
-
     TrackMixerState::FxSlotState& getTrackFxSlot (int i, int slot)
     {
         auto& t = getTrackMixerState (i);
@@ -323,44 +295,11 @@ struct DAWState
         s.hasPlugin = true; s.bypassed = false; s.name = name;
     }
 
-    void toggleTrackFxSlotBypassed (int i, int slot)
-    {
-        auto& s = getTrackFxSlot (i, slot);
-        if (s.hasPlugin) s.bypassed = ! s.bypassed;
-    }
-
     void clearTrackFxSlot (int i, int slot) { getTrackFxSlot (i, slot) = {}; }
 
-    // Master
     void toggleMasterMuted()  { masterMixerState.muted  = ! masterMixerState.muted; }
 
-    juce::String getMasterOutputAssignment() const
-    {
-        return masterOutputAssignment.isNotEmpty() ? masterOutputAssignment : "Output channel 1";
-    }
-
-    void setMasterOutputAssignment (juce::String s)
-    {
-        masterOutputAssignment = s.trim();
-        if (masterOutputAssignment.isEmpty()) masterOutputAssignment = "Output channel 1";
-    }
-
     int getMasterFxSlotCount() const { return (int) masterMixerState.fxSlots.size(); }
-
-    void addMasterFxSlot()
-    {
-        ensureFxSlots (masterMixerState.fxSlots);
-        if ((int) masterMixerState.fxSlots.size() < maxFxSlots)
-            masterMixerState.fxSlots.emplace_back();
-    }
-
-    void removeMasterFxSlot (int slot)
-    {
-        ensureFxSlots (masterMixerState.fxSlots);
-        if ((int) masterMixerState.fxSlots.size() <= minFxSlots) return;
-        int s = juce::jlimit (0, (int) masterMixerState.fxSlots.size() - 1, slot);
-        masterMixerState.fxSlots.erase (masterMixerState.fxSlots.begin() + s);
-    }
 
     TrackMixerState::FxSlotState& getMasterFxSlot (int slot)
     {
@@ -377,12 +316,6 @@ struct DAWState
     {
         auto& s = getMasterFxSlot (slot);
         s.hasPlugin = true; s.bypassed = false; s.name = name;
-    }
-
-    void toggleMasterFxSlotBypassed (int slot)
-    {
-        auto& s = getMasterFxSlot (slot);
-        if (s.hasPlugin) s.bypassed = ! s.bypassed;
     }
 
     void clearMasterFxSlot (int slot) { getMasterFxSlot (slot) = {}; }

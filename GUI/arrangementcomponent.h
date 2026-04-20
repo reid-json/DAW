@@ -56,7 +56,7 @@ private:
     float getMaxHorizontalScroll() const;
     void setHorizontalScrollOffset(int newOffset);
     void showClipMenu(const TimelineClipItem& clip);
-    void promptRenameClip(const TimelineClipItem& clip);
+    void promptRenameClip(int assetId, const juce::String& currentName);
 
     DAWState& state;
     ThemeData& theme;

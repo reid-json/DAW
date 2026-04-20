@@ -10,7 +10,7 @@ constexpr int sectionGap = 12;
 constexpr int emptyRowHeight = 42;
 const auto renameDialogBackground = juce::Colour (0xff18181b);
 
-class RenameDialogLookAndFeel final : public juce::LookAndFeel_V4
+class RenameDialogLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     void drawButtonBackground (juce::Graphics& g,
@@ -58,15 +58,13 @@ juce::Image createDragPreviewImage(const juce::String& name, bool isPattern, The
     juce::Image image(juce::Image::ARGB, 220, rowHeight - 6, true);
     juce::Graphics g(image);
 
+    const auto prefix = isPattern ? "recent-clips.pattern-item." : "recent-clips.clip-item.";
     auto area = image.getBounds().reduced(4);
-    g.setColour(isPattern ? theme.colour("recent-clips.pattern-item.background", juce::Colour(0xffE68000))
-                          : theme.colour("recent-clips.clip-item.background", juce::Colour(0xffE68000)));
+    g.setColour(theme.colour(prefix + juce::String("background")));
     g.fillRoundedRectangle(area.toFloat(), 8.0f);
-    g.setColour(isPattern ? theme.colour("recent-clips.pattern-item.outline", juce::Colours::white.withAlpha(0.95f))
-                          : theme.colour("recent-clips.clip-item.outline", juce::Colours::white.withAlpha(0.95f)));
+    g.setColour(theme.colour(prefix + juce::String("outline")));
     g.drawRoundedRectangle(area.toFloat(), 8.0f, 1.2f);
-
-    g.setColour(theme.colour("recent-clips.item.text", juce::Colours::white));
+    g.setColour(theme.colour("recent-clips.item.text"));
     g.drawText(name, area.reduced(10, 8), juce::Justification::centredLeft, true);
 
     return image;
@@ -110,13 +108,9 @@ void RecentClipsComponent::paint(juce::Graphics& g)
     if (! hasClips && ! hasPatterns)
     {
         auto emptyBounds = getLocalBounds().reduced(10, 20);
-        g.setColour(theme.colour("recent-clips.empty.title", juce::Colours::white.withAlpha(0.92f)));
+        g.setColour(theme.colour("recent-clips.empty.title"));
         g.setFont(juce::Font(16.0f, juce::Font::bold));
-        g.drawText("No clips or patterns",
-                   emptyBounds.removeFromTop(28),
-                   juce::Justification::centredTop,
-                   false);
-
+        g.drawText("No clips or patterns", emptyBounds.removeFromTop(28), juce::Justification::centredTop, false);
         return;
     }
 
@@ -126,7 +120,7 @@ void RecentClipsComponent::paint(juce::Graphics& g)
         auto header = juce::Rectangle<int>(0, y, getWidth() - scrollbarWidth, sectionHeaderHeight).reduced(4, 2);
         if (header.getBottom() >= 0 && header.getY() <= getHeight())
         {
-            g.setColour(theme.colour("recent-clips.section-title", juce::Colours::white.withAlpha(0.88f)));
+            g.setColour(theme.colour("recent-clips.section-title"));
             g.setFont(juce::Font(16.0f, juce::Font::bold));
             g.drawText(getSectionTitle(kind), header, juce::Justification::centredLeft, false);
         }
@@ -138,17 +132,13 @@ void RecentClipsComponent::paint(juce::Graphics& g)
             auto emptyArea = juce::Rectangle<int>(0, y, getWidth() - scrollbarWidth, emptyRowHeight).reduced(4);
             if (emptyArea.getBottom() >= 0 && emptyArea.getY() <= getHeight())
             {
-                g.setColour(theme.colour("recent-clips.empty-row.background", juce::Colour(0xff1b2433)));
+                g.setColour(theme.colour("recent-clips.empty-row.background"));
                 g.fillRoundedRectangle(emptyArea.toFloat(), 8.0f);
-
-                g.setColour(theme.colour("recent-clips.empty-row.text", juce::Colours::white.withAlpha(0.48f)));
+                g.setColour(theme.colour("recent-clips.empty-row.text"));
                 g.setFont(juce::Font(13.0f, juce::Font::bold));
                 g.drawText(kind == ItemKind::clip ? "No audio files yet" : "No saved patterns yet",
-                           emptyArea.reduced(10, 8),
-                           juce::Justification::centredLeft,
-                           false);
+                           emptyArea.reduced(10, 8), juce::Justification::centredLeft, false);
             }
-
             y += emptyRowHeight + sectionGap;
             return;
         }
@@ -159,19 +149,15 @@ void RecentClipsComponent::paint(juce::Graphics& g)
             if (area.getBottom() < 0 || area.getY() > getHeight())
                 continue;
 
-            const auto isPattern = kind == ItemKind::pattern;
-            const auto colour = isPattern ? theme.colour("recent-clips.pattern-item.background", juce::Colour(0xffE68000))
-                                          : theme.colour("recent-clips.clip-item.background", juce::Colour(0xffE68000));
-            const auto outline = isPattern ? theme.colour("recent-clips.pattern-item.outline", juce::Colours::white)
-                                           : theme.colour("recent-clips.clip-item.outline", juce::Colours::white);
-            const auto& name = isPattern ? state.savedPatterns[(size_t) i].name
-                                         : state.recentClips[(size_t) i].name;
+            const auto prefix = kind == ItemKind::pattern ? "recent-clips.pattern-item." : "recent-clips.clip-item.";
+            const auto& name = kind == ItemKind::pattern ? state.savedPatterns[(size_t) i].name
+                                                         : state.recentClips[(size_t) i].name;
 
-            g.setColour(colour);
+            g.setColour(theme.colour(prefix + juce::String("background")));
             g.fillRoundedRectangle(area.toFloat(), 8.0f);
-            g.setColour(outline);
+            g.setColour(theme.colour(prefix + juce::String("outline")));
             g.drawRoundedRectangle(area.toFloat().reduced(0.5f), 8.0f, 1.2f);
-            g.setColour(theme.colour("recent-clips.item.text", juce::Colours::white));
+            g.setColour(theme.colour("recent-clips.item.text"));
             g.setFont(juce::Font(13.0f, juce::Font::bold));
             g.drawText(name, area.reduced(10, 8), juce::Justification::centredLeft, true);
         }
@@ -184,12 +170,12 @@ void RecentClipsComponent::paint(juce::Graphics& g)
 
     if (getMaxScroll() > 0)
     {
-        g.setColour(theme.colour("recent-clips.scrollbar.track", juce::Colours::white.withAlpha(0.08f)));
+        g.setColour(theme.colour("recent-clips.scrollbar.track"));
         g.fillRoundedRectangle(getScrollbarTrackBounds(), 4.0f);
-        g.setColour(theme.colour("recent-clips.scrollbar.thumb", juce::Colour(0xff4c88ff).withAlpha(0.9f)));
+        g.setColour(theme.colour("recent-clips.scrollbar.thumb"));
         auto thumb = getScrollbarThumbBounds();
         g.fillRoundedRectangle(thumb, 4.0f);
-        g.setColour(theme.colour("recent-clips.scrollbar.outline", juce::Colours::white.withAlpha(0.75f)));
+        g.setColour(theme.colour("recent-clips.scrollbar.outline"));
         g.drawRoundedRectangle(thumb, 4.0f, 1.0f);
     }
 }
@@ -246,43 +232,22 @@ void RecentClipsComponent::mouseDrag(const juce::MouseEvent& e)
         return;
     }
 
-    if (! dragItem.has_value())
-        return;
+    if (! dragItem.has_value()) return;
 
-    int assetId = -1;
-    juce::String name;
     const bool isPattern = dragItem->kind == ItemKind::pattern;
+    const auto count = isPattern ? (int) state.savedPatterns.size() : (int) state.recentClips.size();
+    if (dragItem->index < 0 || dragItem->index >= count) return;
 
-    if (isPattern)
-    {
-        if (dragItem->index < 0 || dragItem->index >= (int) state.savedPatterns.size())
-            return;
-
-        const auto& pattern = state.savedPatterns[(size_t) dragItem->index];
-        assetId = pattern.assetId;
-        name = pattern.name;
-    }
-    else
-    {
-        if (dragItem->index < 0 || dragItem->index >= (int) state.recentClips.size())
-            return;
-
-        const auto& clip = state.recentClips[(size_t) dragItem->index];
-        assetId = clip.assetId;
-        name = clip.name;
-    }
-
-    if (assetId <= 0)
-        return;
+    const auto i = (size_t) dragItem->index;
+    const int assetId = isPattern ? state.savedPatterns[i].assetId : state.recentClips[i].assetId;
+    const auto& name = isPattern ? state.savedPatterns[i].name : state.recentClips[i].name;
+    if (assetId <= 0) return;
 
     if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this))
     {
-        container->startDragging("recent:" + juce::String(assetId),
-                                 this,
+        container->startDragging("recent:" + juce::String(assetId), this,
                                  createDragPreviewImage(name, isPattern, theme),
-                                 false,
-                                 nullptr,
-                                 &e.source);
+                                 false, nullptr, &e.source);
         dragItem.reset();
     }
 }
@@ -384,30 +349,16 @@ void RecentClipsComponent::scrollBy(float deltaY)
 
 void RecentClipsComponent::promptRenameItem(const ItemRef& item)
 {
-    int assetId = -1;
-    juce::String currentName;
+    const bool isPattern = item.kind == ItemKind::pattern;
+    const auto count = isPattern ? (int) state.savedPatterns.size() : (int) state.recentClips.size();
+    if (! juce::isPositiveAndBelow(item.index, count)) return;
 
-    if (item.kind == ItemKind::clip)
-    {
-        if (! juce::isPositiveAndBelow(item.index, (int) state.recentClips.size()))
-            return;
+    const auto i = (size_t) item.index;
+    const int assetId = isPattern ? state.savedPatterns[i].assetId : state.recentClips[i].assetId;
+    const auto currentName = isPattern ? state.savedPatterns[i].name : state.recentClips[i].name;
+    if (assetId <= 0) return;
 
-        assetId = state.recentClips[(size_t) item.index].assetId;
-        currentName = state.recentClips[(size_t) item.index].name;
-    }
-    else
-    {
-        if (! juce::isPositiveAndBelow(item.index, (int) state.savedPatterns.size()))
-            return;
-
-        assetId = state.savedPatterns[(size_t) item.index].assetId;
-        currentName = state.savedPatterns[(size_t) item.index].name;
-    }
-
-    if (assetId <= 0)
-        return;
-
-    const auto renameDialogButton = theme.colour ("ui.button.background", juce::Colour (0xffe68000));
+    const auto renameDialogButton = theme.colour ("ui.button.background");
     auto* renameWindow = new juce::AlertWindow("Rename Item", "Enter a new name", juce::AlertWindow::NoIcon);
     renameWindow->setLookAndFeel (&getRenameDialogLookAndFeel());
     renameWindow->setColour (juce::AlertWindow::backgroundColourId, renameDialogBackground);

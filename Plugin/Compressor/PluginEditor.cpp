@@ -1,17 +1,8 @@
-/*
-  ==============================================================================
-
-    This file contains the basic framework code for a JUCE plugin editor.
-
-  ==============================================================================
-*/
-
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-//==============================================================================
-NewProjectAudioProcessorEditor::NewProjectAudioProcessorEditor (NewProjectAudioProcessor& p, juce::AudioProcessorValueTreeState& vts)
-    : AudioProcessorEditor (&p), audioProcessor (p)
+CompressorAudioProcessorEditor::CompressorAudioProcessorEditor(CompressorAudioProcessor& p, juce::AudioProcessorValueTreeState& vts)
+    : AudioProcessorEditor(&p), audioProcessor(p)
 {
     addAndMakeVisible(thresholdSlider);
     addAndMakeVisible(ratioSlider);
@@ -54,58 +45,45 @@ NewProjectAudioProcessorEditor::NewProjectAudioProcessorEditor (NewProjectAudioP
     gainLabel.setJustificationType(juce::Justification::centred);
     attackLabel.setJustificationType(juce::Justification::centred);
     releaseLabel.setJustificationType(juce::Justification::centred);
-    // Make sure that before the constructor has finished, you've set the
-    // editor's size to whatever you need it to be.
-    setSize (500, 325);
+
+    setSize(500, 325);
 }
 
-NewProjectAudioProcessorEditor::~NewProjectAudioProcessorEditor()
+CompressorAudioProcessorEditor::~CompressorAudioProcessorEditor() {}
+
+void CompressorAudioProcessorEditor::paint(juce::Graphics& g)
 {
+    g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
+    g.setColour(juce::Colours::white);
+    g.setFont(juce::FontOptions(15.0f));
 }
 
-//==============================================================================
-void NewProjectAudioProcessorEditor::paint (juce::Graphics& g)
-{
-    // (Our component is opaque, so we must completely fill the background with a solid colour)
-    g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
-
-    g.setColour (juce::Colours::white);
-    g.setFont (juce::FontOptions (15.0f));
-}
-
-void NewProjectAudioProcessorEditor::resized()
+void CompressorAudioProcessorEditor::resized()
 {
     auto area = getLocalBounds();
     int sliderWidth = 100;
     int sliderHeight = 100;
     int labelHeight = 20;
 
-    //Spacing between sliders
-    int spacing = (area.getWidth() - (3 * sliderWidth)) / 4; // 4 gaps: left, middle x2, right
+    int spacing = (area.getWidth() - (3 * sliderWidth)) / 4;
 
-    //Y positions
-    int sliderY = 25; //vertical offset from top
-    int labelY = sliderY + sliderHeight; // label right below slider
+    int sliderY = 25;
+    int labelY = sliderY + sliderHeight;
 
-    //Threshold slider
     thresholdSlider.setBounds(spacing, sliderY, sliderWidth, sliderHeight);
     thresholdLabel.setBounds(spacing, labelY, sliderWidth, labelHeight);
 
-    //Ratio slider
     int ratioX = spacing * 2 + sliderWidth;
     ratioSlider.setBounds(ratioX, sliderY, sliderWidth, sliderHeight);
     ratioLabel.setBounds(ratioX, labelY, sliderWidth, labelHeight);
 
-    //Gain slider
     int gainX = spacing * 3 + sliderWidth * 2;
     gainSlider.setBounds(gainX, sliderY, sliderWidth, sliderHeight);
     gainLabel.setBounds(gainX, labelY, sliderWidth, labelHeight);
 
-    //Attack Slider
     attackSlider.setBounds(spacing, sliderY + 150, sliderWidth, sliderHeight);
     attackLabel.setBounds(spacing, labelY + 150, sliderWidth, labelHeight);
 
-    //Release Slider
     releaseSlider.setBounds(ratioX, sliderY + 150, sliderWidth, sliderHeight);
     releaseLabel.setBounds(ratioX, labelY + 150, sliderWidth, labelHeight);
 }

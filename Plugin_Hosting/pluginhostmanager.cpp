@@ -1,8 +1,11 @@
 #include "pluginhostmanager.h"
-#include "../Plugin/PluginProcessor.h"
+#include "../Plugin/LowHighFilter/PluginProcessor.h"
+#include "../Plugin/Compressor/PluginProcessor.h"
+#include "../Plugin/SevenBandEQ/PluginProcessor.h"
+#include "../Plugin/GainPanFilter/PluginProcessor.h"
 #include <algorithm>
 
-namespace { constexpr const char* externalPluginsPath = "Plugin/Plugins (External)"; }
+namespace { constexpr const char* externalPluginsPath = "ExternalPlugins"; }
 
 PluginHostManager::PluginHostManager()  { formatManager.addDefaultFormats(); }
 PluginHostManager::~PluginHostManager() = default;
@@ -20,11 +23,11 @@ PluginHostManager::PluginEditorWindow::PluginEditorWindow(const juce::String& ti
 
 void PluginHostManager::PluginEditorWindow::closeButtonPressed() { setVisible(false); }
 
-// plugin lists
-
 juce::StringArray PluginHostManager::getBuiltInPluginNames(PluginRole role)
 {
-    return role == PluginRole::effect ? juce::StringArray { "LowpassHighpassFilter" } : juce::StringArray {};
+    if (role == PluginRole::effect)
+        return juce::StringArray { "LowpassHighpassFilter", "Compressor", "SevenBandEQ", "GainPanFilter" };
+    return juce::StringArray {};
 }
 
 juce::StringArray PluginHostManager::getAvailablePluginsForRole(PluginRole role) const
@@ -40,12 +43,10 @@ juce::StringArray PluginHostManager::getAvailableTrackPlugins() const           
 juce::StringArray PluginHostManager::getAvailableMasterPlugins() const          { return getAvailablePluginsForRole(PluginRole::effect); }
 juce::StringArray PluginHostManager::getAvailableTrackInstrumentPlugins() const { return getAvailablePluginsForRole(PluginRole::instrument); }
 
-// track plugins
-
-bool PluginHostManager::loadTrackPlugin(const juce::String& name, int trackIndex, int slotIndex)
+std::optional<PluginHostManager::HostedPlugin> PluginHostManager::makeHostedPlugin(const juce::String& name) const
 {
     auto proc = createProcessor(name);
-    if (proc == nullptr) return false;
+    if (proc == nullptr) return std::nullopt;
     proc->prepareToPlay(processingSampleRate, processingBlockSize);
 
     HostedPlugin hp;
@@ -53,7 +54,31 @@ bool PluginHostManager::loadTrackPlugin(const juce::String& name, int trackIndex
     hp.preparedSampleRate = processingSampleRate;
     hp.preparedBlockSize = processingBlockSize;
     hp.processor = std::move(proc);
-    hostedTrackPlugins[{ trackIndex, slotIndex }] = std::move(hp);
+    return hp;
+}
+
+void PluginHostManager::runPluginOnBuffer(HostedPlugin& hp, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) const
+{
+    const int numSamples = buffer.getNumSamples();
+    const int numCh = juce::jmax(2, hp.processor->getTotalNumInputChannels(),
+                                    hp.processor->getTotalNumOutputChannels());
+
+    juce::AudioBuffer<float> plugBuf(numCh, numSamples);
+    plugBuf.clear();
+    for (int ch = 0; ch < juce::jmin(buffer.getNumChannels(), plugBuf.getNumChannels()); ++ch)
+        plugBuf.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+
+    hp.processor->processBlock(plugBuf, midi);
+
+    for (int ch = 0; ch < juce::jmin(2, plugBuf.getNumChannels()); ++ch)
+        buffer.copyFrom(ch, 0, plugBuf, juce::jmin(ch, plugBuf.getNumChannels() - 1), 0, numSamples);
+}
+
+bool PluginHostManager::loadTrackPlugin(const juce::String& name, int trackIndex, int slotIndex)
+{
+    auto hp = makeHostedPlugin(name);
+    if (! hp) return false;
+    hostedTrackPlugins[{ trackIndex, slotIndex }] = std::move(*hp);
     return true;
 }
 
@@ -89,96 +114,62 @@ bool PluginHostManager::showTrackPluginEditor(int trackIndex, int slotIndex)
     return true;
 }
 
-// track instruments
-
 bool PluginHostManager::loadTrackInstrumentPlugin(const juce::String& name, int trackIndex)
 {
-    auto proc = createProcessor(name);
-    if (proc == nullptr) return false;
-    proc->prepareToPlay(processingSampleRate, processingBlockSize);
-
-    HostedPlugin hp;
-    hp.pluginName = name;
-    hp.preparedSampleRate = processingSampleRate;
-    hp.preparedBlockSize = processingBlockSize;
-    hp.processor = std::move(proc);
-    hostedTrackInstrumentPlugins[trackIndex] = std::move(hp);
+    auto hp = makeHostedPlugin(name);
+    if (! hp) return false;
+    hostedTrackInstrumentPlugins[trackIndex] = std::move(*hp);
     return true;
 }
 
 bool PluginHostManager::renderTrackInstrument(int trackIndex,
                                               juce::AudioBuffer<float>& buffer,
                                               juce::MidiBuffer& midi,
-                                              double /*sampleRate*/)
+                                              double)
 {
     auto* hp = getHostedTrackInstrumentPlugin(trackIndex);
     if (! hp || ! hp->processor || hp->bypassed) return false;
 
-    int numSamples = buffer.getNumSamples();
-    int numCh = juce::jmax(2, hp->processor->getTotalNumInputChannels(),
-                              hp->processor->getTotalNumOutputChannels());
-
-    juce::AudioBuffer<float> plugBuf(numCh, numSamples);
-    plugBuf.clear();
-    for (int ch = 0; ch < juce::jmin(buffer.getNumChannels(), plugBuf.getNumChannels()); ++ch)
-        plugBuf.copyFrom(ch, 0, buffer, ch, 0, numSamples);
-
-    hp->processor->processBlock(plugBuf, midi);
-
     buffer.clear();
-    for (int ch = 0; ch < juce::jmin(2, plugBuf.getNumChannels()); ++ch)
-        buffer.addFrom(ch, 0, plugBuf, juce::jmin(ch, plugBuf.getNumChannels() - 1), 0, numSamples);
-
+    runPluginOnBuffer(*hp, buffer, midi);
     return true;
 }
 
-// track removal
-
 void PluginHostManager::removeTrack(int trackIndex)
 {
-    // Re-index track effect plugins
     std::map<SlotKey, HostedPlugin> updated;
-    for (auto& [key, hp] : hostedTrackPlugins)
+    for (auto& entry : hostedTrackPlugins)
     {
-        if (key.trackIndex == trackIndex)
+        if (entry.first.trackIndex == trackIndex)
         {
-            if (hp.processor) hp.processor->releaseResources();
+            if (entry.second.processor) entry.second.processor->releaseResources();
             continue;
         }
-        auto k = key;
+        auto k = entry.first;
         if (k.trackIndex > trackIndex) --k.trackIndex;
-        updated.emplace(k, std::move(hp));
+        updated.emplace(k, std::move(entry.second));
     }
     hostedTrackPlugins = std::move(updated);
 
-    // Re-index track instrument plugins
     std::map<int, HostedPlugin> updatedInst;
-    for (auto& [idx, hp] : hostedTrackInstrumentPlugins)
+    for (auto& entry : hostedTrackInstrumentPlugins)
     {
+        int idx = entry.first;
         if (idx == trackIndex)
         {
-            if (hp.processor) hp.processor->releaseResources();
+            if (entry.second.processor) entry.second.processor->releaseResources();
             continue;
         }
-        updatedInst.emplace(idx > trackIndex ? idx - 1 : idx, std::move(hp));
+        updatedInst.emplace(idx > trackIndex ? idx - 1 : idx, std::move(entry.second));
     }
     hostedTrackInstrumentPlugins = std::move(updatedInst);
 }
 
-// master plugins
-
 bool PluginHostManager::loadMasterPlugin(const juce::String& name, int slotIndex)
 {
-    auto proc = createProcessor(name);
-    if (proc == nullptr) return false;
-    proc->prepareToPlay(processingSampleRate, processingBlockSize);
-
-    HostedPlugin hp;
-    hp.pluginName = name;
-    hp.preparedSampleRate = processingSampleRate;
-    hp.preparedBlockSize = processingBlockSize;
-    hp.processor = std::move(proc);
-    hostedMasterPlugins[slotIndex] = std::move(hp);
+    auto hp = makeHostedPlugin(name);
+    if (! hp) return false;
+    hostedMasterPlugins[slotIndex] = std::move(*hp);
     return true;
 }
 
@@ -213,62 +204,26 @@ bool PluginHostManager::showMasterPluginEditor(int slotIndex)
     return true;
 }
 
-// FX processing
-
 void PluginHostManager::processTrackEffects(int trackIndex, juce::AudioBuffer<float>& buffer)
 {
+    juce::MidiBuffer emptyMidi;
     for (int slot = 0; slot < 5; ++slot)
     {
         auto* hp = getHostedTrackPlugin(trackIndex, slot);
-        if (hp == nullptr || hp->processor == nullptr || hp->bypassed)
-            continue;
-
-        int numSamples = buffer.getNumSamples();
-        int numCh = juce::jmax(2, hp->processor->getTotalNumInputChannels(),
-                                  hp->processor->getTotalNumOutputChannels());
-
-        juce::AudioBuffer<float> plugBuf(numCh, numSamples);
-        plugBuf.clear();
-        for (int ch = 0; ch < juce::jmin(buffer.getNumChannels(), plugBuf.getNumChannels()); ++ch)
-            plugBuf.copyFrom(ch, 0, buffer, ch, 0, numSamples);
-
-        juce::MidiBuffer emptyMidi;
-        hp->processor->processBlock(plugBuf, emptyMidi);
-
-        for (int ch = 0; ch < juce::jmin(2, plugBuf.getNumChannels()); ++ch)
-            buffer.copyFrom(ch, 0, plugBuf, juce::jmin(ch, plugBuf.getNumChannels() - 1), 0, numSamples);
+        if (hp && hp->processor && ! hp->bypassed)
+            runPluginOnBuffer(*hp, buffer, emptyMidi);
     }
 }
 
 void PluginHostManager::processMasterEffects(juce::AudioBuffer<float>& buffer)
 {
+    juce::MidiBuffer emptyMidi;
     for (int slot = 0; slot < 5; ++slot)
     {
         auto* hp = getHostedMasterPlugin(slot);
-        if (hp == nullptr || hp->processor == nullptr || hp->bypassed)
-            continue;
-
-        int numSamples = buffer.getNumSamples();
-        int numCh = juce::jmax(2, hp->processor->getTotalNumInputChannels(),
-                                  hp->processor->getTotalNumOutputChannels());
-
-        juce::AudioBuffer<float> plugBuf(numCh, numSamples);
-        plugBuf.clear();
-        for (int ch = 0; ch < juce::jmin(buffer.getNumChannels(), plugBuf.getNumChannels()); ++ch)
-            plugBuf.copyFrom(ch, 0, buffer, ch, 0, numSamples);
-
-        juce::MidiBuffer emptyMidi;
-        hp->processor->processBlock(plugBuf, emptyMidi);
-
-        for (int ch = 0; ch < juce::jmin(2, plugBuf.getNumChannels()); ++ch)
-            buffer.copyFrom(ch, 0, plugBuf, juce::jmin(ch, plugBuf.getNumChannels() - 1), 0, numSamples);
+        if (hp && hp->processor && ! hp->bypassed)
+            runPluginOnBuffer(*hp, buffer, emptyMidi);
     }
-}
-
-void PluginHostManager::rescanExternalPlugins()
-{
-    externalPluginsScanned = false;
-    scanExternalPlugins();
 }
 
 bool PluginHostManager::loadPianoRollInstrument(const juce::String& pluginName)
@@ -289,25 +244,29 @@ bool PluginHostManager::renderPianoRollInstrument(juce::AudioBuffer<float>& buff
     return renderTrackInstrument(-1, buffer, midi, sampleRate);
 }
 
-// plugin creation and scanning
-
 std::unique_ptr<juce::AudioProcessor> PluginHostManager::createProcessor(const juce::String& name) const
 {
-    if (name == "LowpassHighpassFilter")
-        return std::make_unique<LowpassHighpassFilterAudioProcessor>();
+    if (name == "LowpassHighpassFilter") return std::make_unique<LowpassHighpassFilterAudioProcessor>();
+    if (name == "Compressor")            return std::make_unique<CompressorAudioProcessor>();
+    if (name == "SevenBandEQ")           return std::make_unique<SevenBandEQAudioProcessor>();
+    if (name == "GainPanFilter")         return std::make_unique<GainPanAudioProcessor>();
 
     scanExternalPlugins();
 
-    auto it = std::find_if(externalPlugins.begin(), externalPlugins.end(),
-                           [&](auto& ep) { return ep.menuName == name; });
-    if (it == externalPlugins.end()) return nullptr;
+    for (auto& ep : externalPlugins)
+    {
+        if (ep.menuName == name)
+        {
+            juce::String err;
+            return std::unique_ptr<juce::AudioProcessor>(
+                formatManager.createPluginInstance(ep.description, processingSampleRate, processingBlockSize, err));
+        }
+    }
 
-    juce::String err;
-    return std::unique_ptr<juce::AudioProcessor>(
-        formatManager.createPluginInstance(it->description, processingSampleRate, processingBlockSize, err));
+    return nullptr;
 }
 
-juce::File PluginHostManager::findExternalPluginsDirectory() const
+juce::File PluginHostManager::getExternalPluginsDir() const
 {
     auto cwd = juce::File::getCurrentWorkingDirectory().getChildFile(externalPluginsPath);
     if (cwd.isDirectory()) return cwd;
@@ -322,7 +281,7 @@ juce::File PluginHostManager::findExternalPluginsDirectory() const
     return {};
 }
 
-juce::String PluginHostManager::makeExternalPluginMenuName(const juce::PluginDescription& desc)
+juce::String PluginHostManager::makeMenuNameForPlugin(const juce::PluginDescription& desc)
 {
     auto vendor = desc.manufacturerName.trim();
     return vendor.isNotEmpty() ? desc.name + " (" + vendor + ")" : desc.name;
@@ -334,30 +293,27 @@ void PluginHostManager::scanExternalPlugins() const
     externalPluginsScanned = true;
     externalPlugins.clear();
 
-    auto dir = findExternalPluginsDirectory();
+    auto dir = getExternalPluginsDir();
     if (! dir.isDirectory()) return;
 
     juce::Array<juce::File> vst3Files;
     dir.findChildFiles(vst3Files, juce::File::findFiles, true, "*.vst3");
 
     for (auto& file : vst3Files)
-    {
         for (auto* fmt : formatManager.getFormats())
         {
             if (! fmt || ! fmt->fileMightContainThisPluginType(file.getFullPathName())) continue;
 
+            const bool isInInstPluginFolder = file.getFullPathName().contains("InstPlugin");
+
             juce::OwnedArray<juce::PluginDescription> descs;
             fmt->findAllTypesForFile(descs, file.getFullPathName());
-
             for (auto* d : descs)
-                if (d) externalPlugins.push_back({ makeExternalPluginMenuName(*d),
-                                                   d->isInstrument ? PluginRole::instrument : PluginRole::effect,
+                if (d) externalPlugins.push_back({ makeMenuNameForPlugin(*d),
+                                                   isInInstPluginFolder ? PluginRole::instrument : PluginRole::effect,
                                                    *d });
         }
-    }
 }
-
-// lookup helpers
 
 PluginHostManager::HostedPlugin* PluginHostManager::getHostedTrackPlugin(int ti, int si)
 {

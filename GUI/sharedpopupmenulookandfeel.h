@@ -4,7 +4,7 @@
 
 #include "theme.h"
 
-class SharedPopupMenuLookAndFeel final : public juce::LookAndFeel_V4
+class SharedPopupMenuLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     explicit SharedPopupMenuLookAndFeel (ThemeData& themeIn) : theme (themeIn) {}

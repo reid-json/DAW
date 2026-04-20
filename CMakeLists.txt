@@ -24,7 +24,7 @@ FetchContent_MakeAvailable(juce)
 add_compile_definitions(JIVE_GUI_ITEMS_HAVE_STYLE_SHEETS=1)
 
 # Add subdirectories
-add_subdirectory(external/JIVE)
+add_subdirectory(JIVE)
 
 add_subdirectory(Audio_Engine)
 

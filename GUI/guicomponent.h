@@ -35,10 +35,10 @@ public:
     void resized() override;
     void paintOverChildren(juce::Graphics& g) override;
 
-    DAWState& getState() noexcept                     { return state; }
-    const DAWState& getState() const noexcept         { return state; }
-    PluginHostManager& getPluginHostManager() noexcept { return pluginHostManager; }
-    void refreshExternalState(bool shouldRefreshControls, bool shouldRebuildTrackList);
+    DAWState& getState() { return state; }
+    const DAWState& getState() const { return state; }
+    PluginHostManager& getPluginHostManager() { return pluginHostManager; }
+    void syncFromEngine(bool shouldRefreshControls, bool shouldRebuildTrackList);
     void repaintDynamicViews();
     void openPianoRollForPattern(std::vector<PianoRoll::Note> notes, int assetId);
 
@@ -87,9 +87,11 @@ private:
     juce::AudioDeviceManager& deviceManager;
 
     static jive::GuiItem* findGuiItemById (jive::GuiItem& node, const juce::Identifier& id);
+    juce::Component* getCompById (const juce::String& id);
+    juce::Button* getBtnById (const juce::String& id);
 
     void registerCustomComponentTypes();
-    void applyManualBodyLayout();
+    void layoutBody();
     void createHeaderButtonOverlays();
     void updateHeaderButtonOverlayBounds();
     void refreshHeaderButtonTooltips();

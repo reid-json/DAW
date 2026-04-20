@@ -1,47 +1,39 @@
 add_library(Plugin STATIC
-<<<<<<< HEAD
-    LowpassHighpassFilter.cpp
-    LowpassHighpassFilter.h
-    PluginProcessor.cpp
-    PluginProcessor.h
-    PluginEditor.cpp
-    PluginEditor.h
+    LowHighFilter/LowpassHighpassFilter.cpp
+    LowHighFilter/LowpassHighpassFilter.h
+    LowHighFilter/PluginProcessor.cpp
+    LowHighFilter/PluginProcessor.h
+    LowHighFilter/PluginEditor.cpp
+    LowHighFilter/PluginEditor.h
+
+    Compressor/Compressor.cpp
+    Compressor/Compressor.h
+    Compressor/PluginProcessor.cpp
+    Compressor/PluginProcessor.h
+    Compressor/PluginEditor.cpp
+    Compressor/PluginEditor.h
+
+    SevenBandEQ/SevenBandEQ.cpp
+    SevenBandEQ/SevenBandEQ.h
+    SevenBandEQ/PluginProcessor.cpp
+    SevenBandEQ/PluginProcessor.h
+    SevenBandEQ/PluginEditor.cpp
+    SevenBandEQ/PluginEditor.h
+
+    GainPanFilter/GainPanFilter.cpp
+    GainPanFilter/GainPanFilter.h
+    GainPanFilter/PluginProcessor.cpp
+    GainPanFilter/PluginProcessor.h
+    GainPanFilter/PluginEditor.cpp
+    GainPanFilter/PluginEditor.h
 )
 
 target_include_directories(Plugin PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-=======
-    plugin.cpp
 )
 
-# LowpassHighpassFilter
-add_library(LowpassHighpassFilterPlugin
-    Plugins/LowpassHighpassFilter/PluginProcessor.cpp
-    Plugins/LowpassHighpassFilter/PluginEditor.cpp
-    Plugins/LowpassHighpassFilter/LowpassHighpassFilter.cpp
-)
-
-target_include_directories(LowpassHighpassFilterPlugin PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/Plugins/LowpassHighpassFilter
->>>>>>> 075fdc811b6aa9e1c2cfa300111279a0c69bafad
-)
-
-# GainPanFilter
-add_library(GainPanFilterPlugin
-    Plugins/GainPanFilter/PluginProcessor.cpp
-    Plugins/GainPanFilter/PluginEditor.cpp
-    Plugins/GainPanFilter/GainPanFilter.cpp
-)
-
-target_include_directories(GainPanFilterPlugin PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GainPanFilter
-)
-
-# Link everything together
 target_link_libraries(Plugin
     PUBLIC
-        LowpassHighpassFilterPlugin
-        GainPanFilterPlugin
         juce::juce_audio_processors
         juce::juce_audio_basics
         juce::juce_gui_basics
@@ -50,12 +42,6 @@ target_link_libraries(Plugin
         juce::juce_dsp
 )
 
-# Include root
-target_include_directories(Plugin PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-# JUCE plugin settings (KEEP THESE)
 target_compile_definitions(Plugin PUBLIC
     JUCE_STANDALONE_APPLICATION=1
     JucePlugin_Name="LowpassHighpassFilter"
@@ -73,4 +59,3 @@ target_compile_definitions(Plugin PUBLIC
     JucePlugin_VersionString="1.0.0"
     "JucePlugin_PreferredChannelConfigurations={(1,1),(2,2)}"
 )
-

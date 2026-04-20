@@ -62,6 +62,8 @@ private:
                            const juce::Image* sprite = nullptr) const;
     void drawFader(juce::Graphics& g, juce::Rectangle<float> bounds, float level, bool active, int rowIndex) const;
     void drawPanKnob(juce::Graphics& g, juce::Rectangle<float> bounds, float pan, bool active, int rowIndex) const;
+    void drawReadout(juce::Graphics& g, juce::Rectangle<float> bounds,
+                     const juce::String& text, const juce::String& tokenPrefix) const;
 
     void promptRenameTrack(int trackIndex);
     void showTrackContextMenu(int trackIndex);

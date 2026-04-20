@@ -97,14 +97,20 @@ bool ArrangementState::placeRecentAssetDirectToTimeline(int assetId, int timelin
 
 bool ArrangementState::moveTimelinePlacement(int placementId, int timelineTrackId, juce::int64 startSample)
 {
-    auto it = std::find_if(timelinePlacements.begin(), timelinePlacements.end(),
-        [placementId](const TimelineClipPlacement& placement) { return placement.placementId == placementId; });
-    if (it == timelinePlacements.end() || findTimelineTrack(timelineTrackId) == nullptr)
+    if (findTimelineTrack(timelineTrackId) == nullptr)
         return false;
 
-    it->timelineTrackId = timelineTrackId;
-    it->startSample = juce::jmax<juce::int64>(0, startSample);
-    return true;
+    for (auto& placement : timelinePlacements)
+    {
+        if (placement.placementId == placementId)
+        {
+            placement.timelineTrackId = timelineTrackId;
+            placement.startSample = juce::jmax<juce::int64>(0, startSample);
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool ArrangementState::removeTimelinePlacement(int placementId)
@@ -232,8 +238,11 @@ void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 play
         buffer.addFrom(1, bufferOffset, clip.rightChannel.data() + clipOffset, overlapLength, gainR);
     }
 
-    for (auto& [trackIndex, midi] : midiByTrack)
+    for (auto& entry : midiByTrack)
     {
+        const int trackIndex = entry.first;
+        auto& midi = entry.second;
+
         juce::AudioBuffer<float> tempBuffer(2, buffer.getNumSamples());
         tempBuffer.clear();
 
@@ -278,26 +287,34 @@ void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 play
 
 const SourceAsset* ArrangementState::findAsset(int id) const
 {
-    auto it = std::find_if(assets.begin(), assets.end(), [id](auto& a) { return a.assetId == id; });
-    return it != assets.end() ? &(*it) : nullptr;
+    for (auto& a : assets)
+        if (a.assetId == id)
+            return &a;
+    return nullptr;
 }
 
 SourceAsset* ArrangementState::findAsset(int id)
 {
-    auto it = std::find_if(assets.begin(), assets.end(), [id](auto& a) { return a.assetId == id; });
-    return it != assets.end() ? &(*it) : nullptr;
+    for (auto& a : assets)
+        if (a.assetId == id)
+            return &a;
+    return nullptr;
 }
 
 const TimelineTrack* ArrangementState::findTimelineTrack(int id) const
 {
-    auto it = std::find_if(timelineTracks.begin(), timelineTracks.end(), [id](auto& t) { return t.timelineTrackId == id; });
-    return it != timelineTracks.end() ? &(*it) : nullptr;
+    for (auto& t : timelineTracks)
+        if (t.timelineTrackId == id)
+            return &t;
+    return nullptr;
 }
 
 const TimelineClipPlacement* ArrangementState::findTimelinePlacement(int id) const
 {
-    auto it = std::find_if(timelinePlacements.begin(), timelinePlacements.end(), [id](auto& p) { return p.placementId == id; });
-    return it != timelinePlacements.end() ? &(*it) : nullptr;
+    for (auto& p : timelinePlacements)
+        if (p.placementId == id)
+            return &p;
+    return nullptr;
 }
 
 void ArrangementState::renderPatternAsset(const SourceAsset& asset,

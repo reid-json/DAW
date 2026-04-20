@@ -24,7 +24,6 @@ void Compressor::setSamplingRate(float samplingRate)
     setRelease(release);
 }
 
-/*Add for attack/Release*/
 void Compressor::setAttack(float attackMs)
 {
     this->attack = attackMs;
@@ -36,7 +35,6 @@ void Compressor::setRelease(float releaseMs)
     this->release = releaseMs;
     releaseCoeff = std::exp(-1.0f / (0.001f * release * samplingRate));
 }
-/**/
 
 void Compressor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {

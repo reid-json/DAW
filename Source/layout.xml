@@ -1,6 +1,0 @@
-<!--JIVE layout test-->
-<jive>
-    <Button id="testButton"
-            text="JIVE Button"
-            class="main-button" />
-</jive>

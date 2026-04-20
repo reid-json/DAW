@@ -3,14 +3,11 @@
 #include <set>
 #include <cmath>
 
-namespace
+static TimelineClipItem::ContentKind toTimelineContentKind(AssetKind kind)
 {
-TimelineClipItem::ContentKind toTimelineContentKind(AssetKind assetKind)
-{
-    return assetKind == AssetKind::pianoRollPattern
+    return kind == AssetKind::pianoRollPattern
         ? TimelineClipItem::ContentKind::pattern
         : TimelineClipItem::ContentKind::recording;
-}
 }
 
 MainComponent::MainComponent()
@@ -48,34 +45,13 @@ MainComponent::MainComponent()
     gui->onStopRequested = [this] { handleStop(); };
     gui->onPauseRequested = [this] { handlePause(); };
     gui->onRestartRequested = [this] { handleRestart(); };
-    gui->onRecentClipDropped = [this] (int assetId, int trackIndex, double startSeconds)
-    {
-        handleRecentClipDropped(assetId, trackIndex, startSeconds);
-    };
-    gui->onAssetRenameRequested = [this] (int assetId, const juce::String& newName)
-    {
-        handleAssetRenamed(assetId, newName);
-    };
-    gui->onPatternEditRequested = [this] (int assetId)
-    {
-        handlePatternEditRequested(assetId);
-    };
-    gui->onTimelineClipMoved = [this] (int placementId, int trackIndex, double startSeconds)
-    {
-        handleTimelineClipMoved(placementId, trackIndex, startSeconds);
-    };
-    gui->onTimelineClipDeleteRequested = [this] (int placementId)
-    {
-        handleTimelineClipRemoved(placementId);
-    };
-    gui->onSavePatternRequested = [this] (int assetId, const std::vector<PianoRoll::Note>& notes)
-    {
-        handleSavePattern(assetId, notes);
-    };
-    gui->onPianoRollInstrumentChangeRequested = [this] (const juce::String& name)
-    {
-        handlePianoRollInstrumentChange(name);
-    };
+    gui->onRecentClipDropped = [this] (int a, int t, double s) { handleRecentClipDropped(a, t, s); };
+    gui->onAssetRenameRequested = [this] (int a, const juce::String& n) { handleAssetRenamed(a, n); };
+    gui->onPatternEditRequested = [this] (int a) { handlePatternEditRequested(a); };
+    gui->onTimelineClipMoved = [this] (int p, int t, double s) { handleTimelineClipMoved(p, t, s); };
+    gui->onTimelineClipDeleteRequested = [this] (int p) { handleTimelineClipRemoved(p); };
+    gui->onSavePatternRequested = [this] (int a, const std::vector<PianoRoll::Note>& n) { handleSavePattern(a, n); };
+    gui->onPianoRollInstrumentChangeRequested = [this] (const juce::String& n) { handlePianoRollInstrumentChange(n); };
 
     addAndMakeVisible(gui.get());
     setSize(1440, 700);
@@ -153,7 +129,7 @@ void MainComponent::syncStateFromEngine()
     const auto currentTempoBpm = juce::jlimit(40.0, 240.0, gui->getState().tempoBpm);
     if (std::abs(currentTempoBpm - lastSyncedTempoBpm) > 0.001)
     {
-        rescaleStandalonePatternAssetsForTempoChange(lastSyncedTempoBpm, currentTempoBpm);
+        rescalePatternsForTempo(lastSyncedTempoBpm, currentTempoBpm);
         lastSyncedTempoBpm = currentTempoBpm;
     }
 
@@ -237,7 +213,7 @@ void MainComponent::syncStateFromEngine()
         || previousMonitoringState != state.audioMonitoringEnabled;
     const bool trackCountChanged = previousTrackCount != state.trackCount;
 
-    gui->refreshExternalState(controlsChanged, trackCountChanged);
+    gui->syncFromEngine(controlsChanged, trackCountChanged);
 
     if (!controlsChanged && !trackCountChanged && !recentClipsChanged && !savedPatternsChanged && !timelineClipsChanged)
         gui->repaintDynamicViews();
@@ -385,7 +361,6 @@ void MainComponent::handleExportWav()
             juce::AudioBuffer<float> fullBuffer(2, static_cast<int>(totalSamples));
             fullBuffer.clear();
 
-            // Render the arrangement in blocks
             constexpr int blockSize = 4096;
             {
                 juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
@@ -403,7 +378,6 @@ void MainComponent::handleExportWav()
                 }
             }
 
-            // Write WAV file
             file.deleteFile();
             auto stream = std::unique_ptr<juce::FileOutputStream>(file.createOutputStream());
             if (stream != nullptr)
@@ -412,7 +386,7 @@ void MainComponent::handleExportWav()
                 auto* writer = wav.createWriterFor(stream.get(), sampleRate, 2, 16, {}, 0);
                 if (writer != nullptr)
                 {
-                    stream.release(); // writer takes ownership of the stream
+                    stream.release();
                     writer->writeFromAudioSampleBuffer(fullBuffer, 0, fullBuffer.getNumSamples());
                     delete writer;
                 }
@@ -513,69 +487,50 @@ void MainComponent::syncTrackPatternsToAssets()
     }
 }
 
-void MainComponent::rescaleStandalonePatternAssetsForTempoChange(double oldTempoBpm, double newTempoBpm)
+void MainComponent::rescalePatternsForTempo(double oldTempoBpm, double newTempoBpm)
 {
-    if (gui == nullptr)
-        return;
+    if (gui == nullptr) return;
 
     oldTempoBpm = juce::jlimit(40.0, 240.0, oldTempoBpm);
     newTempoBpm = juce::jlimit(40.0, 240.0, newTempoBpm);
-
-    if (oldTempoBpm <= 0.0 || newTempoBpm <= 0.0 || std::abs(oldTempoBpm - newTempoBpm) <= 0.001)
-        return;
+    if (std::abs(oldTempoBpm - newTempoBpm) <= 0.001) return;
 
     const double scale = oldTempoBpm / newTempoBpm;
 
-    std::set<int> trackPatternAssetIds;
+    std::set<int> boundAssetIds;
     const auto& state = gui->getState();
-    for (int trackIndex = 0; trackIndex < state.trackCount; ++trackIndex)
+    for (int i = 0; i < state.trackCount; ++i)
     {
-        const auto assetId = state.getTrackPatternState(trackIndex).assetId;
-        if (assetId > 0)
-            trackPatternAssetIds.insert(assetId);
+        const int id = state.getTrackPatternState(i).assetId;
+        if (id > 0)
+            boundAssetIds.insert(id);
     }
 
-    struct PatternAssetUpdate
-    {
-        int assetId = 0;
-        juce::String name;
-        double lengthSeconds = 0.0;
-        std::vector<PatternNote> notes;
-    };
+    struct Update { int assetId; juce::String name; double lengthSeconds; std::vector<PatternNote> notes; };
+    std::vector<Update> updates;
 
-    std::vector<PatternAssetUpdate> updates;
     {
         juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
-        const auto& assets = engine.getArrangementState().getAssets();
-        updates.reserve(assets.size());
-
-        for (const auto& asset : assets)
+        for (const auto& asset : engine.getArrangementState().getAssets())
         {
-            if (asset.kind != AssetKind::pianoRollPattern || trackPatternAssetIds.count(asset.assetId) != 0)
+            if (asset.kind != AssetKind::pianoRollPattern || boundAssetIds.count(asset.assetId))
                 continue;
 
-            PatternAssetUpdate update;
-            update.assetId = asset.assetId;
-            update.name = asset.name;
-            update.lengthSeconds = juce::jmax(0.25, asset.clip.getLengthSeconds() * scale);
-            update.notes.reserve(asset.patternNotes.size());
+            std::vector<PatternNote> notes;
+            notes.reserve(asset.patternNotes.size());
+            for (const auto& n : asset.patternNotes)
+                notes.push_back({ juce::jmax(0.0, n.startSeconds * scale),
+                                  juce::jmax(0.01, n.lengthSeconds * scale),
+                                  n.midiNote, n.velocity });
 
-            for (const auto& note : asset.patternNotes)
-            {
-                PatternNote scaledNote;
-                scaledNote.startSeconds = juce::jmax(0.0, note.startSeconds * scale);
-                scaledNote.lengthSeconds = juce::jmax(0.01, note.lengthSeconds * scale);
-                scaledNote.midiNote = note.midiNote;
-                scaledNote.velocity = note.velocity;
-                update.notes.push_back(scaledNote);
-            }
-
-            updates.push_back(std::move(update));
+            updates.push_back({ asset.assetId, asset.name,
+                                juce::jmax(0.25, asset.clip.getLengthSeconds() * scale),
+                                std::move(notes) });
         }
     }
 
-    for (auto& update : updates)
-        engine.updatePatternAsset(update.assetId, update.name, update.lengthSeconds, std::move(update.notes));
+    for (auto& u : updates)
+        engine.updatePatternAsset(u.assetId, u.name, u.lengthSeconds, std::move(u.notes));
 }
 
 double MainComponent::getPatternLengthSeconds(const TrackPatternState& pattern) const
@@ -611,50 +566,33 @@ void MainComponent::handleSavePattern(int assetId, const std::vector<PianoRoll::
 {
     if (pianoNotes.empty()) return;
 
-    if (assetId > 0)
-    {
-        const auto secondsPerBeat = getSecondsPerBeat();
-        std::vector<PatternNote> patternNotes;
-        patternNotes.reserve(pianoNotes.size());
-        double endBeat = 1.0;
-
-        for (const auto& n : pianoNotes)
-        {
-            patternNotes.push_back({ juce::jmax(0.0, n.startBeat * secondsPerBeat),
-                                     juce::jmax(0.01, n.lengthBeats * secondsPerBeat),
-                                     n.midiNote, 0.85f });
-            endBeat = juce::jmax(endBeat, n.startBeat + n.lengthBeats);
-        }
-
-        const auto* asset = engine.getArrangementState().findAsset(assetId);
-        if (asset == nullptr || asset->kind != AssetKind::pianoRollPattern)
-            return;
-
-        const auto lengthSeconds = juce::jmax(0.25, endBeat * secondsPerBeat);
-        {
-            juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
-            engine.updatePatternAsset(assetId, asset->name, lengthSeconds, std::move(patternNotes));
-        }
-        syncStateFromEngine();
-        return;
-    }
-
     const auto secondsPerBeat = getSecondsPerBeat();
     std::vector<PatternNote> patternNotes;
+    patternNotes.reserve(pianoNotes.size());
     double endBeat = 1.0;
-    for (auto& n : pianoNotes)
+
+    for (const auto& n : pianoNotes)
     {
         patternNotes.push_back({ juce::jmax(0.0, n.startBeat * secondsPerBeat),
-                                  juce::jmax(0.01, n.lengthBeats * secondsPerBeat),
-                                  n.midiNote, 0.85f });
+                                 juce::jmax(0.01, n.lengthBeats * secondsPerBeat),
+                                 n.midiNote, 0.85f });
         endBeat = juce::jmax(endBeat, n.startBeat + n.lengthBeats);
     }
 
-    double lengthSeconds = juce::jmax(0.25, endBeat * secondsPerBeat);
-    juce::String name = "Pattern " + juce::String((int) gui->getState().savedPatterns.size() + 1);
-
+    const auto lengthSeconds = juce::jmax(0.25, endBeat * secondsPerBeat);
     juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
-    engine.createPatternAsset(name, lengthSeconds, std::move(patternNotes));
+
+    if (assetId > 0)
+    {
+        const auto* asset = engine.getArrangementState().findAsset(assetId);
+        if (asset == nullptr || asset->kind != AssetKind::pianoRollPattern) return;
+        engine.updatePatternAsset(assetId, asset->name, lengthSeconds, std::move(patternNotes));
+    }
+    else
+    {
+        const auto name = "Pattern " + juce::String((int) gui->getState().savedPatterns.size() + 1);
+        engine.createPatternAsset(name, lengthSeconds, std::move(patternNotes));
+    }
     syncStateFromEngine();
 }
 

@@ -5,6 +5,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 
 class PluginHostManager
 {
@@ -41,7 +42,6 @@ public:
 
     void processTrackEffects(int trackIndex, juce::AudioBuffer<float>& buffer);
     void processMasterEffects(juce::AudioBuffer<float>& buffer);
-    void rescanExternalPlugins();
 
     bool loadPianoRollInstrument(const juce::String& pluginName);
     juce::String getPianoRollInstrumentName() const;
@@ -65,8 +65,11 @@ private:
         int trackIndex = -1;
         int slotIndex = -1;
 
-        auto tie() const noexcept { return std::tie(trackIndex, slotIndex); }
-        bool operator<(const SlotKey& other) const noexcept { return tie() < other.tie(); }
+        bool operator<(const SlotKey& other) const
+        {
+            if (trackIndex != other.trackIndex) return trackIndex < other.trackIndex;
+            return slotIndex < other.slotIndex;
+        }
     };
 
     struct HostedPlugin
@@ -89,8 +92,10 @@ private:
     static juce::StringArray getBuiltInPluginNames(PluginRole role);
     juce::StringArray getAvailablePluginsForRole(PluginRole role) const;
     std::unique_ptr<juce::AudioProcessor> createProcessor(const juce::String& pluginName) const;
-    juce::File findExternalPluginsDirectory() const;
-    static juce::String makeExternalPluginMenuName(const juce::PluginDescription& description);
+    std::optional<HostedPlugin> makeHostedPlugin(const juce::String& pluginName) const;
+    void runPluginOnBuffer(HostedPlugin& hp, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) const;
+    juce::File getExternalPluginsDir() const;
+    static juce::String makeMenuNameForPlugin(const juce::PluginDescription& description);
     void scanExternalPlugins() const;
     HostedPlugin* getHostedTrackPlugin(int trackIndex, int slotIndex);
     const HostedPlugin* getHostedTrackPlugin(int trackIndex, int slotIndex) const;

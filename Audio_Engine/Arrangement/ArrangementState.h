@@ -113,8 +113,11 @@ private:
         int placementId = 0;
         int noteIndex = 0;
 
-        auto tie() const noexcept { return std::tie(placementId, noteIndex); }
-        bool operator<(const ActivePatternNote& other) const noexcept { return tie() < other.tie(); }
+        bool operator<(const ActivePatternNote& other) const
+        {
+            if (placementId != other.placementId) return placementId < other.placementId;
+            return noteIndex < other.noteIndex;
+        }
     };
 
     void renderPatternAsset(const SourceAsset& asset,

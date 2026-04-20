@@ -3,54 +3,16 @@
 
 namespace
 {
-    constexpr auto panelColour     = juce::uint32(0xff2b3f92);
-    constexpr auto masterColour    = juce::uint32(0xff31489f);
-    constexpr auto edgeColour      = juce::uint32(0xff9db7ff);
-    constexpr auto pillOffColour   = juce::uint32(0xff2f437e);
-    constexpr auto muteColour      = juce::uint32(0xff3a7afe);
-    constexpr auto armColour       = juce::uint32(0xffc2485d);
-    constexpr auto fxColour        = juce::uint32(0xff7b3fa0);
-    constexpr auto inputColour     = juce::uint32(0xff1f7a7a);
-
-    juce::File findResourcesDir()
-    {
-        auto dir = juce::File::getSpecialLocation (juce::File::currentExecutableFile).getParentDirectory();
-        for (int i = 0; i < 4; ++i)
-        {
-            if (dir.getChildFile ("Resources").isDirectory())
-                return dir.getChildFile ("Resources");
-            dir = dir.getParentDirectory();
-        }
-
-        return dir.getChildFile ("Resources");
-    }
-
-    juce::Image loadSpriteImage (const juce::String& fileName)
-    {
-        return juce::ImageFileFormat::loadFrom (findResourcesDir().getChildFile ("ui")
-                                                                  .getChildFile ("sprites")
-                                                                  .getChildFile (fileName));
-    }
-
-    juce::Image loadBodySpiceImage()
-    {
-        return loadSpriteImage ("bodySpice.png");
-    }
-
     juce::String formatDbValue(float level)
     {
         const auto db = juce::jmap(level, 0.0f, 1.0f, -60.0f, 6.0f);
-        if (db <= -59.5f)
-            return "-inf dB";
-
+        if (db <= -59.5f) return "-inf dB";
         return juce::String(db, db < 0.0f ? 1 : 0) + " dB";
     }
 
     juce::String formatPanValue(float pan)
     {
-        if (std::abs(pan) < 0.05f)
-            return "C";
-
+        if (std::abs(pan) < 0.05f) return "C";
         const auto amount = juce::roundToInt(std::abs(pan) * 100.0f);
         return (pan < 0.0f ? "L" : "R") + juce::String(amount);
     }
@@ -58,10 +20,10 @@ namespace
 
 TrackListComponent::TrackListComponent(DAWState& stateIn, ThemeData& themeIn) : state(stateIn), theme(themeIn)
 {
-    mutedSprite = loadSpriteImage ("muteTriggered.png");
-    unmutedSprite = loadSpriteImage ("unmuted.png");
-    armSprite = loadSpriteImage ("arm.png");
-    bodySpiceImage = loadBodySpiceImage();
+    mutedSprite    = ThemeData::loadSpriteImage ("muteTriggered.png");
+    unmutedSprite  = ThemeData::loadSpriteImage ("unmuted.png");
+    armSprite      = ThemeData::loadSpriteImage ("arm.png");
+    bodySpiceImage = ThemeData::loadSpriteImage ("bodySpice.png");
 }
 
 void TrackListComponent::setBodySpiceImage (juce::Image newImage)
@@ -69,8 +31,6 @@ void TrackListComponent::setBodySpiceImage (juce::Image newImage)
     bodySpiceImage = std::move (newImage);
     repaint();
 }
-
-// geometry
 
 int TrackListComponent::getVisualRowCount() const { return state.trackCount + 1; }
 bool TrackListComponent::isMasterRow(int rowIndex) const { return rowIndex == 0; }
@@ -109,14 +69,6 @@ int TrackListComponent::getMaxScroll() const
 {
     return juce::jmax(0, getContentHeight() - getHeight());
 }
-
-// All layout helpers use the same inner bounds as drawing:
-// card = getRowBounds(row).reduced(0, 2), inner = card.reduced(10, 6)
-// Row 1: header 20px
-// Gap: 4px
-// Row 2: indicators 20px
-// Gap: 4px
-// Row 3: controls 20px
 
 static juce::Rectangle<float> getInner(juce::Rectangle<float> rowBounds)
 {
@@ -227,11 +179,9 @@ juce::String TrackListComponent::getTooltipForPosition(juce::Point<float> positi
     return {};
 }
 
-// drawing
-
 void TrackListComponent::paint(juce::Graphics& g)
 {
-    g.fillAll(theme.colour("tracklist.background", juce::Colour(0xff0f141e)));
+    g.fillAll(theme.colour("tracklist.background"));
     if (bodySpiceImage.isValid())
     {
         const int imageYOffset = juce::roundToInt(getHeight() * 0.28f);
@@ -259,12 +209,12 @@ void TrackListComponent::paint(juce::Graphics& g)
     auto addBounds = getAddTrackButtonBounds();
     if (addBounds.getY() < static_cast<float>(getHeight()))
     {
-        g.setColour(theme.colour("tracklist.add-track.background", juce::Colour(pillOffColour).withAlpha(0.6f)));
+        g.setColour(theme.colour("tracklist.add-track.background"));
         g.fillRoundedRectangle(addBounds, 10.0f);
-        g.setColour(theme.colour("tracklist.add-track.border", juce::Colours::white.withAlpha(0.55f)));
+        g.setColour(theme.colour("tracklist.add-track.border"));
         g.drawRoundedRectangle(addBounds, 10.0f, 1.0f);
         g.setFont(juce::Font(12.0f, juce::Font::bold));
-        g.setColour(theme.colour("tracklist.add-track.text", juce::Colours::white.withAlpha(0.7f)));
+        g.setColour(theme.colour("tracklist.add-track.text"));
         g.drawText("Add Track +", addBounds.toNearestInt(), juce::Justification::centred, false);
     }
 }
@@ -281,28 +231,25 @@ void TrackListComponent::drawStrip(juce::Graphics& g, int rowIndex)
 
     auto card = getRowBounds(rowIndex).reduced(0.0f, 2.0f);
 
-    // Background
-    auto bg = theme.colour(master ? "tracklist.master-panel" : "tracklist.panel",
-                           juce::Colour(master ? masterColour : panelColour));
+    auto bg = theme.colour(master ? "tracklist.master-panel" : "tracklist.panel");
     if (selected) bg = bg.brighter(0.08f);
     if (!audible) bg = bg.darker(0.2f).withMultipliedAlpha(0.9f);
     g.setColour(bg);
     g.fillRoundedRectangle(card, 14.0f);
 
-    auto edgeCol = selected ? theme.colour("tracklist.edge.selected", juce::Colour(0xffd7e3ff).withAlpha(0.72f))
-                            : theme.colour("tracklist.edge.default", juce::Colour(edgeColour).withAlpha(0.24f));
+    auto edgeCol = selected ? theme.colour("tracklist.edge.selected")
+                            : theme.colour("tracklist.edge.default");
     g.setColour(edgeCol);
     g.drawRoundedRectangle(card.reduced(1.0f), 14.0f, selected ? 2.0f : 1.2f);
 
     auto inner = getInner(getRowBounds(rowIndex));
 
-    // header row
     auto headerRow = inner.removeFromTop(20.0f);
     if (editingTrackIndex != trackIdx || master)
     {
         const auto title = master ? juce::String("MASTER") : state.getTrackName(trackIdx);
-        g.setColour(audible ? theme.colour("tracklist.text", juce::Colours::white.withAlpha(0.88f))
-                            : theme.colour("tracklist.text-muted", juce::Colours::white.withAlpha(0.5f)));
+        g.setColour(audible ? theme.colour("tracklist.text")
+                            : theme.colour("tracklist.text-muted"));
         g.setFont(juce::Font(13.0f, juce::Font::bold));
         g.drawText(title, headerRow.withTrimmedRight(master ? 0.0f : 72.0f).toNearestInt(),
                    juce::Justification::centredLeft, false);
@@ -310,18 +257,16 @@ void TrackListComponent::drawStrip(juce::Graphics& g, int rowIndex)
 
     if (!master)
     {
-        // Remove button
         auto rem = getRemoveButtonBounds(trackIdx);
-        g.setColour(theme.colour("tracklist.remove-button.background", juce::Colour(0xff23357f)));
+        g.setColour(theme.colour("tracklist.remove-button.background"));
         g.fillRoundedRectangle(rem, 6.0f);
-        g.setColour(theme.colour("tracklist.remove-button.text", juce::Colours::white.withAlpha(0.65f)));
+        g.setColour(theme.colour("tracklist.remove-button.text"));
         g.setFont(juce::Font(14.0f, juce::Font::bold));
         g.drawText("-", rem.toNearestInt(), juce::Justification::centred, false);
     }
 
     inner.removeFromTop(4.0f);
 
-    // indicator pills (mute, arm, fx, input)
     inner.removeFromTop(20.0f); // space is used by getIndicatorBounds
 
     if (master)
@@ -332,20 +277,20 @@ void TrackListComponent::drawStrip(juce::Graphics& g, int rowIndex)
 
         const char* labels[] = { "Mute", "FX" };
         const bool states[]  = { state.masterMixerState.muted, hasMasterFx };
-        const juce::Colour colours[] = { theme.colour("tracklist.mute", juce::Colour(muteColour)),
-                                         theme.colour("tracklist.fx", juce::Colour(fxColour)) };
+        const juce::Colour colours[] = { theme.colour("tracklist.mute"),
+                                         theme.colour("tracklist.fx") };
 
         auto firstBounds = getIndicatorBounds(rowIndex, 0).withHeight(18.0f);
         auto lastBounds = getIndicatorBounds(rowIndex, 1).withHeight(18.0f);
         auto groupBounds = firstBounds.getUnion(lastBounds).withCentre({ firstBounds.getUnion(lastBounds).getCentreX(), firstBounds.getCentreY() });
 
-        g.setColour(theme.colour("tracklist.pill-off", juce::Colour(pillOffColour)));
+        g.setColour(theme.colour("tracklist.pill-off"));
         g.fillRoundedRectangle(groupBounds, groupBounds.getHeight() * 0.5f);
-        g.setColour(theme.colour("tracklist.pill-border-inactive", juce::Colours::white.withAlpha(0.5f)));
+        g.setColour(theme.colour("tracklist.pill-border-inactive"));
         g.drawRoundedRectangle(groupBounds, groupBounds.getHeight() * 0.5f, 1.0f);
 
         auto dividerX = getIndicatorBounds(rowIndex, 0).getRight();
-        g.setColour(theme.colour("tracklist.pill-divider", juce::Colours::white.withAlpha(0.24f)));
+        g.setColour(theme.colour("tracklist.pill-divider"));
         g.drawVerticalLine(juce::roundToInt(dividerX), groupBounds.getY() + 2.0f, groupBounds.getBottom() - 2.0f);
 
         for (int i = 0; i < 2; ++i)
@@ -365,21 +310,21 @@ void TrackListComponent::drawStrip(juce::Graphics& g, int rowIndex)
 
         const char* labels[] = { "Mute", "Arm", "FX", "IN" };
         const bool states[]  = { ts.muted, ts.armed, hasTrackFx, hasInput };
-        const juce::Colour colours[] = { theme.colour("tracklist.mute", juce::Colour(muteColour)),
-                                         theme.colour("tracklist.arm", juce::Colour(armColour)),
-                                         theme.colour("tracklist.fx", juce::Colour(fxColour)),
-                                         theme.colour("tracklist.input", juce::Colour(inputColour)) };
+        const juce::Colour colours[] = { theme.colour("tracklist.mute"),
+                                         theme.colour("tracklist.arm"),
+                                         theme.colour("tracklist.fx"),
+                                         theme.colour("tracklist.input") };
 
         auto firstBounds = getIndicatorBounds(rowIndex, 0).withHeight(18.0f);
         auto lastBounds = getIndicatorBounds(rowIndex, 3).withHeight(18.0f);
         auto groupBounds = firstBounds.getUnion(lastBounds).withCentre({ firstBounds.getUnion(lastBounds).getCentreX(), firstBounds.getCentreY() });
 
-        g.setColour(theme.colour("tracklist.pill-off", juce::Colour(pillOffColour)));
+        g.setColour(theme.colour("tracklist.pill-off"));
         g.fillRoundedRectangle(groupBounds, groupBounds.getHeight() * 0.5f);
-        g.setColour(theme.colour("tracklist.pill-border-inactive", juce::Colours::white.withAlpha(0.5f)));
+        g.setColour(theme.colour("tracklist.pill-border-inactive"));
         g.drawRoundedRectangle(groupBounds, groupBounds.getHeight() * 0.5f, 1.0f);
 
-        g.setColour(theme.colour("tracklist.pill-divider", juce::Colours::white.withAlpha(0.24f)));
+        g.setColour(theme.colour("tracklist.pill-divider"));
         for (int i = 0; i < 3; ++i)
         {
             const auto dividerX = getIndicatorBounds(rowIndex, i).getRight();
@@ -401,18 +346,16 @@ void TrackListComponent::drawStrip(juce::Graphics& g, int rowIndex)
 
     inner.removeFromTop(4.0f);
 
-    // fader, pan knob, routing button
     drawFader(g, getFaderBounds(rowIndex), level, audible, rowIndex);
     drawPanKnob(g, getPanKnobBounds(rowIndex), pan, audible, rowIndex);
 
-    // Routing button
     auto routeBtn = getRoutingButtonBounds(rowIndex);
-    g.setColour(theme.colour("tracklist.routing.background", juce::Colour(pillOffColour)));
+    g.setColour(theme.colour("tracklist.routing.background"));
     g.fillRoundedRectangle(routeBtn, 6.0f);
-    g.setColour(theme.colour("tracklist.routing.border", juce::Colours::white.withAlpha(0.6f)));
+    g.setColour(theme.colour("tracklist.routing.border"));
     g.drawRoundedRectangle(routeBtn, 6.0f, 1.0f);
     g.setFont(juce::Font(9.0f, juce::Font::bold));
-    g.setColour(theme.colour("tracklist.routing.text", juce::Colours::white.withAlpha(0.7f)));
+    g.setColour(theme.colour("tracklist.routing.text"));
 
     if (!master)
     {
@@ -480,52 +423,55 @@ void TrackListComponent::drawIndicatorPill(juce::Graphics& g, juce::Rectangle<fl
         return;
     }
 
-    g.setColour(active ? theme.colour("tracklist.pill-text-active", juce::Colours::white)
-                       : theme.colour("tracklist.pill-text-inactive", juce::Colours::white.withAlpha(0.7f)));
+    g.setColour(active ? theme.colour("tracklist.pill-text-active")
+                       : theme.colour("tracklist.pill-text-inactive"));
     g.setFont(juce::Font(8.5f, juce::Font::bold));
     g.drawText(label, pillBounds.toNearestInt(), juce::Justification::centred, false);
+}
+
+void TrackListComponent::drawReadout(juce::Graphics& g, juce::Rectangle<float> bounds,
+                                     const juce::String& text, const juce::String& tokenPrefix) const
+{
+    if (bounds.getX() < 4.0f)
+        bounds.setX(4.0f);
+    if (bounds.getRight() > static_cast<float>(getWidth() - 4))
+        bounds.setX(static_cast<float>(getWidth()) - 4.0f - bounds.getWidth());
+
+    g.setColour(theme.colour(tokenPrefix + ".background"));
+    g.fillRoundedRectangle(bounds, 6.0f);
+    g.setColour(theme.colour(tokenPrefix + ".outline"));
+    g.drawRoundedRectangle(bounds, 6.0f, 1.0f);
+    g.setColour(theme.colour(tokenPrefix + ".text"));
+    g.setFont(juce::Font(9.0f, juce::Font::bold));
+    g.drawText(text, bounds.toNearestInt(), juce::Justification::centred, false);
 }
 
 void TrackListComponent::drawFader(juce::Graphics& g, juce::Rectangle<float> bounds, float level, bool active, int rowIndex) const
 {
     auto track = bounds.withHeight(6.0f).withCentre({ bounds.getCentreX(), bounds.getCentreY() });
-    g.setColour(active ? theme.colour("tracklist.fader.track-active", juce::Colours::white.withAlpha(0.12f))
-                       : theme.colour("tracklist.fader.track-inactive", juce::Colours::white.withAlpha(0.06f)));
+    g.setColour(active ? theme.colour("tracklist.fader.track-active")
+                       : theme.colour("tracklist.fader.track-inactive"));
     g.fillRoundedRectangle(track, 3.0f);
-    g.setColour(theme.colour("tracklist.fader.outline", juce::Colours::white.withAlpha(0.75f)));
+    g.setColour(theme.colour("tracklist.fader.outline"));
     g.drawRoundedRectangle(track, 3.0f, 1.0f);
 
-    g.setColour(active ? theme.colour("tracklist.fader.fill-active", juce::Colour(0xff3a7afe).withAlpha(0.7f))
-                       : theme.colour("tracklist.fader.fill-inactive", juce::Colours::white.withAlpha(0.15f)));
+    g.setColour(active ? theme.colour("tracklist.fader.fill-active")
+                       : theme.colour("tracklist.fader.fill-inactive"));
     g.fillRoundedRectangle(track.withWidth(track.getWidth() * level), 3.0f);
 
     float tx = track.getX() + track.getWidth() * level;
     auto handle = juce::Rectangle<float>(0, 0, 10, bounds.getHeight())
                       .withCentre({ tx, bounds.getCentreY() });
-    g.setColour(active ? theme.colour("tracklist.fader.handle-active", juce::Colours::white.withAlpha(0.85f))
-                       : theme.colour("tracklist.fader.handle-inactive", juce::Colours::white.withAlpha(0.35f)));
+    g.setColour(active ? theme.colour("tracklist.fader.handle-active")
+                       : theme.colour("tracklist.fader.handle-inactive"));
     g.fillRoundedRectangle(handle, 4.0f);
-    g.setColour(theme.colour("tracklist.fader.outline", juce::Colours::white.withAlpha(0.75f)));
+    g.setColour(theme.colour("tracklist.fader.outline"));
     g.drawRoundedRectangle(handle, 4.0f, 1.0f);
 
     if (draggingFaderRow == rowIndex)
-    {
-        auto readoutBounds = juce::Rectangle<float>(0.0f, 0.0f, 56.0f, 18.0f)
-                                 .withCentre({ handle.getCentreX(), handle.getY() - 12.0f });
-
-        if (readoutBounds.getX() < 4.0f)
-            readoutBounds.setX(4.0f);
-        if (readoutBounds.getRight() > static_cast<float>(getWidth() - 4))
-            readoutBounds.setX(static_cast<float>(getWidth()) - 4.0f - readoutBounds.getWidth());
-
-        g.setColour(theme.colour("tracklist.fader-readout.background", juce::Colour(0xff101729).withAlpha(0.96f)));
-        g.fillRoundedRectangle(readoutBounds, 6.0f);
-        g.setColour(theme.colour("tracklist.fader-readout.outline", juce::Colours::white.withAlpha(0.65f)));
-        g.drawRoundedRectangle(readoutBounds, 6.0f, 1.0f);
-        g.setColour(theme.colour("tracklist.fader-readout.text", juce::Colours::white.withAlpha(0.92f)));
-        g.setFont(juce::Font(9.0f, juce::Font::bold));
-        g.drawText(formatDbValue(level), readoutBounds.toNearestInt(), juce::Justification::centred, false);
-    }
+        drawReadout(g, juce::Rectangle<float>(0.0f, 0.0f, 56.0f, 18.0f)
+                            .withCentre({ handle.getCentreX(), handle.getY() - 12.0f }),
+                    formatDbValue(level), "tracklist.fader-readout");
 }
 
 void TrackListComponent::drawPanKnob(juce::Graphics& g, juce::Rectangle<float> bounds, float pan, bool active, int rowIndex) const
@@ -534,8 +480,8 @@ void TrackListComponent::drawPanKnob(juce::Graphics& g, juce::Rectangle<float> b
     const float radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.44f;
 
     auto knobBounds = bounds.reduced(1.0f);
-    g.setColour(active ? theme.colour("tracklist.pan.ring-active", juce::Colour(0xffe68000))
-                       : theme.colour("tracklist.pan.ring-inactive", juce::Colour(0xffe68000)));
+    g.setColour(active ? theme.colour("tracklist.pan.ring-active")
+                       : theme.colour("tracklist.pan.ring-inactive"));
     g.fillEllipse(knobBounds);
     g.setColour(juce::Colours::white.withAlpha(0.9f));
     g.drawEllipse(knobBounds, 1.2f);
@@ -544,31 +490,15 @@ void TrackListComponent::drawPanKnob(juce::Graphics& g, juce::Rectangle<float> b
                       + (pan + 1.0f) * 0.5f * juce::MathConstants<float>::pi * 1.5f;
     const float endX = centre.x + std::cos(angle) * radius;
     const float endY = centre.y + std::sin(angle) * radius;
-    g.setColour(active ? theme.colour("tracklist.pan.indicator-active", juce::Colours::white)
-                       : theme.colour("tracklist.pan.indicator-inactive", juce::Colours::white));
+    g.setColour(active ? theme.colour("tracklist.pan.indicator-active")
+                       : theme.colour("tracklist.pan.indicator-inactive"));
     g.drawLine(centre.x, centre.y, endX, endY, 2.0f);
 
     if (draggingPanRow == rowIndex)
-    {
-        auto readoutBounds = juce::Rectangle<float>(0.0f, 0.0f, 42.0f, 18.0f)
-                                 .withCentre({ bounds.getCentreX(), bounds.getY() - 12.0f });
-
-        if (readoutBounds.getX() < 4.0f)
-            readoutBounds.setX(4.0f);
-        if (readoutBounds.getRight() > static_cast<float>(getWidth() - 4))
-            readoutBounds.setX(static_cast<float>(getWidth()) - 4.0f - readoutBounds.getWidth());
-
-        g.setColour(theme.colour("tracklist.pan-readout.background", juce::Colour(0xff101729).withAlpha(0.96f)));
-        g.fillRoundedRectangle(readoutBounds, 6.0f);
-        g.setColour(theme.colour("tracklist.pan-readout.outline", juce::Colours::white.withAlpha(0.65f)));
-        g.drawRoundedRectangle(readoutBounds, 6.0f, 1.0f);
-        g.setColour(theme.colour("tracklist.pan-readout.text", juce::Colours::white.withAlpha(0.92f)));
-        g.setFont(juce::Font(9.0f, juce::Font::bold));
-        g.drawText(formatPanValue(pan), readoutBounds.toNearestInt(), juce::Justification::centred, false);
-    }
+        drawReadout(g, juce::Rectangle<float>(0.0f, 0.0f, 42.0f, 18.0f)
+                            .withCentre({ bounds.getCentreX(), bounds.getY() - 12.0f }),
+                    formatPanValue(pan), "tracklist.pan-readout");
 }
-
-// mouse handling
 
 void TrackListComponent::mouseDown(const juce::MouseEvent& e)
 {
@@ -584,7 +514,6 @@ void TrackListComponent::mouseDown(const juce::MouseEvent& e)
     const bool master = isMasterRow(rowIndex);
     const int trackIdx = getTrackIndexForRow(rowIndex);
 
-    // Right-click context menu (tracks only)
     if (!master && e.mods.isPopupMenu())
     {
         state.selectTrack(trackIdx);
@@ -593,7 +522,6 @@ void TrackListComponent::mouseDown(const juce::MouseEvent& e)
         return;
     }
 
-    // Indicator button clicks — check these FIRST before selecting
     const int numIndicators = master ? 2 : 4;
     for (int i = 0; i < numIndicators; ++i)
     {
@@ -616,7 +544,6 @@ void TrackListComponent::mouseDown(const juce::MouseEvent& e)
         }
     }
 
-    // Fader drag
     if (getFaderBounds(rowIndex).contains(e.position))
     {
         draggingFaderRow = rowIndex;
@@ -628,7 +555,6 @@ void TrackListComponent::mouseDown(const juce::MouseEvent& e)
         return;
     }
 
-    // Pan knob
     if (getPanKnobBounds(rowIndex).contains(e.position))
     {
         draggingPanRow = rowIndex;
@@ -640,21 +566,18 @@ void TrackListComponent::mouseDown(const juce::MouseEvent& e)
         return;
     }
 
-    // Routing button
     if (getRoutingButtonBounds(rowIndex).contains(e.position))
     {
         showRoutingMenu(rowIndex);
         return;
     }
 
-    // Remove button
     if (!master && getRemoveButtonBounds(trackIdx).contains(e.position))
     {
         if (onRemoveTrackRequested) onRemoveTrackRequested(trackIdx);
         return;
     }
 
-    // Default: select track
     if (master)
         state.showMasterMixerFocus();
     else
@@ -726,8 +649,6 @@ void TrackListComponent::mouseWheelMove(const juce::MouseEvent&, const juce::Mou
         repaint();
 }
 
-// menus
-
 void TrackListComponent::promptRenameTrack(int trackIndex)
 {
     startInlineRename(trackIndex);
@@ -742,9 +663,9 @@ void TrackListComponent::startInlineRename(int trackIndex)
     inlineEditor->setText(state.getTrackName(trackIndex), false);
     inlineEditor->selectAll();
     inlineEditor->setFont(juce::Font(13.0f, juce::Font::bold));
-    inlineEditor->setColour(juce::TextEditor::backgroundColourId, theme.colour("tracklist.inline-editor.background", juce::Colour(0xff1b2744)));
-    inlineEditor->setColour(juce::TextEditor::textColourId, theme.colour("tracklist.inline-editor.text", juce::Colours::white));
-    inlineEditor->setColour(juce::TextEditor::outlineColourId, theme.colour("tracklist.inline-editor.outline", juce::Colour(0xff3a7afe)));
+    inlineEditor->setColour(juce::TextEditor::backgroundColourId, theme.colour("tracklist.inline-editor.background"));
+    inlineEditor->setColour(juce::TextEditor::textColourId, theme.colour("tracklist.inline-editor.text"));
+    inlineEditor->setColour(juce::TextEditor::outlineColourId, theme.colour("tracklist.inline-editor.outline"));
 
     auto inner = getInner(getRowBounds(trackIndex + 1));
     auto header = inner.removeFromTop(20.0f).withTrimmedRight(72.0f);

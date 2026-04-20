@@ -5,10 +5,10 @@
 
 namespace
 {
-    constexpr auto settingsBackgroundColour = 0xff18181b;
-    constexpr auto settingsTextColour = 0xffffffff;
+    const juce::uint32 settingsBackgroundColour = 0xff18181b;
+    const juce::uint32 settingsTextColour = 0xffffffff;
 
-    class SettingsComboBoxLookAndFeel final : public juce::LookAndFeel_V4
+    class SettingsComboBoxLookAndFeel : public juce::LookAndFeel_V4
     {
     public:
         void setAccentColour (juce::Colour newAccentColour)
@@ -129,14 +129,29 @@ public:
         addAndMakeVisible (sampleRateBox);
         addAndMakeVisible (bufferSizeBox);
 
-        for (auto* box : { &outputDeviceBox, &inputDeviceBox, &sampleRateBox, &bufferSizeBox })
-        {
-            box->setLookAndFeel (&comboBoxLookAndFeel);
-            box->setColour (juce::ComboBox::textColourId, juce::Colours::white);
-            box->setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
-            box->setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xffe68000));
-            box->setColour (juce::ComboBox::arrowColourId, juce::Colours::white);
-        }
+        outputDeviceBox.setLookAndFeel (&comboBoxLookAndFeel);
+        outputDeviceBox.setColour (juce::ComboBox::textColourId, juce::Colours::white);
+        outputDeviceBox.setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
+        outputDeviceBox.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xffe68000));
+        outputDeviceBox.setColour (juce::ComboBox::arrowColourId, juce::Colours::white);
+
+        inputDeviceBox.setLookAndFeel (&comboBoxLookAndFeel);
+        inputDeviceBox.setColour (juce::ComboBox::textColourId, juce::Colours::white);
+        inputDeviceBox.setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
+        inputDeviceBox.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xffe68000));
+        inputDeviceBox.setColour (juce::ComboBox::arrowColourId, juce::Colours::white);
+
+        sampleRateBox.setLookAndFeel (&comboBoxLookAndFeel);
+        sampleRateBox.setColour (juce::ComboBox::textColourId, juce::Colours::white);
+        sampleRateBox.setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
+        sampleRateBox.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xffe68000));
+        sampleRateBox.setColour (juce::ComboBox::arrowColourId, juce::Colours::white);
+
+        bufferSizeBox.setLookAndFeel (&comboBoxLookAndFeel);
+        bufferSizeBox.setColour (juce::ComboBox::textColourId, juce::Colours::white);
+        bufferSizeBox.setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
+        bufferSizeBox.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xffe68000));
+        bufferSizeBox.setColour (juce::ComboBox::arrowColourId, juce::Colours::white);
 
         outputDeviceBox.onChange = [this]
         {
@@ -156,26 +171,22 @@ public:
 
         sampleRateBox.onChange = [this]
         {
-            auto rate = sampleRateBox.getText().getDoubleValue();
-            if (rate > 0)
-            {
-                juce::AudioDeviceManager::AudioDeviceSetup setup;
-                deviceManager.getAudioDeviceSetup (setup);
-                setup.sampleRate = rate;
-                deviceManager.setAudioDeviceSetup (setup, true);
-            }
+            double rate = sampleRateBox.getText().getDoubleValue();
+            if (rate <= 0) return;
+            juce::AudioDeviceManager::AudioDeviceSetup setup;
+            deviceManager.getAudioDeviceSetup (setup);
+            setup.sampleRate = rate;
+            deviceManager.setAudioDeviceSetup (setup, true);
         };
 
         bufferSizeBox.onChange = [this]
         {
-            auto size = bufferSizeBox.getText().getIntValue();
-            if (size > 0)
-            {
-                juce::AudioDeviceManager::AudioDeviceSetup setup;
-                deviceManager.getAudioDeviceSetup (setup);
-                setup.bufferSize = size;
-                deviceManager.setAudioDeviceSetup (setup, true);
-            }
+            int size = bufferSizeBox.getText().getIntValue();
+            if (size <= 0) return;
+            juce::AudioDeviceManager::AudioDeviceSetup setup;
+            deviceManager.getAudioDeviceSetup (setup);
+            setup.bufferSize = size;
+            deviceManager.setAudioDeviceSetup (setup, true);
         };
 
         deviceManager.addChangeListener (this);
@@ -186,51 +197,62 @@ public:
     void setAccentColour (juce::Colour newAccentColour)
     {
         comboBoxLookAndFeel.setAccentColour (newAccentColour);
-        for (auto* box : { &outputDeviceBox, &inputDeviceBox, &sampleRateBox, &bufferSizeBox })
-            box->setColour (juce::ComboBox::backgroundColourId, newAccentColour);
-
+        outputDeviceBox.setColour (juce::ComboBox::backgroundColourId, newAccentColour);
+        inputDeviceBox.setColour (juce::ComboBox::backgroundColourId, newAccentColour);
+        sampleRateBox.setColour (juce::ComboBox::backgroundColourId, newAccentColour);
+        bufferSizeBox.setColour (juce::ComboBox::backgroundColourId, newAccentColour);
         repaint();
     }
 
     ~SettingsContent() override
     {
-        for (auto* box : { &outputDeviceBox, &inputDeviceBox, &sampleRateBox, &bufferSizeBox })
-            box->setLookAndFeel (nullptr);
-
+        outputDeviceBox.setLookAndFeel (nullptr);
+        inputDeviceBox.setLookAndFeel (nullptr);
+        sampleRateBox.setLookAndFeel (nullptr);
+        bufferSizeBox.setLookAndFeel (nullptr);
         deviceManager.removeChangeListener (this);
     }
 
     void paint (juce::Graphics& g) override
     {
         g.fillAll (juce::Colour (settingsBackgroundColour));
-
         g.setColour (juce::Colour (settingsTextColour));
         g.setFont (juce::Font (16.0f, juce::Font::bold));
 
         auto area = getLocalBounds().reduced (20, 15);
+
         g.drawText ("Output Device", area.removeFromTop (22), juce::Justification::centredLeft);
-        area.removeFromTop (30 + 10);
+        area.removeFromTop (38);
+
         g.drawText ("Input Device", area.removeFromTop (22), juce::Justification::centredLeft);
-        area.removeFromTop (30 + 10);
+        area.removeFromTop (38);
+
         g.drawText ("Sample Rate", area.removeFromTop (22), juce::Justification::centredLeft);
-        area.removeFromTop (30 + 10);
+        area.removeFromTop (38);
+
         g.drawText ("Buffer Size", area.removeFromTop (22), juce::Justification::centredLeft);
+        area.removeFromTop (38);
     }
 
     void resized() override
     {
         auto area = getLocalBounds().reduced (20, 15);
+
         area.removeFromTop (22);
         outputDeviceBox.setBounds (area.removeFromTop (28));
         area.removeFromTop (10);
+
         area.removeFromTop (22);
         inputDeviceBox.setBounds (area.removeFromTop (28));
         area.removeFromTop (10);
+
         area.removeFromTop (22);
         sampleRateBox.setBounds (area.removeFromTop (28));
         area.removeFromTop (10);
+
         area.removeFromTop (22);
         bufferSizeBox.setBounds (area.removeFromTop (28));
+        area.removeFromTop (10);
     }
 
 private:

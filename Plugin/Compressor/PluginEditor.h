@@ -1,33 +1,20 @@
-/*
-  ==============================================================================
-
-    This file contains the basic framework code for a JUCE plugin editor.
-
-  ==============================================================================
-*/
-
 #pragma once
 
-#include <JuceHeader.h>
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_gui_basics/juce_gui_basics.h>
 #include "PluginProcessor.h"
 
-//==============================================================================
-/**
-*/
-class NewProjectAudioProcessorEditor  : public juce::AudioProcessorEditor
+class CompressorAudioProcessorEditor : public juce::AudioProcessorEditor
 {
 public:
-    NewProjectAudioProcessorEditor (NewProjectAudioProcessor&, juce::AudioProcessorValueTreeState& vts);
-    ~NewProjectAudioProcessorEditor() override;
+    CompressorAudioProcessorEditor(CompressorAudioProcessor&, juce::AudioProcessorValueTreeState& vts);
+    ~CompressorAudioProcessorEditor() override;
 
-    //==============================================================================
-    void paint (juce::Graphics&) override;
+    void paint(juce::Graphics&) override;
     void resized() override;
 
 private:
-    // This reference is provided as a quick way for your editor to
-    // access the processor object that created it.
-    NewProjectAudioProcessor& audioProcessor;
+    CompressorAudioProcessor& audioProcessor;
     juce::Slider thresholdSlider;
     juce::Slider ratioSlider;
     juce::Slider gainSlider;
@@ -44,5 +31,5 @@ private:
     juce::Label attackLabel;
     juce::Label releaseLabel;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NewProjectAudioProcessorEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CompressorAudioProcessorEditor)
 };

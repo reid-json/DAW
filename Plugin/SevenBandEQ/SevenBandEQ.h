@@ -1,7 +1,8 @@
 #pragma once
+#include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_core/juce_core.h>
 #include <vector>
 #include <array>
-#include "JuceHeader.h"
 
 class SevenBandEQ
 {
@@ -19,8 +20,8 @@ public:
 private:
     struct Band
     {
-        float gain = 0.0f;    // dB
-        float freq = 1000.0f; // Hz
+        float gain = 0.0f;
+        float freq = 1000.0f;
         float Q = 1.0f;
         bool bypass = false;
     };
@@ -30,8 +31,8 @@ private:
         float a0 = 1.0f, a1 = 0.0f, a2 = 0.0f;
         float b1 = 0.0f, b2 = 0.0f;
 
-        float x1 = 0.0f, x2 = 0.0f; // previous input samples
-        float y1 = 0.0f, y2 = 0.0f; // previous output samples
+        float x1 = 0.0f, x2 = 0.0f;
+        float y1 = 0.0f, y2 = 0.0f;
 
         void reset()
         {
@@ -54,8 +55,8 @@ private:
 
     void updateBandCoefficients(int bandIndex);
 
-    std::vector<Band> bands;                     // 7 bands
-    std::vector<std::vector<Biquad>> filters;    // filters[channel][band]
+    std::vector<Band> bands;
+    std::vector<std::vector<Biquad>> filters;
     float samplingRate = 44100.0f;
     int numChannels = 0;
 };

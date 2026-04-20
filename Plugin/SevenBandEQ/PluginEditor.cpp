@@ -1,7 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-//==============================================================================
 SevenBandEQAudioProcessorEditor::SevenBandEQAudioProcessorEditor(SevenBandEQAudioProcessor& p)
     : AudioProcessorEditor(&p), audioProcessor(p)
 {
@@ -23,7 +22,6 @@ SevenBandEQAudioProcessorEditor::SevenBandEQAudioProcessorEditor(SevenBandEQAudi
 
 SevenBandEQAudioProcessorEditor::~SevenBandEQAudioProcessorEditor() = default;
 
-//==============================================================================
 void SevenBandEQAudioProcessorEditor::paint(juce::Graphics& g)
 {
     g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));

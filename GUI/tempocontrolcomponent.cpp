@@ -4,7 +4,7 @@
 
 namespace
 {
-class MixerStyleSliderLookAndFeel final : public juce::LookAndFeel_V4
+class MixerStyleSliderLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     explicit MixerStyleSliderLookAndFeel(ThemeData& themeIn) : theme(themeIn) {}

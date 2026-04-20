@@ -2,35 +2,12 @@
 #include <cmath>
 #include "recentclipscomponent.h"
 
-namespace
-{
-    constexpr int mixerFooterScrollPadding = 76;
-
-    juce::File findResourcesDir()
-    {
-        auto dir = juce::File::getSpecialLocation (juce::File::currentExecutableFile).getParentDirectory();
-        for (int i = 0; i < 4; ++i)
-        {
-            if (dir.getChildFile ("Resources").isDirectory())
-                return dir.getChildFile ("Resources");
-            dir = dir.getParentDirectory();
-        }
-
-        return dir.getChildFile ("Resources");
-    }
-
-    juce::Image loadBodySpiceImage()
-    {
-        return juce::ImageFileFormat::loadFrom (findResourcesDir().getChildFile ("ui")
-                                                                  .getChildFile ("sprites")
-                                                                  .getChildFile ("bodySpice.png"));
-    }
-}
+namespace { constexpr int mixerFooterScrollPadding = 76; }
 
 ArrangementComponent::ArrangementComponent(DAWState& stateIn, ThemeData& themeIn)
     : state(stateIn), theme(themeIn)
 {
-    bodySpiceImage = loadBodySpiceImage();
+    bodySpiceImage = ThemeData::loadSpriteImage ("bodySpice.png");
     popupMenuLookAndFeel = std::make_unique<SharedPopupMenuLookAndFeel> (theme);
 }
 
@@ -43,24 +20,17 @@ void ArrangementComponent::setBodySpiceImage (juce::Image newImage)
 void ArrangementComponent::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
-    g.fillAll(theme.colour("arrangement.background", juce::Colour::fromRGB(15, 20, 30)));
+    g.fillAll(theme.colour("arrangement.background"));
     if (bodySpiceImage.isValid())
     {
         const int imageYOffset = juce::roundToInt(getHeight() * 0.28f);
         g.setOpacity(0.9f);
-        g.drawImage(bodySpiceImage,
-                    0,
-                    imageYOffset,
-                    getWidth(),
-                    getHeight(),
-                    0,
-                    0,
-                    bodySpiceImage.getWidth(),
-                    bodySpiceImage.getHeight());
+        g.drawImage(bodySpiceImage, 0, imageYOffset, getWidth(), getHeight(),
+                    0, 0, bodySpiceImage.getWidth(), bodySpiceImage.getHeight());
         g.setOpacity(1.0f);
     }
 
-    g.setColour(theme.colour("arrangement.grid.minor", juce::Colour::fromRGBA(255, 255, 255, 18)));
+    g.setColour(theme.colour("arrangement.grid.minor"));
     constexpr int gridSpacing = 40;
     const float gridOffset = std::fmod(clipLeftInset - static_cast<float>(state.horizontalScrollOffset), static_cast<float>(gridSpacing));
     for (float x = gridOffset; x < getWidth(); x += gridSpacing)
@@ -70,19 +40,17 @@ void ArrangementComponent::paint(juce::Graphics& g)
     for (int i = 0; i < state.trackCount; ++i)
     {
         const float y = static_cast<float>(i * (rowHeight + rowGap) - state.verticalScrollOffset);
-        if (y + rowHeight < 0.0f || y > bounds.getHeight())
-            continue;
+        if (y + rowHeight < 0.0f || y > bounds.getHeight()) continue;
 
         const bool isSelectedTrack = !state.isMasterMixerFocused() && state.isTrackSelected(i);
         auto rowBounds = juce::Rectangle<float>(8.0f, y + 4.0f, bounds.getWidth() - scrollbarWidth - 18.0f, static_cast<float>(rowHeight));
 
-        g.setColour(isSelectedTrack ? theme.colour("arrangement.row.selected", juce::Colour(0xff24478d).withAlpha(0.52f))
-                                    : theme.colour("arrangement.row.default", juce::Colour::fromRGBA(255, 255, 255, 10)));
+        g.setColour(theme.colour(isSelectedTrack ? "arrangement.row.selected" : "arrangement.row.default"));
         g.fillRoundedRectangle(rowBounds, 8.0f);
 
         if (isSelectedTrack)
         {
-            g.setColour(theme.colour("arrangement.row.selected-border", juce::Colour(0xffd7e3ff).withAlpha(0.42f)));
+            g.setColour(theme.colour("arrangement.row.selected-border"));
             g.drawRoundedRectangle(rowBounds.reduced(1.0f), 8.0f, 1.4f);
         }
     }
@@ -90,53 +58,40 @@ void ArrangementComponent::paint(juce::Graphics& g)
     for (const auto& clip : state.timelineClips)
     {
         const auto clipBounds = getClipBounds(clip);
-        auto colour = theme.colour("arrangement.clip.fill", juce::Colour::fromRGB(58, 122, 254));
-        g.setColour(colour);
+        g.setColour(theme.colour("arrangement.clip.fill"));
         g.fillRoundedRectangle(clipBounds, 8.0f);
-        g.setColour(theme.colour("arrangement.clip.outline", juce::Colours::white));
+        g.setColour(theme.colour("arrangement.clip.outline"));
         g.drawRoundedRectangle(clipBounds.reduced(0.5f), 8.0f, 1.2f);
 
         const auto deleteBounds = getDeleteButtonBounds(clip);
-        g.setColour(theme.colour("arrangement.clip.delete-background", juce::Colour::fromRGBA(12, 17, 25, 190)));
+        g.setColour(theme.colour("arrangement.clip.delete-background"));
         g.fillEllipse(deleteBounds);
 
-        g.setColour(theme.colour("arrangement.clip.text", juce::Colours::white));
-        g.drawText("x",
-                   deleteBounds.toNearestInt(),
-                   juce::Justification::centred,
-                   false);
-
+        g.setColour(theme.colour("arrangement.clip.text"));
+        g.drawText("x", deleteBounds.toNearestInt(), juce::Justification::centred, false);
         g.drawText(clip.name,
                    clipBounds.toNearestInt().reduced(10, 6).withTrimmedLeft(static_cast<int>(deleteButtonSize) + 10),
-                   juce::Justification::centredLeft,
-                   true);
+                   juce::Justification::centredLeft, true);
     }
 
     const auto playheadX = juce::jlimit(0.0f, bounds.getWidth(), getPlayheadX());
-    g.setColour(theme.colour("arrangement.playhead", juce::Colour::fromRGB(58, 122, 254)));
+    g.setColour(theme.colour("arrangement.playhead"));
     g.drawLine(playheadX, 0.0f, playheadX, bounds.getHeight(), 2.0f);
 
-    if (getMaxScroll() > 0)
+    auto drawScrollbar = [&] (juce::Rectangle<float> track, juce::Rectangle<float> thumb)
     {
-        g.setColour(theme.colour("arrangement.scrollbar.track", juce::Colours::white.withAlpha(0.08f)));
-        g.fillRoundedRectangle(getScrollbarTrackBounds(), 4.0f);
-        g.setColour(theme.colour("arrangement.scrollbar.thumb", juce::Colour(0xff4c88ff).withAlpha(0.9f)));
-        auto thumb = getScrollbarThumbBounds();
+        g.setColour(theme.colour("arrangement.scrollbar.track"));
+        g.fillRoundedRectangle(track, 4.0f);
+        g.setColour(theme.colour("arrangement.scrollbar.thumb"));
         g.fillRoundedRectangle(thumb, 4.0f);
-        g.setColour(theme.colour("arrangement.scrollbar.outline", juce::Colours::white.withAlpha(0.75f)));
+        g.setColour(theme.colour("arrangement.scrollbar.outline"));
         g.drawRoundedRectangle(thumb, 4.0f, 1.0f);
-    }
+    };
 
+    if (getMaxScroll() > 0)
+        drawScrollbar(getScrollbarTrackBounds(), getScrollbarThumbBounds());
     if (getMaxHorizontalScroll() > 0.0f)
-    {
-        g.setColour(theme.colour("arrangement.scrollbar.track", juce::Colours::white.withAlpha(0.08f)));
-        g.fillRoundedRectangle(getHorizontalScrollbarTrackBounds(), 4.0f);
-        g.setColour(theme.colour("arrangement.scrollbar.thumb", juce::Colour(0xff4c88ff).withAlpha(0.9f)));
-        auto thumb = getHorizontalScrollbarThumbBounds();
-        g.fillRoundedRectangle(thumb, 4.0f);
-        g.setColour(theme.colour("arrangement.scrollbar.outline", juce::Colours::white.withAlpha(0.75f)));
-        g.drawRoundedRectangle(thumb, 4.0f, 1.0f);
-    }
+        drawScrollbar(getHorizontalScrollbarTrackBounds(), getHorizontalScrollbarThumbBounds());
 }
 
 void ArrangementComponent::mouseDown(const juce::MouseEvent& e)
@@ -390,50 +345,36 @@ void ArrangementComponent::showClipMenu(const TimelineClipItem& clip)
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(localAreaToGlobal(target)),
                        [safeThis, assetId, clipName](int result)
                        {
-                           if (safeThis == nullptr || result == 0)
-                               return;
-
-                           if (result == 1)
-                           {
-                               TimelineClipItem tempClip;
-                               tempClip.assetId = assetId;
-                               tempClip.name = clipName;
-                               safeThis->promptRenameClip(tempClip);
-                               return;
-                           }
-
-                           if (result == 2 && safeThis->onPatternEditRequested)
+                           if (safeThis == nullptr || result == 0) return;
+                           if (result == 1) safeThis->promptRenameClip(assetId, clipName);
+                           else if (result == 2 && safeThis->onPatternEditRequested)
                                safeThis->onPatternEditRequested(assetId);
                        });
 }
 
-void ArrangementComponent::promptRenameClip(const TimelineClipItem& clip)
+void ArrangementComponent::promptRenameClip(int assetId, const juce::String& currentName)
 {
-    if (clip.assetId <= 0)
-        return;
+    if (assetId <= 0) return;
 
     auto* renameWindow = new juce::AlertWindow("Rename Item", "Enter a new name", juce::AlertWindow::NoIcon);
-    renameWindow->addTextEditor("itemName", clip.name, "Name");
+    renameWindow->addTextEditor("itemName", currentName, "Name");
     renameWindow->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
     renameWindow->addButton("Rename", 1, juce::KeyPress(juce::KeyPress::returnKey));
 
     juce::Component::SafePointer<ArrangementComponent> safeThis(this);
     juce::Component::SafePointer<juce::AlertWindow> safeWindow(renameWindow);
-    const auto assetId = clip.assetId;
     renameWindow->enterModalState(true,
-                                  juce::ModalCallbackFunction::create([safeThis, safeWindow, assetId](int result)
-                                  {
-                                      if (result != 1 || safeThis == nullptr || safeWindow == nullptr)
-                                          return;
-
-                                      if (auto* editor = safeWindow->getTextEditor("itemName"))
-                                      {
-                                          const auto renamed = editor->getText().trim();
-                                          if (renamed.isNotEmpty() && safeThis->onAssetRenameRequested)
-                                              safeThis->onAssetRenameRequested(assetId, renamed);
-                                      }
-                                  }),
-                                  true);
+        juce::ModalCallbackFunction::create([safeThis, safeWindow, assetId](int result)
+        {
+            if (result != 1 || safeThis == nullptr || safeWindow == nullptr) return;
+            if (auto* editor = safeWindow->getTextEditor("itemName"))
+            {
+                const auto renamed = editor->getText().trim();
+                if (renamed.isNotEmpty() && safeThis->onAssetRenameRequested)
+                    safeThis->onAssetRenameRequested(assetId, renamed);
+            }
+        }),
+        true);
 }
 
 juce::Rectangle<float> ArrangementComponent::getHorizontalScrollbarTrackBounds() const

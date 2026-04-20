@@ -189,6 +189,16 @@
         "background": "#1b2744",
         "text": "#ffffff",
         "outline": "#3a7afe"
+      },
+      "fader-readout": {
+        "background": "rgba(16,23,41,0.96)",
+        "outline": "rgba(255,255,255,0.65)",
+        "text": "#ffffff"
+      },
+      "pan-readout": {
+        "background": "rgba(16,23,41,0.96)",
+        "outline": "rgba(255,255,255,0.65)",
+        "text": "#ffffff"
       }
     },
     "recent-clips": {

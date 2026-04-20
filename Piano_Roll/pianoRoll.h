@@ -33,7 +33,6 @@ namespace PianoRoll
     juce::Rectangle<float> getNoteBounds (const Note& note);
 }
 
-//==================================================
 class PianoRollComponent : public juce::Component,
                            public juce::SettableTooltipClient
 {
@@ -108,7 +107,6 @@ private:
         PianoRollComponent& owner;
     };
 
-    // Painting
     void paintToolbar (juce::Graphics& g, juce::Rectangle<int> area);
     void paintTimeline (juce::Graphics& g, juce::Rectangle<int> area);
     void paintKeys (juce::Graphics& g);
@@ -119,36 +117,24 @@ private:
                       const juce::String& text, bool active = false, bool accent = false,
                       const juce::Image* icon = nullptr);
 
-    // Layout / toolbar
     ButtonRects layoutButtons (juce::Rectangle<int> area) const;
     bool isOverButton (juce::Point<int> pos) const;
     juce::String getToolbarTooltip (juce::Point<int> pos) const;
     bool handleButtonClick (juce::Point<int> pos);
 
-    // Grid mouse handlers
-    void gridMouseDown (const juce::MouseEvent& e);
-    void gridMouseDrag (const juce::MouseEvent& e);
-    void gridMouseUp (const juce::MouseEvent& e);
-
-    // Note finding
     std::optional<size_t> findNoteAt (juce::Point<int> pos) const;
     std::optional<std::pair<size_t, Edge>> findNoteEdge (juce::Point<int> pos) const;
     std::optional<size_t> findNoteById (int id) const;
 
-    // Selection
     void setSelection (std::set<int> ids);
     void selectOne (std::optional<size_t> index);
     void startMarquee (const juce::MouseEvent& e);
     void updateMarquee (juce::Point<int> pos);
-    void endMarquee();
 
-    // Note operations
     void startMove (size_t index, juce::Point<int> pos);
     void updateMove (juce::Point<int> pos);
-    void endMove();
     void startResize (size_t index, Edge edge);
     void updateResize (juce::Point<int> pos);
-    void endResize();
     void startDraw (juce::Point<int> pos);
     void updateDraw (juce::Point<int> pos);
     void commitDraw();
@@ -156,7 +142,6 @@ private:
     void deleteSelected();
     void nudgeSelected (double beatDelta, int rowDelta);
 
-    // Helpers
     juce::Point<int> toGridPos (juce::Point<int> local) const;
     std::optional<juce::Rectangle<int>> getMarqueeRect() const;
     void handleScroll (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel);
@@ -167,7 +152,6 @@ private:
 
     std::unique_ptr<PianoRollLookAndFeel> pianoRollLookAndFeel;
 
-    // Child components (scrollbars only)
     juce::ScrollBar hScroll { false };
     juce::ScrollBar vScroll { true };
     ScrollListener scrollListener { *this };
@@ -178,11 +162,9 @@ private:
     juce::Image drawToolIcon;
     juce::Image eraseToolIcon;
 
-    // Layout rects (computed in resized)
     ButtonRects btnRects;
     juce::Rectangle<int> keyArea, gridArea;
 
-    // State
     std::vector<PianoRoll::Note> notes;
     std::optional<PianoRoll::Note> drawingNote;
     std::set<int> selectedIds;
@@ -201,20 +183,14 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PianoRollComponent)
 };
 
-//==================================================
 class PianoRollWindow : public juce::DocumentWindow
 {
 public:
     PianoRollWindow();
-    void setNotes (std::vector<PianoRoll::Note> notes);
-    void setOnSavePattern (std::function<void (const std::vector<PianoRoll::Note>&)> cb);
-    void setOnGetAvailableInstruments (std::function<juce::StringArray()> cb);
-    void setOnInstrumentChanged (std::function<void (const juce::String&)> cb);
-    void setInstrumentName (const juce::String& name);
-    void setThemeAssets (juce::Image newHeaderSpiceImage, juce::Image newBodySpiceImage, juce::Colour newAccentColour);
-    void closeButtonPressed() override;
+    void closeButtonPressed() override { setVisible (false); }
+
+    PianoRollComponent* content = nullptr;
 
 private:
-    PianoRollComponent* content = nullptr;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PianoRollWindow)
 };
