@@ -643,11 +643,26 @@ bool PianoRollComponent::handleButtonClick (juce::Point<int> pos)
 
 void PianoRollComponent::mouseMove (const juce::MouseEvent& e)
 {
-    setMouseCursor (isOverButton (e.getPosition())
-                        ? juce::MouseCursor::PointingHandCursor
-                        : juce::MouseCursor::NormalCursor);
+    auto cursor = juce::MouseCursor::NormalCursor;
+    const auto position = e.getPosition();
 
-    setTooltip (getToolbarTooltip (e.getPosition()));
+    if (isOverButton (position))
+    {
+        cursor = juce::MouseCursor::PointingHandCursor;
+    }
+    else if (tool == Tool::select && gridArea.contains (position))
+    {
+        const auto gridPos = toGridPos (position);
+
+        if (findNoteEdge (gridPos).has_value())
+            cursor = juce::MouseCursor::LeftRightResizeCursor;
+        else if (findNoteAt (gridPos).has_value())
+            cursor = juce::MouseCursor::DraggingHandCursor;
+    }
+
+    setMouseCursor (cursor);
+
+    setTooltip (getToolbarTooltip (position));
 }
 
 void PianoRollComponent::mouseExit (const juce::MouseEvent&)
@@ -1157,5 +1172,6 @@ PianoRollWindow::PianoRollWindow()
     setResizeLimits (800, 500, 1800, 1100);
     content = new PianoRollComponent();
     setContentOwned (content, false);
+    tooltipWindow = std::make_unique<juce::TooltipWindow> (content, 500);
     centreWithSize (1100, 700);
 }
