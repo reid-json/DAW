@@ -1,9 +1,12 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "../BuiltInPluginTheme.h"
 
 CompressorAudioProcessorEditor::CompressorAudioProcessorEditor(CompressorAudioProcessor& p, juce::AudioProcessorValueTreeState& vts)
     : AudioProcessorEditor(&p), audioProcessor(p)
 {
+    BuiltInPluginTheme::applyEditorTheme (*this);
+
     addAndMakeVisible(thresholdSlider);
     addAndMakeVisible(ratioSlider);
     addAndMakeVisible(gainSlider);
@@ -17,45 +20,50 @@ CompressorAudioProcessorEditor::CompressorAudioProcessorEditor(CompressorAudioPr
 
     thresholdSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     thresholdSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    BuiltInPluginTheme::styleSlider (thresholdSlider);
     thresholdAttachment.reset(new juce::AudioProcessorValueTreeState::SliderAttachment(vts, "threshold", thresholdSlider));
     thresholdLabel.setText("Threshold", juce::dontSendNotification);
+    BuiltInPluginTheme::styleLabel (thresholdLabel);
 
     ratioSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     ratioSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    BuiltInPluginTheme::styleSlider (ratioSlider);
     ratioAttachment.reset(new juce::AudioProcessorValueTreeState::SliderAttachment(vts, "ratio", ratioSlider));
     ratioLabel.setText("Ratio", juce::dontSendNotification);
+    BuiltInPluginTheme::styleLabel (ratioLabel);
 
     gainSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     gainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    BuiltInPluginTheme::styleSlider (gainSlider);
     gainAttachment.reset(new juce::AudioProcessorValueTreeState::SliderAttachment(vts, "gain", gainSlider));
     gainLabel.setText("Gain", juce::dontSendNotification);
+    BuiltInPluginTheme::styleLabel (gainLabel);
 
     attackSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     attackSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    BuiltInPluginTheme::styleSlider (attackSlider);
     attackAttachment.reset(new juce::AudioProcessorValueTreeState::SliderAttachment(vts, "attack", attackSlider));
     attackLabel.setText("Attack", juce::dontSendNotification);
+    BuiltInPluginTheme::styleLabel (attackLabel);
 
     releaseSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     releaseSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    BuiltInPluginTheme::styleSlider (releaseSlider);
     releaseAttachment.reset(new juce::AudioProcessorValueTreeState::SliderAttachment(vts, "release", releaseSlider));
     releaseLabel.setText("Release", juce::dontSendNotification);
-
-    thresholdLabel.setJustificationType(juce::Justification::centred);
-    ratioLabel.setJustificationType(juce::Justification::centred);
-    gainLabel.setJustificationType(juce::Justification::centred);
-    attackLabel.setJustificationType(juce::Justification::centred);
-    releaseLabel.setJustificationType(juce::Justification::centred);
+    BuiltInPluginTheme::styleLabel (releaseLabel);
 
     setSize(500, 325);
 }
 
-CompressorAudioProcessorEditor::~CompressorAudioProcessorEditor() {}
+CompressorAudioProcessorEditor::~CompressorAudioProcessorEditor()
+{
+    BuiltInPluginTheme::clearEditorTheme (*this);
+}
 
 void CompressorAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
-    g.setColour(juce::Colours::white);
-    g.setFont(juce::FontOptions(15.0f));
+    BuiltInPluginTheme::paintEditorBackground (g, *this);
 }
 
 void CompressorAudioProcessorEditor::resized()

@@ -1148,6 +1148,7 @@ void GUIComponent::applyThemePreset (ThemePreset preset)
     if (arrangementComponent != nullptr) arrangementComponent->setBodySpiceImage (bodySpiceImage);
     if (settingsWindow != nullptr)       settingsWindow->setAccentColour (primaryAccent);
     if (pianoRollWindow != nullptr)      pianoRollWindow->content->setThemeAssets (headerSpiceImage, bodySpiceImage, primaryAccent);
+    pluginHostManager.setBuiltInPluginTheme (primaryAccent, bodySpiceImage);
 
     root->callLayoutChildrenWithRecursionLock();
     layoutBody();

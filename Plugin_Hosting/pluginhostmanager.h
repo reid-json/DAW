@@ -46,17 +46,21 @@ public:
     bool loadPianoRollInstrument(const juce::String& pluginName);
     juce::String getPianoRollInstrumentName() const;
     bool renderPianoRollInstrument(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi, double sampleRate);
+    void setBuiltInPluginTheme (juce::Colour accentColour, juce::Image bodySpiceImage);
 
 private:
     class PluginEditorWindow : public juce::DocumentWindow
     {
     public:
         PluginEditorWindow(const juce::String& windowTitle,
-                           std::unique_ptr<juce::AudioProcessorEditor> editorIn);
+                           std::unique_ptr<juce::AudioProcessorEditor> editorIn,
+                           bool useBuiltInTheme);
 
         void closeButtonPressed() override;
+        void refreshTheme();
 
     private:
+        bool builtInThemeEnabled = false;
         std::unique_ptr<juce::AudioProcessorEditor> ownedEditor;
     };
 
@@ -103,6 +107,7 @@ private:
     const HostedPlugin* getHostedTrackInstrumentPlugin(int trackIndex) const;
     HostedPlugin* getHostedMasterPlugin(int slotIndex);
     const HostedPlugin* getHostedMasterPlugin(int slotIndex) const;
+    static bool isBuiltInPluginName (const juce::String& pluginName);
 
     mutable juce::AudioPluginFormatManager formatManager;
     mutable std::vector<ExternalPluginInfo> externalPlugins;

@@ -3,6 +3,7 @@
 #include "../Plugin/Compressor/PluginProcessor.h"
 #include "../Plugin/SevenBandEQ/PluginProcessor.h"
 #include "../Plugin/GainPanFilter/PluginProcessor.h"
+#include "../Plugin/BuiltInPluginTheme.h"
 #include <algorithm>
 
 namespace { constexpr const char* externalPluginsPath = "ExternalPlugins"; }
@@ -11,17 +12,36 @@ PluginHostManager::PluginHostManager()  { formatManager.addDefaultFormats(); }
 PluginHostManager::~PluginHostManager() = default;
 
 PluginHostManager::PluginEditorWindow::PluginEditorWindow(const juce::String& title,
-                                                          std::unique_ptr<juce::AudioProcessorEditor> ed)
+                                                          std::unique_ptr<juce::AudioProcessorEditor> ed,
+                                                          bool useBuiltInTheme)
     : juce::DocumentWindow(title, juce::Colours::black, juce::DocumentWindow::closeButton),
+      builtInThemeEnabled(useBuiltInTheme),
       ownedEditor(std::move(ed))
 {
     setUsingNativeTitleBar(true);
     setResizable(true, true);
     setContentOwned(ownedEditor.release(), true);
     centreWithSize(getWidth(), getHeight());
+    refreshTheme();
 }
 
 void PluginHostManager::PluginEditorWindow::closeButtonPressed() { setVisible(false); }
+
+void PluginHostManager::PluginEditorWindow::refreshTheme()
+{
+    if (! builtInThemeEnabled)
+        return;
+
+    setBackgroundColour (BuiltInPluginTheme::getPalette().background);
+
+    if (auto* content = getContentComponent())
+    {
+        content->sendLookAndFeelChange();
+        content->repaint();
+    }
+
+    repaint();
+}
 
 juce::StringArray PluginHostManager::getBuiltInPluginNames(PluginRole role)
 {
@@ -107,7 +127,7 @@ bool PluginHostManager::showTrackPluginEditor(int trackIndex, int slotIndex)
         auto ed = std::unique_ptr<juce::AudioProcessorEditor>(hp->processor->createEditor());
         if (! ed) return false;
         hp->editorWindow = std::make_unique<PluginEditorWindow>(
-            hp->pluginName + " - Track " + juce::String(trackIndex + 1), std::move(ed));
+            hp->pluginName + " - Track " + juce::String(trackIndex + 1), std::move(ed), isBuiltInPluginName (hp->pluginName));
     }
     hp->editorWindow->setVisible(true);
     hp->editorWindow->toFront(true);
@@ -197,11 +217,30 @@ bool PluginHostManager::showMasterPluginEditor(int slotIndex)
     {
         auto ed = std::unique_ptr<juce::AudioProcessorEditor>(hp->processor->createEditor());
         if (! ed) return false;
-        hp->editorWindow = std::make_unique<PluginEditorWindow>(hp->pluginName + " - Master", std::move(ed));
+        hp->editorWindow = std::make_unique<PluginEditorWindow>(hp->pluginName + " - Master",
+                                                                std::move(ed),
+                                                                isBuiltInPluginName (hp->pluginName));
     }
     hp->editorWindow->setVisible(true);
     hp->editorWindow->toFront(true);
     return true;
+}
+
+void PluginHostManager::setBuiltInPluginTheme (juce::Colour accentColour, juce::Image bodySpiceImage)
+{
+    BuiltInPluginTheme::setAccentColour (accentColour);
+    BuiltInPluginTheme::setBodySpiceImage (std::move (bodySpiceImage));
+
+    const auto refreshHosted = [] (auto& plugins)
+    {
+        for (auto& entry : plugins)
+            if (entry.second.editorWindow != nullptr)
+                entry.second.editorWindow->refreshTheme();
+    };
+
+    refreshHosted (hostedTrackPlugins);
+    refreshHosted (hostedTrackInstrumentPlugins);
+    refreshHosted (hostedMasterPlugins);
 }
 
 void PluginHostManager::processTrackEffects(int trackIndex, juce::AudioBuffer<float>& buffer)
@@ -264,6 +303,12 @@ std::unique_ptr<juce::AudioProcessor> PluginHostManager::createProcessor(const j
     }
 
     return nullptr;
+}
+
+bool PluginHostManager::isBuiltInPluginName (const juce::String& pluginName)
+{
+    const auto names = getBuiltInPluginNames (PluginRole::effect);
+    return names.contains (pluginName);
 }
 
 juce::File PluginHostManager::getExternalPluginsDir() const
