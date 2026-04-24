@@ -1,0 +1,20 @@
+Thanks for download DSK VST Instrument :)
+
+Install:
+Just unzip and copy the DSK Instrument folder to your DAW or System VST folder
+( if you dont know what it is, please read your DAW documentation or search in Google something like "install vst in YourDAW" )
+
+Note:
+Most of DSK Music VST dont works fine in 64 bits or Mac system.
+If they dont works for you, you can use any 32 to 64 bits VST adapters, like jbridge:
+https://jstuff.wordpress.com/jbridge/
+
+Also, you can get HQ Instruments too, include all sounds from my free synths and much more (1640 instruments):
+https://www.dskmusic.com/high-quality-instruments
+Works on ANY system.
+
+
+----
+Thanks and enjoy them!
+Victor C.
+DSSK Mmusic
