@@ -341,15 +341,19 @@ void PluginHostManager::scanExternalPlugins() const
     auto dir = getExternalPluginsDir();
     if (! dir.isDirectory()) return;
 
-    juce::Array<juce::File> vst3Files;
-    dir.findChildFiles(vst3Files, juce::File::findFiles, true, "*.vst3");
+    juce::Array<juce::File> pluginFiles;
+    dir.findChildFiles(pluginFiles, juce::File::findFiles, true, "*.vst3");
 
-    for (auto& file : vst3Files)
+   #if JUCE_PLUGINHOST_VST
+    dir.findChildFiles(pluginFiles, juce::File::findFiles, true, "*.dll");
+   #endif
+
+    for (auto& file : pluginFiles)
         for (auto* fmt : formatManager.getFormats())
         {
             if (! fmt || ! fmt->fileMightContainThisPluginType(file.getFullPathName())) continue;
 
-            const bool isInInstPluginFolder = file.getFullPathName().contains("InstPlugin");
+            const bool isInInstPluginFolder = file.getFullPathName().containsIgnoreCase("InstPlugin");
 
             juce::OwnedArray<juce::PluginDescription> descs;
             fmt->findAllTypesForFile(descs, file.getFullPathName());
