@@ -1,0 +1,5 @@
+Thank you for using Drumplayer by 99Sounds.
+
+To install the plugin, copy the entire folder to your VST plugins folder.
+
+https://99sounds.org
