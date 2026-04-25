@@ -143,17 +143,29 @@ void ArrangementState::setMasterGain(float gain) { masterTrack.gainLinear = gain
 
 void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 playbackStartSample) const
 {
+    struct PatternRenderKey
+    {
+        int trackIndex = 0;
+        juce::String instrumentName;
+
+        bool operator<(const PatternRenderKey& other) const
+        {
+            if (trackIndex != other.trackIndex) return trackIndex < other.trackIndex;
+            return instrumentName < other.instrumentName;
+        }
+    };
+
     const auto blockEndSample = playbackStartSample + buffer.getNumSamples();
     const bool patternRenderDiscontinuity = lastPatternRenderEndSample != playbackStartSample;
 
     if (patternRenderDiscontinuity)
         activePatternNotesByTrack.clear();
 
-    std::map<int, juce::MidiBuffer> midiByTrack;
-    std::map<int, float> gainByTrack;
-    std::map<int, float> panByTrack;
-    std::map<int, double> sampleRateByTrack;
-    std::map<int, bool> trackHasPatternFallback;
+    std::map<PatternRenderKey, juce::MidiBuffer> midiByPatternRenderer;
+    std::map<PatternRenderKey, float> gainByPatternRenderer;
+    std::map<PatternRenderKey, float> panByPatternRenderer;
+    std::map<PatternRenderKey, double> sampleRateByPatternRenderer;
+    std::map<PatternRenderKey, bool> patternRendererHasFallback;
 
     for (const auto& placement : timelinePlacements)
     {
@@ -185,12 +197,13 @@ void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 play
         if (asset->kind == AssetKind::pianoRollPattern && !asset->patternNotes.empty())
         {
             const int trackIndex = juce::jmax(0, placement.timelineTrackId - 1);
-            gainByTrack.emplace(trackIndex, gain);
+            const PatternRenderKey renderKey { trackIndex, asset->instrumentName };
+            gainByPatternRenderer.emplace(renderKey, gain);
             if (mixTrackIdx >= 0 && mixTrackIdx < static_cast<int>(mixerTracks.size()))
-                panByTrack.emplace(trackIndex, mixerTracks[static_cast<size_t>(mixTrackIdx)].panLinear);
-            sampleRateByTrack.emplace(trackIndex, asset->clip.sampleRate > 0.0 ? asset->clip.sampleRate : 44100.0);
+                panByPatternRenderer.emplace(renderKey, mixerTracks[static_cast<size_t>(mixTrackIdx)].panLinear);
+            sampleRateByPatternRenderer.emplace(renderKey, asset->clip.sampleRate > 0.0 ? asset->clip.sampleRate : 44100.0);
 
-            auto& midi = midiByTrack[trackIndex];
+            auto& midi = midiByPatternRenderer[renderKey];
             auto& activeNotes = activePatternNotesByTrack[trackIndex];
 
             for (int noteIndex = 0; noteIndex < static_cast<int>(asset->patternNotes.size()); ++noteIndex)
@@ -204,6 +217,24 @@ void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 play
 
                 if (noteEndSample <= playbackStartSample || noteStartSample >= blockEndSample)
                     continue;
+
+                if (asset->instrumentName.containsIgnoreCase("drum"))
+                {
+                    if (noteStartSample >= playbackStartSample && noteStartSample < blockEndSample)
+                    {
+                        const auto offset = static_cast<int>(noteStartSample - playbackStartSample);
+                        midi.addEvent(juce::MidiMessage::noteOn(1, note.midiNote, note.velocity), offset);
+                        midi.addEvent(juce::MidiMessage::noteOff(1, note.midiNote),
+                                      juce::jmin(buffer.getNumSamples() - 1, offset + 96));
+                    }
+                    else if (patternRenderDiscontinuity && noteStartSample < playbackStartSample && noteEndSample > playbackStartSample)
+                    {
+                        midi.addEvent(juce::MidiMessage::noteOn(1, note.midiNote, note.velocity), 0);
+                        midi.addEvent(juce::MidiMessage::noteOff(1, note.midiNote),
+                                      juce::jmin(buffer.getNumSamples() - 1, 96));
+                    }
+                    continue;
+                }
 
                 if (noteStartSample >= playbackStartSample && noteStartSample < blockEndSample)
                 {
@@ -225,7 +256,7 @@ void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 play
                 }
             }
 
-            trackHasPatternFallback[trackIndex] = true;
+            patternRendererHasFallback[renderKey] = true;
             continue;
         }
 
@@ -238,29 +269,29 @@ void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 play
         buffer.addFrom(1, bufferOffset, clip.rightChannel.data() + clipOffset, overlapLength, gainR);
     }
 
-    for (auto& entry : midiByTrack)
+    for (auto& entry : midiByPatternRenderer)
     {
-        const int trackIndex = entry.first;
+        const auto& renderKey = entry.first;
         auto& midi = entry.second;
 
         juce::AudioBuffer<float> tempBuffer(2, buffer.getNumSamples());
         tempBuffer.clear();
 
-        const auto gain = gainByTrack.count(trackIndex) > 0 ? gainByTrack[trackIndex] : 1.0f;
-        const auto sampleRate = sampleRateByTrack.count(trackIndex) > 0 ? sampleRateByTrack[trackIndex] : 44100.0;
+        const auto gain = gainByPatternRenderer.count(renderKey) > 0 ? gainByPatternRenderer[renderKey] : 1.0f;
+        const auto sampleRate = sampleRateByPatternRenderer.count(renderKey) > 0 ? sampleRateByPatternRenderer[renderKey] : 44100.0;
         const bool renderedByPlugin = patternTrackRenderer != nullptr
-            && patternTrackRenderer(trackIndex, tempBuffer, midi, sampleRate);
+            && patternTrackRenderer(renderKey.trackIndex, renderKey.instrumentName, tempBuffer, midi, sampleRate);
 
         if (renderedByPlugin)
         {
-            const float pan = panByTrack.count(trackIndex) > 0 ? panByTrack[trackIndex] : 0.0f;
+            const float pan = panByPatternRenderer.count(renderKey) > 0 ? panByPatternRenderer[renderKey] : 0.0f;
             const float gL = gain * juce::jmin(1.0f, 1.0f - pan);
             const float gR = gain * juce::jmin(1.0f, 1.0f + pan);
             tempBuffer.applyGain(0, 0, tempBuffer.getNumSamples(), gL);
             tempBuffer.applyGain(1, 0, tempBuffer.getNumSamples(), gR);
             buffer.addFrom(0, 0, tempBuffer, 0, 0, buffer.getNumSamples());
             buffer.addFrom(1, 0, tempBuffer, 1, 0, buffer.getNumSamples());
-            trackHasPatternFallback[trackIndex] = false;
+            patternRendererHasFallback[renderKey] = false;
         }
     }
 
@@ -271,8 +302,9 @@ void ArrangementState::render(juce::AudioBuffer<float>& buffer, juce::int64 play
             continue;
 
         const int trackIndex = juce::jmax(0, placement.timelineTrackId - 1);
-        const auto fallbackIt = trackHasPatternFallback.find(trackIndex);
-        if (fallbackIt != trackHasPatternFallback.end() && !fallbackIt->second)
+        const PatternRenderKey renderKey { trackIndex, asset->instrumentName };
+        const auto fallbackIt = patternRendererHasFallback.find(renderKey);
+        if (fallbackIt != patternRendererHasFallback.end() && !fallbackIt->second)
             continue;
 
         float gain = masterTrack.gainLinear;

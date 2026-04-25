@@ -28,8 +28,13 @@ public:
     bool showTrackPluginEditor(int trackIndex, int slotIndex);
 
     bool loadTrackInstrumentPlugin(const juce::String& pluginName, int trackIndex);
+    juce::String getTrackInstrumentPluginName(int trackIndex) const;
+    bool showTrackInstrumentPluginEditor(int trackIndex);
     bool renderTrackInstrument(int trackIndex, juce::AudioBuffer<float>& buffer,
                                juce::MidiBuffer& midi, double sampleRate);
+    bool preloadInstrumentPlugin(const juce::String& pluginName);
+    bool renderInstrumentPlugin(const juce::String& pluginName, juce::AudioBuffer<float>& buffer,
+                                juce::MidiBuffer& midi, double sampleRate);
 
     void removeTrack(int trackIndex);
 
@@ -45,6 +50,7 @@ public:
 
     bool loadPianoRollInstrument(const juce::String& pluginName);
     juce::String getPianoRollInstrumentName() const;
+    bool showPianoRollInstrumentEditor();
     bool renderPianoRollInstrument(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi, double sampleRate);
     void setBuiltInPluginTheme (juce::Colour accentColour, juce::Image bodySpiceImage);
 
@@ -97,7 +103,9 @@ private:
     juce::StringArray getAvailablePluginsForRole(PluginRole role) const;
     std::unique_ptr<juce::AudioProcessor> createProcessor(const juce::String& pluginName) const;
     std::optional<HostedPlugin> makeHostedPlugin(const juce::String& pluginName) const;
-    void runPluginOnBuffer(HostedPlugin& hp, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) const;
+    void releaseHostedPlugin(HostedPlugin& hp) const;
+    void runPluginOnBuffer(HostedPlugin& hp, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi,
+                           bool mixAllOutputsToStereo = false) const;
     juce::File getExternalPluginsDir() const;
     static juce::String makeMenuNameForPlugin(const juce::PluginDescription& description);
     void scanExternalPlugins() const;
@@ -115,6 +123,7 @@ private:
     std::map<SlotKey, HostedPlugin> hostedTrackPlugins;
     std::map<int, HostedPlugin> hostedTrackInstrumentPlugins;
     std::map<int, HostedPlugin> hostedMasterPlugins;
+    std::map<juce::String, HostedPlugin> hostedPatternInstrumentPlugins;
     double processingSampleRate = 44100.0;
     int processingBlockSize = 512;
 };

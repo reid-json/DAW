@@ -1191,6 +1191,7 @@ void GUIComponent::openPianoRollForPattern(std::vector<PianoRoll::Note> notes, i
     ensurePianoRollWindow();
     currentPianoRollAssetId = assetId;
     pianoRollWindow->content->setNotes(std::move(notes));
+    pianoRollWindow->content->setInstrumentName(pluginHostManager.getTrackInstrumentPluginName(state.selectedTrackIndex));
     pianoRollWindow->setVisible(true);
     pianoRollWindow->toFront(true);
 }
@@ -1249,8 +1250,12 @@ void GUIComponent::ensurePianoRollWindow()
         if (onPianoRollInstrumentChangeRequested)
             onPianoRollInstrumentChangeRequested (name);
     });
+    pr->setOnShowInstrumentEditor ([this]
+    {
+        pluginHostManager.showTrackInstrumentPluginEditor(state.selectedTrackIndex);
+    });
 
-    auto currentInst = pluginHostManager.getPianoRollInstrumentName();
+    auto currentInst = pluginHostManager.getTrackInstrumentPluginName(state.selectedTrackIndex);
     if (currentInst.isNotEmpty())
         pr->setInstrumentName (currentInst);
 

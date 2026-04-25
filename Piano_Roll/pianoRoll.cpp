@@ -194,6 +194,11 @@ void PianoRollComponent::setOnInstrumentChanged (std::function<void (const juce:
     onInstrumentChangeRequested = std::move (cb);
 }
 
+void PianoRollComponent::setOnShowInstrumentEditor (std::function<void()> cb)
+{
+    onShowInstrumentEditorRequested = std::move (cb);
+}
+
 void PianoRollComponent::setInstrumentName (const juce::String& name)
 {
     instrumentName = name;
@@ -560,6 +565,9 @@ juce::String PianoRollComponent::getToolbarTooltip (juce::Point<int> pos) const
     if (btnRects.erase.contains (pos))
         return "Erase notes from the piano roll";
 
+    if (btnRects.instrument.contains (pos))
+        return "Choose the pattern instrument. Right-click the piano roll to open the plugin editor";
+
     return {};
 }
 
@@ -641,6 +649,19 @@ bool PianoRollComponent::handleButtonClick (juce::Point<int> pos)
     return false;
 }
 
+void PianoRollComponent::showContextMenu()
+{
+    juce::PopupMenu menu;
+    menu.setLookAndFeel (pianoRollLookAndFeel.get());
+    menu.addItem (1, "Open Instrument Editor", instrumentName.isNotEmpty());
+
+    menu.showMenuAsync (juce::PopupMenu::Options(), [this] (int result)
+    {
+        if (result == 1 && onShowInstrumentEditorRequested)
+            onShowInstrumentEditorRequested();
+    });
+}
+
 void PianoRollComponent::mouseMove (const juce::MouseEvent& e)
 {
     auto cursor = juce::MouseCursor::NormalCursor;
@@ -673,6 +694,12 @@ void PianoRollComponent::mouseExit (const juce::MouseEvent&)
 
 void PianoRollComponent::mouseDown (const juce::MouseEvent& e)
 {
+    if (e.mods.isRightButtonDown())
+    {
+        showContextMenu();
+        return;
+    }
+
     if (handleButtonClick (e.getPosition()))
         return;
 

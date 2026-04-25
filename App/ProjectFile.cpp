@@ -41,7 +41,7 @@ bool saveProject(const juce::File& file,
     if (!out.is_open()) return false;
 
     out.write("DAWP", 4);
-    writeVal<uint32_t>(out, 2);
+    writeVal<uint32_t>(out, 3);
 
     writeVal(out, dawState.tempoBpm);
     writeVal(out, (int32_t) dawState.trackCount);
@@ -107,6 +107,7 @@ bool saveProject(const juce::File& file,
         writeVal(out, (int32_t) asset.assetId);
         writeString(out, asset.name);
         writeVal(out, (int32_t) asset.kind);
+        writeString(out, asset.instrumentName);
         writeVal(out, asset.clip.sampleRate);
 
         int32_t sampleCount = (int32_t) asset.clip.leftChannel.size();
@@ -170,7 +171,8 @@ bool loadProject(const juce::File& file,
     char magic[4] = {};
     in.read(magic, 4);
     if (std::string(magic, 4) != "DAWP") return false;
-    if (readVal<uint32_t>(in) != 2) return false;
+    const auto fileVersion = readVal<uint32_t>(in);
+    if (fileVersion < 2 || fileVersion > 3) return false;
 
     dawState.tempoBpm = readVal<double>(in);
     dawState.trackCount = readVal<int32_t>(in);
@@ -235,6 +237,8 @@ bool loadProject(const juce::File& file,
         asset.assetId = readVal<int32_t>(in);
         asset.name = readString(in);
         asset.kind = (AssetKind) readVal<int32_t>(in);
+        if (fileVersion >= 3)
+            asset.instrumentName = readString(in);
         asset.clip.sampleRate = readVal<double>(in);
         asset.clip.clipId = asset.assetId;
         asset.clip.name = asset.name;

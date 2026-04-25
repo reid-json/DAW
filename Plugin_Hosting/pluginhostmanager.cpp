@@ -67,6 +67,16 @@ std::optional<PluginHostManager::HostedPlugin> PluginHostManager::makeHostedPlug
 {
     auto proc = createProcessor(name);
     if (proc == nullptr) return std::nullopt;
+
+    proc->enableAllBuses();
+
+    if (proc->getBusCount(false) > 0 && proc->getMainBusNumOutputChannels() == 0)
+        proc->setChannelLayoutOfBus(false, 0, juce::AudioChannelSet::stereo());
+
+    if (proc->getBusCount(true) > 0 && proc->getMainBusNumInputChannels() == 0 && ! proc->acceptsMidi())
+        proc->setChannelLayoutOfBus(true, 0, juce::AudioChannelSet::stereo());
+
+    proc->setRateAndBufferSizeDetails(processingSampleRate, processingBlockSize);
     proc->prepareToPlay(processingSampleRate, processingBlockSize);
 
     HostedPlugin hp;
@@ -77,7 +87,20 @@ std::optional<PluginHostManager::HostedPlugin> PluginHostManager::makeHostedPlug
     return hp;
 }
 
-void PluginHostManager::runPluginOnBuffer(HostedPlugin& hp, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) const
+void PluginHostManager::releaseHostedPlugin(HostedPlugin& hp) const
+{
+    if (hp.editorWindow != nullptr)
+    {
+        hp.editorWindow->setVisible(false);
+        hp.editorWindow.reset();
+    }
+
+    if (hp.processor != nullptr)
+        hp.processor->releaseResources();
+}
+
+void PluginHostManager::runPluginOnBuffer(HostedPlugin& hp, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi,
+                                          bool mixAllOutputsToStereo) const
 {
     const int numSamples = buffer.getNumSamples();
     const int numCh = juce::jmax(2, hp.processor->getTotalNumInputChannels(),
@@ -90,15 +113,63 @@ void PluginHostManager::runPluginOnBuffer(HostedPlugin& hp, juce::AudioBuffer<fl
 
     hp.processor->processBlock(plugBuf, midi);
 
+    if (mixAllOutputsToStereo)
+    {
+        for (int ch = 0; ch < juce::jmin(buffer.getNumChannels(), plugBuf.getNumChannels(), 2); ++ch)
+            buffer.copyFrom(ch, 0, plugBuf, ch, 0, numSamples);
+
+        for (int ch = 2; ch < plugBuf.getNumChannels(); ++ch)
+        {
+            const auto destCh = ch % juce::jmax(1, buffer.getNumChannels());
+            buffer.addFrom(destCh, 0, plugBuf, ch, 0, numSamples);
+        }
+
+        for (int ch = plugBuf.getNumChannels(); ch < buffer.getNumChannels(); ++ch)
+            buffer.clear(ch, 0, numSamples);
+
+        return;
+    }
+
     for (int ch = 0; ch < juce::jmin(2, plugBuf.getNumChannels()); ++ch)
         buffer.copyFrom(ch, 0, plugBuf, juce::jmin(ch, plugBuf.getNumChannels() - 1), 0, numSamples);
+}
+
+static juce::MidiBuffer withDrumChannelDuplicate(const juce::MidiBuffer& midi)
+{
+    static const int drumPadNotes[] = { 35, 36, 38, 40, 41, 42, 45, 46, 48, 49, 51 };
+    juce::MidiBuffer result;
+
+    for (const auto metadata : midi)
+    {
+        const auto message = metadata.getMessage();
+
+        if (message.isNoteOnOrOff())
+        {
+            auto mappedMessage = message;
+            const auto padIndex = juce::jlimit(0, (int) std::size(drumPadNotes) - 1, std::abs(message.getNoteNumber() - 60) % (int) std::size(drumPadNotes));
+            mappedMessage.setNoteNumber(drumPadNotes[padIndex]);
+            mappedMessage.setChannel(1);
+            result.addEvent(mappedMessage, metadata.samplePosition);
+        }
+        else
+        {
+            result.addEvent(message, metadata.samplePosition);
+        }
+    }
+
+    return result;
 }
 
 bool PluginHostManager::loadTrackPlugin(const juce::String& name, int trackIndex, int slotIndex)
 {
     auto hp = makeHostedPlugin(name);
     if (! hp) return false;
-    hostedTrackPlugins[{ trackIndex, slotIndex }] = std::move(*hp);
+
+    auto key = SlotKey { trackIndex, slotIndex };
+    if (auto* existing = getHostedTrackPlugin(trackIndex, slotIndex))
+        releaseHostedPlugin(*existing);
+
+    hostedTrackPlugins[key] = std::move(*hp);
     return true;
 }
 
@@ -112,7 +183,7 @@ bool PluginHostManager::removeTrackPlugin(int trackIndex, int slotIndex)
 {
     auto it = hostedTrackPlugins.find({ trackIndex, slotIndex });
     if (it == hostedTrackPlugins.end()) return false;
-    if (it->second.processor) it->second.processor->releaseResources();
+    releaseHostedPlugin(it->second);
     hostedTrackPlugins.erase(it);
     return true;
 }
@@ -138,7 +209,36 @@ bool PluginHostManager::loadTrackInstrumentPlugin(const juce::String& name, int 
 {
     auto hp = makeHostedPlugin(name);
     if (! hp) return false;
+
+    if (auto* existing = getHostedTrackInstrumentPlugin(trackIndex))
+        releaseHostedPlugin(*existing);
+
     hostedTrackInstrumentPlugins[trackIndex] = std::move(*hp);
+    return true;
+}
+
+juce::String PluginHostManager::getTrackInstrumentPluginName(int trackIndex) const
+{
+    auto* hp = getHostedTrackInstrumentPlugin(trackIndex);
+    return hp != nullptr ? hp->pluginName : juce::String();
+}
+
+bool PluginHostManager::showTrackInstrumentPluginEditor(int trackIndex)
+{
+    auto* hp = getHostedTrackInstrumentPlugin(trackIndex);
+    if (! hp || ! hp->processor || ! hp->processor->hasEditor()) return false;
+
+    if (! hp->editorWindow)
+    {
+        auto ed = std::unique_ptr<juce::AudioProcessorEditor>(hp->processor->createEditor());
+        if (! ed) return false;
+        hp->editorWindow = std::make_unique<PluginEditorWindow>(hp->pluginName + " - Track " + juce::String(trackIndex + 1),
+                                                                std::move(ed),
+                                                                isBuiltInPluginName (hp->pluginName));
+    }
+
+    hp->editorWindow->setVisible(true);
+    hp->editorWindow->toFront(true);
     return true;
 }
 
@@ -150,8 +250,60 @@ bool PluginHostManager::renderTrackInstrument(int trackIndex,
     auto* hp = getHostedTrackInstrumentPlugin(trackIndex);
     if (! hp || ! hp->processor || hp->bypassed) return false;
 
+    juce::MidiBuffer drumMidi;
+    auto* midiToRender = &midi;
+
+    if (hp->pluginName.containsIgnoreCase("drum"))
+    {
+        drumMidi = withDrumChannelDuplicate(midi);
+        midiToRender = &drumMidi;
+    }
+
     buffer.clear();
-    runPluginOnBuffer(*hp, buffer, midi);
+    runPluginOnBuffer(*hp, buffer, *midiToRender, true);
+
+    return true;
+}
+
+bool PluginHostManager::preloadInstrumentPlugin(const juce::String& pluginName)
+{
+    if (pluginName.isEmpty() || hostedPatternInstrumentPlugins.find(pluginName) != hostedPatternInstrumentPlugins.end())
+        return true;
+
+    auto hp = makeHostedPlugin(pluginName);
+    if (! hp) return false;
+
+    hostedPatternInstrumentPlugins.emplace(pluginName, std::move(*hp));
+    return true;
+}
+
+bool PluginHostManager::renderInstrumentPlugin(const juce::String& pluginName,
+                                               juce::AudioBuffer<float>& buffer,
+                                               juce::MidiBuffer& midi,
+                                               double)
+{
+    if (pluginName.isEmpty())
+        return false;
+
+    auto it = hostedPatternInstrumentPlugins.find(pluginName);
+    if (it == hostedPatternInstrumentPlugins.end())
+        return false;
+
+    auto& hp = it->second;
+    if (! hp.processor || hp.bypassed) return false;
+
+    juce::MidiBuffer drumMidi;
+    auto* midiToRender = &midi;
+
+    if (pluginName.containsIgnoreCase("drum"))
+    {
+        drumMidi = withDrumChannelDuplicate(midi);
+        midiToRender = &drumMidi;
+    }
+
+    buffer.clear();
+    runPluginOnBuffer(hp, buffer, *midiToRender, true);
+
     return true;
 }
 
@@ -162,7 +314,7 @@ void PluginHostManager::removeTrack(int trackIndex)
     {
         if (entry.first.trackIndex == trackIndex)
         {
-            if (entry.second.processor) entry.second.processor->releaseResources();
+            releaseHostedPlugin(entry.second);
             continue;
         }
         auto k = entry.first;
@@ -177,7 +329,7 @@ void PluginHostManager::removeTrack(int trackIndex)
         int idx = entry.first;
         if (idx == trackIndex)
         {
-            if (entry.second.processor) entry.second.processor->releaseResources();
+            releaseHostedPlugin(entry.second);
             continue;
         }
         updatedInst.emplace(idx > trackIndex ? idx - 1 : idx, std::move(entry.second));
@@ -189,6 +341,10 @@ bool PluginHostManager::loadMasterPlugin(const juce::String& name, int slotIndex
 {
     auto hp = makeHostedPlugin(name);
     if (! hp) return false;
+
+    if (auto* existing = getHostedMasterPlugin(slotIndex))
+        releaseHostedPlugin(*existing);
+
     hostedMasterPlugins[slotIndex] = std::move(*hp);
     return true;
 }
@@ -203,7 +359,7 @@ bool PluginHostManager::removeMasterPlugin(int slotIndex)
 {
     auto it = hostedMasterPlugins.find(slotIndex);
     if (it == hostedMasterPlugins.end()) return false;
-    if (it->second.processor) it->second.processor->releaseResources();
+    releaseHostedPlugin(it->second);
     hostedMasterPlugins.erase(it);
     return true;
 }
@@ -272,8 +428,12 @@ bool PluginHostManager::loadPianoRollInstrument(const juce::String& pluginName)
 
 juce::String PluginHostManager::getPianoRollInstrumentName() const
 {
-    auto* hp = getHostedTrackInstrumentPlugin(-1);
-    return hp != nullptr ? hp->pluginName : juce::String();
+    return getTrackInstrumentPluginName(-1);
+}
+
+bool PluginHostManager::showPianoRollInstrumentEditor()
+{
+    return showTrackInstrumentPluginEditor(-1);
 }
 
 bool PluginHostManager::renderPianoRollInstrument(juce::AudioBuffer<float>& buffer,
@@ -358,9 +518,13 @@ void PluginHostManager::scanExternalPlugins() const
             juce::OwnedArray<juce::PluginDescription> descs;
             fmt->findAllTypesForFile(descs, file.getFullPathName());
             for (auto* d : descs)
-                if (d) externalPlugins.push_back({ makeMenuNameForPlugin(*d),
-                                                   isInInstPluginFolder ? PluginRole::instrument : PluginRole::effect,
-                                                   *d });
+                if (d)
+                {
+                    const auto menuName = makeMenuNameForPlugin(*d);
+                    externalPlugins.push_back({ menuName,
+                                                isInInstPluginFolder ? PluginRole::instrument : PluginRole::effect,
+                                                *d });
+                }
         }
 }
 
