@@ -1035,9 +1035,14 @@ void PianoRollComponent::eraseAt (juce::Point<int> pos)
     int midi = rowToNote (row);
 
     auto before = notes.size();
-    notes.erase (std::remove_if (notes.begin(), notes.end(), [&] (auto& n) {
-        return n.midiNote == midi && beat >= n.startBeat && beat <= n.startBeat + n.lengthBeats;
-    }), notes.end());
+    for (size_t i = 0; i < notes.size();)
+    {
+        auto& n = notes[i];
+        if (n.midiNote == midi && beat >= n.startBeat && beat <= n.startBeat + n.lengthBeats)
+            notes.erase (notes.begin() + (long) i);
+        else
+            ++i;
+    }
 
     if (notes.size() != before)
     {
@@ -1062,9 +1067,13 @@ void PianoRollComponent::deleteSelected()
 {
     if (selectedIds.empty()) return;
 
-    notes.erase (std::remove_if (notes.begin(), notes.end(),
-                                 [this] (auto& n) { return selectedIds.count (n.id) > 0; }),
-                 notes.end());
+    for (size_t i = 0; i < notes.size();)
+    {
+        if (selectedIds.count (notes[i].id) > 0)
+            notes.erase (notes.begin() + (long) i);
+        else
+            ++i;
+    }
     setSelection ({});
     refreshDisplay();
 }

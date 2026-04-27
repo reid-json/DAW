@@ -210,7 +210,8 @@ namespace BuiltInPluginTheme
     {
         g.fillAll (getPalette().background);
 
-        if (auto image = bodySpiceImage(); image.isValid())
+        auto image = bodySpiceImage();
+        if (image.isValid())
         {
             const auto bounds = component.getLocalBounds();
             g.setOpacity (0.92f);

@@ -1,2 +1,0 @@
-/*if needed this section could be code that maybe the whole project can use, just repetative code or something */
-/*for any reason we don't end up needing this could change it to a test module, but just added this in case*/

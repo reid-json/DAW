@@ -115,11 +115,15 @@ bool ArrangementState::moveTimelinePlacement(int placementId, int timelineTrackI
 
 bool ArrangementState::removeTimelinePlacement(int placementId)
 {
-    auto it = std::remove_if(timelinePlacements.begin(), timelinePlacements.end(),
-        [placementId](auto& p) { return p.placementId == placementId; });
-    if (it == timelinePlacements.end()) return false;
-    timelinePlacements.erase(it, timelinePlacements.end());
-    return true;
+    for (size_t i = 0; i < timelinePlacements.size(); ++i)
+    {
+        if (timelinePlacements[i].placementId == placementId)
+        {
+            timelinePlacements.erase(timelinePlacements.begin() + (long)i);
+            return true;
+        }
+    }
+    return false;
 }
 
 void ArrangementState::setPatternTrackRenderer(PatternTrackRenderer renderer)

@@ -584,10 +584,11 @@ void GUIComponent::registerCustomComponentTypes()
             return isMaster ? pluginHostManager.getAvailableMasterPlugins()
                             : pluginHostManager.getAvailableTrackPlugins();
         };
-        component->onGetPluginName = [this] (bool isMaster, int trackIndex, int slotIndex) -> juce::String
+        component->onGetPluginName = [this] (bool isMaster, int trackIndex, int slotIndex)
         {
-            return isMaster ? pluginHostManager.getMasterPluginName(slotIndex)
-                            : pluginHostManager.getTrackPluginName(trackIndex, slotIndex);
+            if (isMaster)
+                return pluginHostManager.getMasterPluginName(slotIndex);
+            return pluginHostManager.getTrackPluginName(trackIndex, slotIndex);
         };
         component->onLoadPlugin = [this] (bool isMaster, int trackIndex, int slotIndex, const juce::String& name)
         {
@@ -663,9 +664,13 @@ void GUIComponent::registerCustomComponentTypes()
                 return;
             }
 
-            auto it = std::remove_if (state.timelineClips.begin(), state.timelineClips.end(),
-                                      [placementId] (const TimelineClipItem& clip) { return clip.placementId == placementId; });
-            state.timelineClips.erase (it, state.timelineClips.end());
+            for (size_t i = 0; i < state.timelineClips.size();)
+            {
+                if (state.timelineClips[i].placementId == placementId)
+                    state.timelineClips.erase (state.timelineClips.begin() + (long) i);
+                else
+                    ++i;
+            }
             repaintDynamicViews();
         };
         component->onAssetRenameRequested = [this] (int assetId, const juce::String& newName)
@@ -1064,20 +1069,16 @@ void GUIComponent::installCallbacks()
         juce::PopupMenu menu;
         menu.setLookAndFeel (fileMenuLookAndFeel.get());
         menu.addItem (1, "Orange", true, currentTheme == ThemePreset::orange);
-        menu.addItem (2, "Blue", true, currentTheme == ThemePreset::blue);
-        menu.addItem (3, "Green", true, currentTheme == ThemePreset::green);
+        menu.addItem (2, "Blue",   true, currentTheme == ThemePreset::blue);
+        menu.addItem (3, "Green",  true, currentTheme == ThemePreset::green);
         menu.addItem (4, "Purple", true, currentTheme == ThemePreset::purple);
 
         menu.showMenuAsync (juce::PopupMenu::Options(), [this] (int result)
         {
-            if (result == 1)
-                applyThemePreset (ThemePreset::orange);
-            else if (result == 2)
-                applyThemePreset (ThemePreset::blue);
-            else if (result == 3)
-                applyThemePreset (ThemePreset::green);
-            else if (result == 4)
-                applyThemePreset (ThemePreset::purple);
+            if (result == 1) applyThemePreset (ThemePreset::orange);
+            if (result == 2) applyThemePreset (ThemePreset::blue);
+            if (result == 3) applyThemePreset (ThemePreset::green);
+            if (result == 4) applyThemePreset (ThemePreset::purple);
         });
     });
 }
@@ -1119,12 +1120,12 @@ void GUIComponent::applyThemePreset (ThemePreset preset)
     themeData.setColour ("recent-clips.scrollbar.track", primaryAccent.withAlpha (0.22f));
 
     const auto presetDef = getThemePresetDefinition (preset);
-    const auto getSpriteImage = [this] (const juce::String& key) -> juce::Image
+    auto getSpriteImage = [this] (const juce::String& key)
     {
         const auto* sprite = findSprite (juce::StringArray { key }, spriteAssets);
         if (sprite != nullptr && ! sprite->isVoid())
             return juce::VariantConverter<juce::Image>::fromVar (*sprite);
-        return {};
+        return juce::Image();
     };
 
     auto headerSpiceNode = jive::findElementWithID (uiTree, juce::Identifier ("headerSpice"));
