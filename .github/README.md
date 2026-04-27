@@ -46,6 +46,10 @@ patterns, and to save them to the recent clips section.
 such as saving project/audio files, changing settings, and setting program themes. 
 
 
+## Software Preview:
+
+<img width="1914" height="999" alt="Image" src="https://github.com/user-attachments/assets/ae51a20e-b8f5-4845-8ed9-3d43939d8e80" />
+
 ## Future Development
 
 - MIDI Support
