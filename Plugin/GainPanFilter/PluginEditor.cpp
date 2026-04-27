@@ -1,20 +1,27 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "../BuiltInPluginTheme.h"
 
 GainPanAudioProcessorEditor::GainPanAudioProcessorEditor (GainPanAudioProcessor& p, juce::AudioProcessorValueTreeState& vts)
     : AudioProcessorEditor (&p), audioProcessor (p)
 {
+    BuiltInPluginTheme::applyEditorTheme (*this);
+
     //add all bisible elements
     addAndMakeVisible(gainSlider);
     gainSlider.setSliderStyle(juce::Slider::SliderStyle::LinearVertical);
+    BuiltInPluginTheme::styleSlider (gainSlider);
     gainAttachment.reset(new juce::AudioProcessorValueTreeState::SliderAttachment(vts, "gain", gainSlider));
     addAndMakeVisible(gainLabel);
     gainLabel.setText("Gain", juce::dontSendNotification);
+    BuiltInPluginTheme::styleLabel (gainLabel);
     addAndMakeVisible(panSlider);
     panSlider.setSliderStyle(juce::Slider::SliderStyle::LinearVertical);
+    BuiltInPluginTheme::styleSlider (panSlider);
     panAttachment.reset(new juce::AudioProcessorValueTreeState::SliderAttachment(vts, "pan", panSlider));
     addAndMakeVisible(panLabel);
     panLabel.setText("Pan", juce::dontSendNotification);
+    BuiltInPluginTheme::styleLabel (panLabel);
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
     setSize(400, 350);
@@ -22,14 +29,12 @@ GainPanAudioProcessorEditor::GainPanAudioProcessorEditor (GainPanAudioProcessor&
 
 GainPanAudioProcessorEditor::~GainPanAudioProcessorEditor()
 {
+    BuiltInPluginTheme::clearEditorTheme (*this);
 }
 
 void GainPanAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
-
-    g.setColour (juce::Colours::white);
-    g.setFont (juce::FontOptions (15.0f));
+    BuiltInPluginTheme::paintEditorBackground (g, *this);
 }
 
 void GainPanAudioProcessorEditor::resized()

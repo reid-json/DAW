@@ -194,6 +194,11 @@ void PianoRollComponent::setOnInstrumentChanged (std::function<void (const juce:
     onInstrumentChangeRequested = std::move (cb);
 }
 
+void PianoRollComponent::setOnShowInstrumentEditor (std::function<void()> cb)
+{
+    onShowInstrumentEditorRequested = std::move (cb);
+}
+
 void PianoRollComponent::setInstrumentName (const juce::String& name)
 {
     instrumentName = name;
@@ -560,6 +565,9 @@ juce::String PianoRollComponent::getToolbarTooltip (juce::Point<int> pos) const
     if (btnRects.erase.contains (pos))
         return "Erase notes from the piano roll";
 
+    if (btnRects.instrument.contains (pos))
+        return "Choose the pattern instrument. Right-click the piano roll to open the plugin editor";
+
     return {};
 }
 
@@ -641,13 +649,41 @@ bool PianoRollComponent::handleButtonClick (juce::Point<int> pos)
     return false;
 }
 
+void PianoRollComponent::showContextMenu()
+{
+    juce::PopupMenu menu;
+    menu.setLookAndFeel (pianoRollLookAndFeel.get());
+    menu.addItem (1, "Open Instrument Editor", instrumentName.isNotEmpty());
+
+    menu.showMenuAsync (juce::PopupMenu::Options(), [this] (int result)
+    {
+        if (result == 1 && onShowInstrumentEditorRequested)
+            onShowInstrumentEditorRequested();
+    });
+}
+
 void PianoRollComponent::mouseMove (const juce::MouseEvent& e)
 {
-    setMouseCursor (isOverButton (e.getPosition())
-                        ? juce::MouseCursor::PointingHandCursor
-                        : juce::MouseCursor::NormalCursor);
+    auto cursor = juce::MouseCursor::NormalCursor;
+    const auto position = e.getPosition();
 
-    setTooltip (getToolbarTooltip (e.getPosition()));
+    if (isOverButton (position))
+    {
+        cursor = juce::MouseCursor::PointingHandCursor;
+    }
+    else if (tool == Tool::select && gridArea.contains (position))
+    {
+        const auto gridPos = toGridPos (position);
+
+        if (findNoteEdge (gridPos).has_value())
+            cursor = juce::MouseCursor::LeftRightResizeCursor;
+        else if (findNoteAt (gridPos).has_value())
+            cursor = juce::MouseCursor::DraggingHandCursor;
+    }
+
+    setMouseCursor (cursor);
+
+    setTooltip (getToolbarTooltip (position));
 }
 
 void PianoRollComponent::mouseExit (const juce::MouseEvent&)
@@ -658,6 +694,12 @@ void PianoRollComponent::mouseExit (const juce::MouseEvent&)
 
 void PianoRollComponent::mouseDown (const juce::MouseEvent& e)
 {
+    if (e.mods.isRightButtonDown())
+    {
+        showContextMenu();
+        return;
+    }
+
     if (handleButtonClick (e.getPosition()))
         return;
 
@@ -993,9 +1035,14 @@ void PianoRollComponent::eraseAt (juce::Point<int> pos)
     int midi = rowToNote (row);
 
     auto before = notes.size();
-    notes.erase (std::remove_if (notes.begin(), notes.end(), [&] (auto& n) {
-        return n.midiNote == midi && beat >= n.startBeat && beat <= n.startBeat + n.lengthBeats;
-    }), notes.end());
+    for (size_t i = 0; i < notes.size();)
+    {
+        auto& n = notes[i];
+        if (n.midiNote == midi && beat >= n.startBeat && beat <= n.startBeat + n.lengthBeats)
+            notes.erase (notes.begin() + (long) i);
+        else
+            ++i;
+    }
 
     if (notes.size() != before)
     {
@@ -1020,9 +1067,13 @@ void PianoRollComponent::deleteSelected()
 {
     if (selectedIds.empty()) return;
 
-    notes.erase (std::remove_if (notes.begin(), notes.end(),
-                                 [this] (auto& n) { return selectedIds.count (n.id) > 0; }),
-                 notes.end());
+    for (size_t i = 0; i < notes.size();)
+    {
+        if (selectedIds.count (notes[i].id) > 0)
+            notes.erase (notes.begin() + (long) i);
+        else
+            ++i;
+    }
     setSelection ({});
     refreshDisplay();
 }
@@ -1157,5 +1208,6 @@ PianoRollWindow::PianoRollWindow()
     setResizeLimits (800, 500, 1800, 1100);
     content = new PianoRollComponent();
     setContentOwned (content, false);
+    tooltipWindow = std::make_unique<juce::TooltipWindow> (content, 500);
     centreWithSize (1100, 700);
 }

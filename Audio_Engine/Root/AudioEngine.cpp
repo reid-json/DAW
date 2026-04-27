@@ -231,22 +231,29 @@ int AudioEngine::importAudioFileAsRecentAsset(const juce::File& file)
     return asset != nullptr ? asset->assetId : -1;
 }
 
-int AudioEngine::createPatternAsset(const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes)
+int AudioEngine::createPatternAsset(const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes, const juce::String& instrumentName)
 {
     auto clip = makePatternClip(name, lengthSeconds);
     juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
     auto* asset = arrangementState.addAsset(name, AssetKind::pianoRollPattern, clip);
-    if (asset != nullptr) asset->patternNotes = std::move(patternNotes);
+    if (asset != nullptr)
+    {
+        asset->patternNotes = std::move(patternNotes);
+        asset->instrumentName = instrumentName;
+    }
     return asset != nullptr ? asset->assetId : -1;
 }
 
-bool AudioEngine::updatePatternAsset(int assetId, const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes)
+bool AudioEngine::updatePatternAsset(int assetId, const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes, const juce::String& instrumentName)
 {
     auto clip = makePatternClip(name, lengthSeconds);
     juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
     bool ok = arrangementState.renameAsset(assetId, name) && arrangementState.updateAssetClip(assetId, clip);
     if (auto* asset = arrangementState.findAsset(assetId))
+    {
         asset->patternNotes = std::move(patternNotes);
+        asset->instrumentName = instrumentName;
+    }
     return ok;
 }
 

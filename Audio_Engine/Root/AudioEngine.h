@@ -42,8 +42,8 @@ public:
     bool removeTimelinePlacement(int placementId);
 
     int importAudioFileAsRecentAsset(const juce::File& file);
-    int createPatternAsset(const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes = {});
-    bool updatePatternAsset(int assetId, const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes = {});
+    int createPatternAsset(const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes = {}, const juce::String& instrumentName = {});
+    bool updatePatternAsset(int assetId, const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes = {}, const juce::String& instrumentName = {});
     bool renameAsset(int assetId, const juce::String& newName);
     void setPatternTrackRenderer(ArrangementState::PatternTrackRenderer renderer);
 

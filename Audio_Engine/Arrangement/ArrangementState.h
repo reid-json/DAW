@@ -29,6 +29,7 @@ struct SourceAsset
     juce::String name;
     AssetKind kind = AssetKind::recording;
     RecordedClip clip;
+    juce::String instrumentName;
     std::vector<PatternNote> patternNotes;
 };
 
@@ -64,6 +65,7 @@ class ArrangementState
 {
 public:
     using PatternTrackRenderer = std::function<bool(int trackIndex,
+                                                    const juce::String& instrumentName,
                                                     juce::AudioBuffer<float>& buffer,
                                                     juce::MidiBuffer& midi,
                                                     double sampleRate)>;

@@ -16,13 +16,23 @@ MainComponent::MainComponent()
 
     tooltipWindow = std::make_unique<juce::TooltipWindow> (this, 500);
     gui = std::make_unique<GUIComponent>(engine.getDeviceManager());
-    engine.setPatternTrackRenderer([this] (int /*trackIndex*/,
+    engine.setPatternTrackRenderer([this] (int trackIndex,
+                                           const juce::String& instrumentName,
                                            juce::AudioBuffer<float>& buffer,
                                            juce::MidiBuffer& midi,
                                            double sampleRate)
     {
-        return gui != nullptr
-            && gui->getPluginHostManager().renderPianoRollInstrument(buffer, midi, sampleRate);
+        if (gui == nullptr)
+            return false;
+
+        if (instrumentName.isNotEmpty()
+            && gui->getPluginHostManager().getTrackInstrumentPluginName(trackIndex) == instrumentName)
+            return gui->getPluginHostManager().renderTrackInstrument(trackIndex, buffer, midi, sampleRate);
+
+        if (instrumentName.isNotEmpty())
+            return gui->getPluginHostManager().renderInstrumentPlugin(instrumentName, buffer, midi, sampleRate);
+
+        return gui->getPluginHostManager().renderTrackInstrument(trackIndex, buffer, midi, sampleRate);
     });
     engine.getIODeviceManager().setFxProcessCallback([this] (juce::AudioBuffer<float>& buffer)
     {
@@ -439,7 +449,8 @@ void MainComponent::handleAssetRenamed(int assetId, const juce::String& newName)
         {
             state.setTrackName(trackIndex, trimmedName);
             state.setTrackPatternName(trackIndex, trimmedName);
-            engine.updatePatternAsset(assetId, trimmedName, getPatternLengthSeconds(pattern), toPatternNotes(pattern));
+            engine.updatePatternAsset(assetId, trimmedName, getPatternLengthSeconds(pattern), toPatternNotes(pattern),
+                                      gui->getPluginHostManager().getTrackInstrumentPluginName(trackIndex));
             syncStateFromEngine();
             return;
         }
@@ -481,9 +492,11 @@ void MainComponent::syncTrackPatternsToAssets()
         auto patternNotes = toPatternNotes(pattern);
 
         if (pattern.assetId <= 0)
-            pattern.assetId = engine.createPatternAsset(patternName, lengthSeconds, std::move(patternNotes));
+            pattern.assetId = engine.createPatternAsset(patternName, lengthSeconds, std::move(patternNotes),
+                                                        gui->getPluginHostManager().getTrackInstrumentPluginName(trackIndex));
         else
-            engine.updatePatternAsset(pattern.assetId, patternName, lengthSeconds, std::move(patternNotes));
+            engine.updatePatternAsset(pattern.assetId, patternName, lengthSeconds, std::move(patternNotes),
+                                      gui->getPluginHostManager().getTrackInstrumentPluginName(trackIndex));
     }
 }
 
@@ -506,7 +519,7 @@ void MainComponent::rescalePatternsForTempo(double oldTempoBpm, double newTempoB
             boundAssetIds.insert(id);
     }
 
-    struct Update { int assetId; juce::String name; double lengthSeconds; std::vector<PatternNote> notes; };
+    struct Update { int assetId; juce::String name; juce::String instrumentName; double lengthSeconds; std::vector<PatternNote> notes; };
     std::vector<Update> updates;
 
     {
@@ -523,14 +536,14 @@ void MainComponent::rescalePatternsForTempo(double oldTempoBpm, double newTempoB
                                   juce::jmax(0.01, n.lengthSeconds * scale),
                                   n.midiNote, n.velocity });
 
-            updates.push_back({ asset.assetId, asset.name,
+            updates.push_back({ asset.assetId, asset.name, asset.instrumentName,
                                 juce::jmax(0.25, asset.clip.getLengthSeconds() * scale),
                                 std::move(notes) });
         }
     }
 
     for (auto& u : updates)
-        engine.updatePatternAsset(u.assetId, u.name, u.lengthSeconds, std::move(u.notes));
+        engine.updatePatternAsset(u.assetId, u.name, u.lengthSeconds, std::move(u.notes), u.instrumentName);
 }
 
 double MainComponent::getPatternLengthSeconds(const TrackPatternState& pattern) const
@@ -566,6 +579,10 @@ void MainComponent::handleSavePattern(int assetId, const std::vector<PianoRoll::
 {
     if (pianoNotes.empty()) return;
 
+    const auto instrumentName = gui->getPluginHostManager().getTrackInstrumentPluginName(gui->getState().selectedTrackIndex);
+    if (instrumentName.isNotEmpty())
+        gui->getPluginHostManager().preloadInstrumentPlugin(instrumentName);
+
     const auto secondsPerBeat = getSecondsPerBeat();
     std::vector<PatternNote> patternNotes;
     patternNotes.reserve(pianoNotes.size());
@@ -586,12 +603,12 @@ void MainComponent::handleSavePattern(int assetId, const std::vector<PianoRoll::
     {
         const auto* asset = engine.getArrangementState().findAsset(assetId);
         if (asset == nullptr || asset->kind != AssetKind::pianoRollPattern) return;
-        engine.updatePatternAsset(assetId, asset->name, lengthSeconds, std::move(patternNotes));
+        engine.updatePatternAsset(assetId, asset->name, lengthSeconds, std::move(patternNotes), instrumentName);
     }
     else
     {
         const auto name = "Pattern " + juce::String((int) gui->getState().savedPatterns.size() + 1);
-        engine.createPatternAsset(name, lengthSeconds, std::move(patternNotes));
+        engine.createPatternAsset(name, lengthSeconds, std::move(patternNotes), instrumentName);
     }
     syncStateFromEngine();
 }
@@ -599,7 +616,9 @@ void MainComponent::handleSavePattern(int assetId, const std::vector<PianoRoll::
 void MainComponent::handlePianoRollInstrumentChange(const juce::String& pluginName)
 {
     juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
-    gui->getPluginHostManager().loadPianoRollInstrument(pluginName);
+    const int trackIndex = gui != nullptr ? gui->getState().selectedTrackIndex : -1;
+    gui->getPluginHostManager().loadTrackInstrumentPlugin(pluginName, trackIndex);
+    gui->getPluginHostManager().preloadInstrumentPlugin(pluginName);
 }
 
 int MainComponent::getNewestRecentAssetId() const {

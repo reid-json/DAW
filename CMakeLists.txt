@@ -5,6 +5,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(DAW_ENABLE_VST2_HOSTING "Enable legacy VST2 .dll plugin hosting" OFF)
+set(DAW_VST2_SDK_PATH "" CACHE PATH "Path to a VST2 SDK folder containing pluginterfaces/vst2.x")
+
 # Fetching JUCE
 include(FetchContent)
 
@@ -18,6 +21,14 @@ FetchContent_Declare(
     GIT_TAG        8.0.0
 )
 FetchContent_MakeAvailable(juce)
+
+if(DAW_ENABLE_VST2_HOSTING)
+    if(NOT DAW_VST2_SDK_PATH)
+        message(FATAL_ERROR "DAW_ENABLE_VST2_HOSTING requires DAW_VST2_SDK_PATH")
+    endif()
+
+    juce_set_vst2_sdk_path("${DAW_VST2_SDK_PATH}")
+endif()
 
 
 # Ensure stylesheet support is compiled in for anything that needs it (including JIVE sources)

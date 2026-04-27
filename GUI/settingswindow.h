@@ -129,29 +129,15 @@ public:
         addAndMakeVisible (sampleRateBox);
         addAndMakeVisible (bufferSizeBox);
 
-        outputDeviceBox.setLookAndFeel (&comboBoxLookAndFeel);
-        outputDeviceBox.setColour (juce::ComboBox::textColourId, juce::Colours::white);
-        outputDeviceBox.setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
-        outputDeviceBox.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xffe68000));
-        outputDeviceBox.setColour (juce::ComboBox::arrowColourId, juce::Colours::white);
-
-        inputDeviceBox.setLookAndFeel (&comboBoxLookAndFeel);
-        inputDeviceBox.setColour (juce::ComboBox::textColourId, juce::Colours::white);
-        inputDeviceBox.setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
-        inputDeviceBox.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xffe68000));
-        inputDeviceBox.setColour (juce::ComboBox::arrowColourId, juce::Colours::white);
-
-        sampleRateBox.setLookAndFeel (&comboBoxLookAndFeel);
-        sampleRateBox.setColour (juce::ComboBox::textColourId, juce::Colours::white);
-        sampleRateBox.setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
-        sampleRateBox.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xffe68000));
-        sampleRateBox.setColour (juce::ComboBox::arrowColourId, juce::Colours::white);
-
-        bufferSizeBox.setLookAndFeel (&comboBoxLookAndFeel);
-        bufferSizeBox.setColour (juce::ComboBox::textColourId, juce::Colours::white);
-        bufferSizeBox.setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
-        bufferSizeBox.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xffe68000));
-        bufferSizeBox.setColour (juce::ComboBox::arrowColourId, juce::Colours::white);
+        juce::ComboBox* boxes[] = { &outputDeviceBox, &inputDeviceBox, &sampleRateBox, &bufferSizeBox };
+        for (auto* box : boxes)
+        {
+            box->setLookAndFeel (&comboBoxLookAndFeel);
+            box->setColour (juce::ComboBox::textColourId, juce::Colours::white);
+            box->setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
+            box->setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xffe68000));
+            box->setColour (juce::ComboBox::arrowColourId, juce::Colours::white);
+        }
 
         outputDeviceBox.onChange = [this]
         {

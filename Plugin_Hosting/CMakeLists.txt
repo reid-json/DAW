@@ -14,5 +14,6 @@ target_link_libraries(Plugin_Hosting
 
 target_compile_definitions(Plugin_Hosting
     PUBLIC
+        JUCE_PLUGINHOST_VST=$<BOOL:${DAW_ENABLE_VST2_HOSTING}>
         JUCE_PLUGINHOST_VST3=1
 )

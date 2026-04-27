@@ -1,9 +1,12 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "../BuiltInPluginTheme.h"
 
 SevenBandEQAudioProcessorEditor::SevenBandEQAudioProcessorEditor(SevenBandEQAudioProcessor& p)
     : AudioProcessorEditor(&p), audioProcessor(p)
 {
+    BuiltInPluginTheme::applyEditorTheme (*this);
+
     for (int i = 0; i < 7; ++i)
     {
         bandAttachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
@@ -15,18 +18,20 @@ SevenBandEQAudioProcessorEditor::SevenBandEQAudioProcessorEditor(SevenBandEQAudi
         addAndMakeVisible(bandSliders[i]);
         bandSliders[i].setSliderStyle(juce::Slider::LinearVertical);
         bandSliders[i].setTextBoxStyle(juce::Slider::TextBoxBelow, true, 50, 20);
+        BuiltInPluginTheme::styleSlider (bandSliders[i]);
     }
 
     setSize(400, 300);
 }
 
-SevenBandEQAudioProcessorEditor::~SevenBandEQAudioProcessorEditor() = default;
+SevenBandEQAudioProcessorEditor::~SevenBandEQAudioProcessorEditor()
+{
+    BuiltInPluginTheme::clearEditorTheme (*this);
+}
 
 void SevenBandEQAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
-    g.setColour(juce::Colours::white);
-    g.setFont(15.0f);
+    BuiltInPluginTheme::paintEditorBackground (g, *this);
 }
 
 void SevenBandEQAudioProcessorEditor::resized()

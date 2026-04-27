@@ -13,9 +13,9 @@ namespace PianoRoll
     static constexpr int keyWidth    = 96;
     static constexpr int rowHeight   = 24;
     static constexpr int beatWidth   = 48;
-    static constexpr int numRows     = 36;
+    static constexpr int numRows     = 73;
     static constexpr int numBeats    = 32;
-    static constexpr int topNote     = 84; // C6
+    static constexpr int topNote     = 96; // C7 down to C1, covering common drum maps
 
     struct Note
     {
@@ -54,6 +54,7 @@ public:
     void setOnSavePattern (std::function<void (const std::vector<PianoRoll::Note>&)> cb);
     void setOnGetAvailableInstruments (std::function<juce::StringArray()> cb);
     void setOnInstrumentChanged (std::function<void (const juce::String&)> cb);
+    void setOnShowInstrumentEditor (std::function<void()> cb);
     void setInstrumentName (const juce::String& name);
     void setThemeAssets (juce::Image newHeaderSpiceImage, juce::Image newBodySpiceImage, juce::Colour newAccentColour);
 
@@ -121,6 +122,7 @@ private:
     bool isOverButton (juce::Point<int> pos) const;
     juce::String getToolbarTooltip (juce::Point<int> pos) const;
     bool handleButtonClick (juce::Point<int> pos);
+    void showContextMenu();
 
     std::optional<size_t> findNoteAt (juce::Point<int> pos) const;
     std::optional<std::pair<size_t, Edge>> findNoteEdge (juce::Point<int> pos) const;
@@ -174,11 +176,12 @@ private:
 
     Tool tool = Tool::select;
     int nextId = 1;
-    int scrollX = 0, scrollY = 0;
+    int scrollX = 0, scrollY = (PianoRoll::topNote - 48) * PianoRoll::rowHeight;
     juce::String instrumentName;
     std::function<void (const std::vector<PianoRoll::Note>&)> onSavePatternRequested;
     std::function<juce::StringArray()> onGetAvailableInstruments;
     std::function<void (const juce::String&)> onInstrumentChangeRequested;
+    std::function<void()> onShowInstrumentEditorRequested;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PianoRollComponent)
 };
@@ -192,5 +195,6 @@ public:
     PianoRollComponent* content = nullptr;
 
 private:
+    std::unique_ptr<juce::TooltipWindow> tooltipWindow;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PianoRollWindow)
 };
