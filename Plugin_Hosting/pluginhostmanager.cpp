@@ -9,7 +9,10 @@
 namespace { constexpr const char* externalPluginsPath = "ExternalPlugins"; }
 
 PluginHostManager::PluginHostManager()  { formatManager.addDefaultFormats(); }
-PluginHostManager::~PluginHostManager() = default;
+PluginHostManager::~PluginHostManager()
+{
+    clearAllPlugins();
+}
 
 PluginHostManager::PluginEditorWindow::PluginEditorWindow(const juce::String& title,
                                                           std::unique_ptr<juce::AudioProcessorEditor> ed,
@@ -145,11 +148,17 @@ static juce::MidiBuffer withDrumChannelDuplicate(const juce::MidiBuffer& midi)
 
         if (message.isNoteOnOrOff())
         {
-            auto mappedMessage = message;
+            result.addEvent(message, metadata.samplePosition);
+
             const auto padIndex = juce::jlimit(0, (int) std::size(drumPadNotes) - 1, std::abs(message.getNoteNumber() - 60) % (int) std::size(drumPadNotes));
-            mappedMessage.setNoteNumber(drumPadNotes[padIndex]);
-            mappedMessage.setChannel(1);
-            result.addEvent(mappedMessage, metadata.samplePosition);
+            auto mappedChannelOne = message;
+            mappedChannelOne.setNoteNumber(drumPadNotes[padIndex]);
+            mappedChannelOne.setChannel(1);
+            result.addEvent(mappedChannelOne, metadata.samplePosition);
+
+            auto mappedChannelTen = mappedChannelOne;
+            mappedChannelTen.setChannel(10);
+            result.addEvent(mappedChannelTen, metadata.samplePosition);
         }
         else
         {
@@ -205,6 +214,16 @@ bool PluginHostManager::showTrackPluginEditor(int trackIndex, int slotIndex)
     return true;
 }
 
+juce::MemoryBlock PluginHostManager::getTrackPluginState(int trackIndex, int slotIndex) const
+{
+    return getProcessorState(getHostedTrackPlugin(trackIndex, slotIndex));
+}
+
+bool PluginHostManager::setTrackPluginState(int trackIndex, int slotIndex, const juce::MemoryBlock& state)
+{
+    return setProcessorState(getHostedTrackPlugin(trackIndex, slotIndex), state);
+}
+
 bool PluginHostManager::loadTrackInstrumentPlugin(const juce::String& name, int trackIndex)
 {
     auto hp = makeHostedPlugin(name);
@@ -240,6 +259,16 @@ bool PluginHostManager::showTrackInstrumentPluginEditor(int trackIndex)
     hp->editorWindow->setVisible(true);
     hp->editorWindow->toFront(true);
     return true;
+}
+
+juce::MemoryBlock PluginHostManager::getTrackInstrumentPluginState(int trackIndex) const
+{
+    return getProcessorState(getHostedTrackInstrumentPlugin(trackIndex));
+}
+
+bool PluginHostManager::setTrackInstrumentPluginState(int trackIndex, const juce::MemoryBlock& state)
+{
+    return setProcessorState(getHostedTrackInstrumentPlugin(trackIndex), state);
 }
 
 bool PluginHostManager::renderTrackInstrument(int trackIndex,
@@ -382,6 +411,35 @@ bool PluginHostManager::showMasterPluginEditor(int slotIndex)
     return true;
 }
 
+juce::MemoryBlock PluginHostManager::getMasterPluginState(int slotIndex) const
+{
+    return getProcessorState(getHostedMasterPlugin(slotIndex));
+}
+
+bool PluginHostManager::setMasterPluginState(int slotIndex, const juce::MemoryBlock& state)
+{
+    return setProcessorState(getHostedMasterPlugin(slotIndex), state);
+}
+
+void PluginHostManager::clearAllPlugins()
+{
+    for (auto& entry : hostedTrackPlugins)
+        releaseHostedPlugin(entry.second);
+    hostedTrackPlugins.clear();
+
+    for (auto& entry : hostedTrackInstrumentPlugins)
+        releaseHostedPlugin(entry.second);
+    hostedTrackInstrumentPlugins.clear();
+
+    for (auto& entry : hostedMasterPlugins)
+        releaseHostedPlugin(entry.second);
+    hostedMasterPlugins.clear();
+
+    for (auto& entry : hostedPatternInstrumentPlugins)
+        releaseHostedPlugin(entry.second);
+    hostedPatternInstrumentPlugins.clear();
+}
+
 void PluginHostManager::setBuiltInPluginTheme (juce::Colour accentColour, juce::Image bodySpiceImage)
 {
     BuiltInPluginTheme::setAccentColour (accentColour);
@@ -469,6 +527,23 @@ bool PluginHostManager::isBuiltInPluginName (const juce::String& pluginName)
 {
     const auto names = getBuiltInPluginNames (PluginRole::effect);
     return names.contains (pluginName);
+}
+
+juce::MemoryBlock PluginHostManager::getProcessorState(const HostedPlugin* plugin)
+{
+    juce::MemoryBlock state;
+    if (plugin != nullptr && plugin->processor != nullptr)
+        plugin->processor->getStateInformation(state);
+    return state;
+}
+
+bool PluginHostManager::setProcessorState(HostedPlugin* plugin, const juce::MemoryBlock& state)
+{
+    if (plugin == nullptr || plugin->processor == nullptr || state.getSize() == 0)
+        return false;
+
+    plugin->processor->setStateInformation(state.getData(), (int) state.getSize());
+    return true;
 }
 
 juce::File PluginHostManager::getExternalPluginsDir() const

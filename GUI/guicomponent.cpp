@@ -788,6 +788,11 @@ GUIComponent::GUIComponent(juce::AudioDeviceManager& sharedDeviceManager)
 
 GUIComponent::~GUIComponent()
 {
+    settingsWindow.reset();
+    pianoRollWindow.reset();
+    pluginHostManager.clearAllPlugins();
+    headerButtonOverlays.clear();
+    root.reset();
     setLookAndFeel (nullptr);
 }
 
@@ -1041,7 +1046,9 @@ void GUIComponent::installCallbacks()
 
     bindBtn ("pianoRollBtn", [this]
     {
-        openPianoRollForPattern (getSelectedTrackPatternNotes(), getSelectedTrackPatternAssetId());
+        openPianoRollForPattern (getSelectedTrackPatternNotes(),
+                                 getSelectedTrackPatternAssetId(),
+                                 pluginHostManager.getTrackInstrumentPluginName(state.selectedTrackIndex));
     });
 
     bindBtn ("fileBtn", [this]
@@ -1187,12 +1194,12 @@ juce::StringArray GUIComponent::getAvailableTrackInputs() const
     return inputs;
 }
 
-void GUIComponent::openPianoRollForPattern(std::vector<PianoRoll::Note> notes, int assetId)
+void GUIComponent::openPianoRollForPattern(std::vector<PianoRoll::Note> notes, int assetId, const juce::String& instrumentName)
 {
     ensurePianoRollWindow();
     currentPianoRollAssetId = assetId;
     pianoRollWindow->content->setNotes(std::move(notes));
-    pianoRollWindow->content->setInstrumentName(pluginHostManager.getTrackInstrumentPluginName(state.selectedTrackIndex));
+    pianoRollWindow->content->setInstrumentName(instrumentName);
     pianoRollWindow->setVisible(true);
     pianoRollWindow->toFront(true);
 }
@@ -1237,10 +1244,10 @@ void GUIComponent::ensurePianoRollWindow()
 
     pianoRollWindow = std::make_unique<PianoRollWindow>();
     auto* pr = pianoRollWindow->content;
-    pr->setOnSavePattern ([this] (const std::vector<PianoRoll::Note>& notes)
+    pr->setOnSavePattern ([this] (const std::vector<PianoRoll::Note>& notes, const juce::String& instrumentName)
     {
         if (onSavePatternRequested)
-            onSavePatternRequested (currentPianoRollAssetId, notes);
+            onSavePatternRequested (currentPianoRollAssetId, notes, instrumentName);
     });
     pr->setOnGetAvailableInstruments ([this]
     {
@@ -1248,6 +1255,7 @@ void GUIComponent::ensurePianoRollWindow()
     });
     pr->setOnInstrumentChanged ([this] (const juce::String& name)
     {
+        state.getTrackPatternState(state.selectedTrackIndex).instrumentName = name;
         if (onPianoRollInstrumentChangeRequested)
             onPianoRollInstrumentChangeRequested (name);
     });

@@ -68,6 +68,7 @@ struct TrackMixerState
         juce::String name;
         bool hasPlugin = false;
         bool bypassed = false;
+        juce::MemoryBlock pluginState;
     };
 
     std::vector<FxSlotState> fxSlots;
@@ -92,11 +93,14 @@ struct TrackPatternState
 {
     int assetId = -1;
     juce::String name = "Pattern 1";
+    juce::String instrumentName;
+    juce::MemoryBlock instrumentState;
     std::vector<TrackPatternNote> notes;
 
     bool operator== (const TrackPatternState& o) const
     {
-        return assetId == o.assetId && name == o.name && notes == o.notes;
+        return assetId == o.assetId && name == o.name
+            && instrumentName == o.instrumentName && notes == o.notes;
     }
 };
 
@@ -110,6 +114,9 @@ struct MasterMixerState
 
 struct DAWState
 {
+    static constexpr double minTempoBpm = 40.0;
+    static constexpr double maxTempoBpm = 400.0;
+
     enum class TransportState { stopped, playing, paused };
 
     TransportState transportState = TransportState::stopped;
@@ -142,7 +149,7 @@ struct DAWState
     void pause()   { transportState = TransportState::paused; }
     void stop()    { transportState = TransportState::stopped; playhead = 0.0; isRecording = false; }
     void toggleAudioMonitoring() { audioMonitoringEnabled = ! audioMonitoringEnabled; }
-    void setTempoBpm (double bpm) { tempoBpm = juce::jlimit (40.0, 240.0, bpm); }
+    void setTempoBpm (double bpm) { tempoBpm = juce::jlimit (minTempoBpm, maxTempoBpm, bpm); }
 
     void addTrack()
     {

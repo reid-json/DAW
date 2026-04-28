@@ -19,6 +19,26 @@ static juce::String readString(std::ifstream& in)
     return juce::String(buf);
 }
 
+static void writeMemoryBlock(std::ofstream& out, const juce::MemoryBlock& block)
+{
+    const auto size = (int32_t) block.getSize();
+    out.write(reinterpret_cast<const char*>(&size), sizeof(size));
+    if (size > 0)
+        out.write(static_cast<const char*>(block.getData()), size);
+}
+
+static juce::MemoryBlock readMemoryBlock(std::ifstream& in)
+{
+    int32_t size = 0;
+    in.read(reinterpret_cast<char*>(&size), sizeof(size));
+    if (size <= 0)
+        return {};
+
+    juce::MemoryBlock block((size_t) size);
+    in.read(static_cast<char*>(block.getData()), size);
+    return block;
+}
+
 template <typename T>
 static void writeVal(std::ofstream& out, const T& val)
 {
@@ -41,7 +61,7 @@ bool saveProject(const juce::File& file,
     if (!out.is_open()) return false;
 
     out.write("DAWP", 4);
-    writeVal<uint32_t>(out, 3);
+    writeVal<uint32_t>(out, 4);
 
     writeVal(out, dawState.tempoBpm);
     writeVal(out, (int32_t) dawState.trackCount);
@@ -57,6 +77,7 @@ bool saveProject(const juce::File& file,
         writeString(out, slot.name);
         writeVal(out, slot.hasPlugin);
         writeVal(out, slot.bypassed);
+        writeMemoryBlock(out, slot.pluginState);
     }
 
     writeVal(out, (int32_t) dawState.trackMixerStates.size());
@@ -77,6 +98,7 @@ bool saveProject(const juce::File& file,
             writeString(out, slot.name);
             writeVal(out, slot.hasPlugin);
             writeVal(out, slot.bypassed);
+            writeMemoryBlock(out, slot.pluginState);
         }
     }
 
@@ -85,6 +107,8 @@ bool saveProject(const juce::File& file,
     {
         writeVal(out, (int32_t) pattern.assetId);
         writeString(out, pattern.name);
+        writeString(out, pattern.instrumentName);
+        writeMemoryBlock(out, pattern.instrumentState);
 
         writeVal(out, (int32_t) pattern.notes.size());
         for (const auto& note : pattern.notes)
@@ -172,7 +196,7 @@ bool loadProject(const juce::File& file,
     in.read(magic, 4);
     if (std::string(magic, 4) != "DAWP") return false;
     const auto fileVersion = readVal<uint32_t>(in);
-    if (fileVersion < 2 || fileVersion > 3) return false;
+    if (fileVersion < 2 || fileVersion > 4) return false;
 
     dawState.tempoBpm = readVal<double>(in);
     dawState.trackCount = readVal<int32_t>(in);
@@ -188,6 +212,8 @@ bool loadProject(const juce::File& file,
         slot.name = readString(in);
         slot.hasPlugin = readVal<bool>(in);
         slot.bypassed = readVal<bool>(in);
+        if (fileVersion >= 4)
+            slot.pluginState = readMemoryBlock(in);
     }
 
     dawState.trackMixerStates.resize((size_t) readVal<int32_t>(in));
@@ -208,6 +234,8 @@ bool loadProject(const juce::File& file,
             slot.name = readString(in);
             slot.hasPlugin = readVal<bool>(in);
             slot.bypassed = readVal<bool>(in);
+            if (fileVersion >= 4)
+                slot.pluginState = readMemoryBlock(in);
         }
     }
 
@@ -216,6 +244,11 @@ bool loadProject(const juce::File& file,
     {
         pattern.assetId = readVal<int32_t>(in);
         pattern.name = readString(in);
+        if (fileVersion >= 4)
+        {
+            pattern.instrumentName = readString(in);
+            pattern.instrumentState = readMemoryBlock(in);
+        }
 
         pattern.notes.resize((size_t) readVal<int32_t>(in));
         for (auto& note : pattern.notes)

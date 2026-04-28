@@ -26,10 +26,14 @@ public:
     bool loadTrackPlugin(const juce::String& pluginName, int trackIndex, int slotIndex);
     bool removeTrackPlugin(int trackIndex, int slotIndex);
     bool showTrackPluginEditor(int trackIndex, int slotIndex);
+    juce::MemoryBlock getTrackPluginState(int trackIndex, int slotIndex) const;
+    bool setTrackPluginState(int trackIndex, int slotIndex, const juce::MemoryBlock& state);
 
     bool loadTrackInstrumentPlugin(const juce::String& pluginName, int trackIndex);
     juce::String getTrackInstrumentPluginName(int trackIndex) const;
     bool showTrackInstrumentPluginEditor(int trackIndex);
+    juce::MemoryBlock getTrackInstrumentPluginState(int trackIndex) const;
+    bool setTrackInstrumentPluginState(int trackIndex, const juce::MemoryBlock& state);
     bool renderTrackInstrument(int trackIndex, juce::AudioBuffer<float>& buffer,
                                juce::MidiBuffer& midi, double sampleRate);
     bool preloadInstrumentPlugin(const juce::String& pluginName);
@@ -44,6 +48,9 @@ public:
     bool loadMasterPlugin(const juce::String& pluginName, int slotIndex);
     bool removeMasterPlugin(int slotIndex);
     bool showMasterPluginEditor(int slotIndex);
+    juce::MemoryBlock getMasterPluginState(int slotIndex) const;
+    bool setMasterPluginState(int slotIndex, const juce::MemoryBlock& state);
+    void clearAllPlugins();
 
     void processTrackEffects(int trackIndex, juce::AudioBuffer<float>& buffer);
     void processMasterEffects(juce::AudioBuffer<float>& buffer);
@@ -116,6 +123,8 @@ private:
     HostedPlugin* getHostedMasterPlugin(int slotIndex);
     const HostedPlugin* getHostedMasterPlugin(int slotIndex) const;
     static bool isBuiltInPluginName (const juce::String& pluginName);
+    static juce::MemoryBlock getProcessorState(const HostedPlugin* plugin);
+    static bool setProcessorState(HostedPlugin* plugin, const juce::MemoryBlock& state);
 
     mutable juce::AudioPluginFormatManager formatManager;
     mutable std::vector<ExternalPluginInfo> externalPlugins;

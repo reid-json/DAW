@@ -35,6 +35,26 @@ namespace PianoRoll
 
 namespace
 {
+    struct DrumLane
+    {
+        int midi = 36;
+        const char* name = "Kick";
+    };
+
+    static constexpr DrumLane drumLanes[] = {
+        { 49, "Crash" },
+        { 51, "Ride" },
+        { 48, "High Tom" },
+        { 45, "Mid Tom" },
+        { 41, "Low Tom" },
+        { 46, "Open Hat" },
+        { 42, "Closed Hat" },
+        { 40, "Rim" },
+        { 38, "Snare" },
+        { 36, "Kick" },
+        { 35, "Low Kick" }
+    };
+
     const auto pianoRollBackground = juce::Colour (0xff18181b);
     const auto pianoRollPanel = juce::Colour (0xff18181b);
     const auto pianoRollGridDark = juce::Colour (0xff18181b);
@@ -179,7 +199,7 @@ void PianoRollComponent::setNotes (std::vector<PianoRoll::Note> newNotes)
     refreshDisplay();
 }
 
-void PianoRollComponent::setOnSavePattern (std::function<void (const std::vector<PianoRoll::Note>&)> cb)
+void PianoRollComponent::setOnSavePattern (std::function<void (const std::vector<PianoRoll::Note>&, const juce::String&)> cb)
 {
     onSavePatternRequested = std::move (cb);
 }
@@ -201,7 +221,11 @@ void PianoRollComponent::setOnShowInstrumentEditor (std::function<void()> cb)
 
 void PianoRollComponent::setInstrumentName (const juce::String& name)
 {
+    const bool wasDrumMode = isDrumMode();
     instrumentName = name;
+    if (isDrumMode() && ! wasDrumMode)
+        scrollY = 0;
+    updateViewport();
     repaint();
 }
 
@@ -248,17 +272,18 @@ void PianoRollComponent::paintKeys (juce::Graphics& g)
     using namespace PianoRoll;
 
     g.fillAll (juce::Colour::fromRGB (232, 235, 240));
+    const int rowCount = getDisplayRowCount();
 
     for (int pass = 0; pass < 2; ++pass)
     {
-        for (int row = 0; row < numRows; ++row)
+        for (int row = 0; row < rowCount; ++row)
         {
-            int midi = topNote - row;
             int y = keyArea.getY() + row * rowHeight - scrollY;
             if (y >= keyArea.getBottom() || y + rowHeight <= keyArea.getY()) continue;
 
-            bool black = isBlackKey (midi);
+            bool black = isDarkDisplayRow (row);
             if ((pass == 0) == black) continue;
+            const auto label = getDisplayLabelForMidi (rowToMidiForDisplay (row));
 
             if (black)
             {
@@ -273,8 +298,7 @@ void PianoRollComponent::paintKeys (juce::Graphics& g)
 
                 g.setColour (juce::Colours::white.withAlpha (0.88f));
                 g.setFont (12.0f);
-                g.drawText (getNoteName (midi), r.toNearestInt().withTrimmedLeft (10),
-                            juce::Justification::centredLeft);
+                g.drawText (label, r.toNearestInt().withTrimmedLeft (10), juce::Justification::centredLeft);
             }
             else
             {
@@ -286,8 +310,7 @@ void PianoRollComponent::paintKeys (juce::Graphics& g)
 
                 g.setColour (juce::Colours::black.withAlpha (0.78f));
                 g.setFont (12.0f);
-                g.drawText (getNoteName (midi), r.withTrimmedLeft (10),
-                            juce::Justification::centredLeft);
+                g.drawText (label, r.withTrimmedLeft (10), juce::Justification::centredLeft);
             }
         }
     }
@@ -301,15 +324,14 @@ void PianoRollComponent::paintGrid (juce::Graphics& g)
     using namespace PianoRoll;
 
     int gx = gridArea.getX();
+    const int rowCount = getDisplayRowCount();
 
-    for (int row = 0; row < numRows; ++row)
+    for (int row = 0; row < rowCount; ++row)
     {
-        int midi = topNote - row;
         int y = gridArea.getY() + row * rowHeight - scrollY;
         if (y >= gridArea.getBottom() || y + rowHeight <= gridArea.getY()) continue;
 
-        g.setColour (isBlackKey (midi) ? pianoRollGridDark
-                                       : pianoRollGridLight);
+        g.setColour (isDarkDisplayRow (row) ? pianoRollGridDark : pianoRollGridLight);
         g.fillRect (gx, y, gridArea.getWidth(), rowHeight);
 
         g.setColour (juce::Colours::white.withAlpha (0.05f));
@@ -338,7 +360,7 @@ void PianoRollComponent::paintGrid (juce::Graphics& g)
         int x = gx + beat * beatWidth - scrollX;
         if (x < gx - beatWidth || x > gridArea.getRight() + beatWidth) continue;
 
-        bool major = (beat % 4 == 0);
+        bool major = (beat % beatsPerBar == 0);
         g.setColour (juce::Colours::white.withAlpha (major ? 0.14f : 0.07f));
         g.drawVerticalLine (x, (float) gridArea.getY(), (float) gridArea.getBottom());
 
@@ -360,11 +382,11 @@ void PianoRollComponent::paintNotes (juce::Graphics& g)
 
     for (auto& note : allNotes)
     {
-        int row = noteToRow (note.midiNote);
-        if (row < 0 || row >= numRows) continue;
+        int row = midiToRowForDisplay (note.midiNote);
+        if (row < 0 || row >= getDisplayRowCount()) continue;
 
-        auto r = getNoteBounds (note).translated ((float) (gridArea.getX() - scrollX),
-                                                   (float) (gridArea.getY() - scrollY));
+        auto r = getNoteBoundsForDisplay (note).translated ((float) (gridArea.getX() - scrollX),
+                                                            (float) (gridArea.getY() - scrollY));
         bool selected = selectedIds.count (note.id) > 0;
 
         g.setColour (selected ? accentColour.brighter (0.18f)
@@ -451,7 +473,7 @@ void PianoRollComponent::paintTimeline (juce::Graphics& g, juce::Rectangle<int> 
         int x = area.getX() + beat * beatWidth - scrollX;
         if (x < area.getX() - beatWidth || x > area.getRight() + beatWidth) continue;
 
-        bool major = (beat % 4 == 0);
+        bool major = (beat % beatsPerBar == 0);
         g.setColour (juce::Colours::white.withAlpha (major ? 0.16f : 0.08f));
         g.drawVerticalLine (x, (float) area.getY(), (float) area.getBottom());
 
@@ -460,10 +482,13 @@ void PianoRollComponent::paintTimeline (juce::Graphics& g, juce::Rectangle<int> 
             g.setColour (juce::Colours::white.withAlpha (0.04f));
             g.drawVerticalLine (x + beatWidth / 2, (float) area.getY() + 18.0f, (float) area.getBottom());
 
-            g.setColour (pianoRollText);
-            g.setFont (juce::Font (13.0f, juce::Font::bold));
-            g.drawText (juce::String (beat + 1), x + 4, area.getY() + 12, 28, 14,
-                        juce::Justification::centredLeft);
+            if (major)
+            {
+                g.setColour (pianoRollText);
+                g.setFont (juce::Font (13.0f, juce::Font::bold));
+                g.drawText (juce::String (beat / beatsPerBar + 1), x + 4, area.getY() + 12, 28, 14,
+                            juce::Justification::centredLeft);
+            }
         }
     }
 
@@ -638,7 +663,7 @@ bool PianoRollComponent::handleButtonClick (juce::Point<int> pos)
 
         if (onSavePatternRequested)
         {
-            onSavePatternRequested (notes);
+            onSavePatternRequested (notes, instrumentName);
             notes.clear();
             selectedIds.clear();
             nextId = 1;
@@ -798,8 +823,8 @@ std::optional<size_t> PianoRollComponent::findNoteAt (juce::Point<int> pos) cons
     using namespace PianoRoll;
 
     double clickBeat = pos.x / (double) beatWidth;
-    int row = juce::jlimit (0, numRows - 1, pos.y / rowHeight);
-    int midi = rowToNote (row);
+    int row = juce::jlimit (0, getDisplayRowCount() - 1, pos.y / rowHeight);
+    int midi = rowToMidiForDisplay (row);
 
     for (size_t i = notes.size(); i-- > 0;)
     {
@@ -874,7 +899,7 @@ void PianoRollComponent::updateMarquee (juce::Point<int> pos)
         juce::jmax (marqueeState->start.y, pos.y)).toFloat();
 
     for (auto& n : notes)
-        if (PianoRoll::getNoteBounds (n).intersects (rect))
+        if (getNoteBoundsForDisplay (n).intersects (rect))
             sel.insert (n.id);
 
     setSelection (std::move (sel));
@@ -886,8 +911,8 @@ void PianoRollComponent::startMove (size_t index, juce::Point<int> pos)
     using namespace PianoRoll;
     auto& n = notes[index];
     double clickBeat = pos.x / (double) beatWidth;
-    int clickRow = juce::jlimit (0, numRows - 1, pos.y / rowHeight);
-    int noteRow = noteToRow (n.midiNote);
+    int clickRow = juce::jlimit (0, getDisplayRowCount() - 1, pos.y / rowHeight);
+    int noteRow = midiToRowForDisplay (n.midiNote);
 
     std::vector<MoveSnapshot> snaps;
     for (auto& c : notes)
@@ -908,14 +933,14 @@ void PianoRollComponent::updateMove (juce::Point<int> pos)
     double snapped = std::round (rawBeat / step) * step;
     double timeDelta = snapped - moving->anchorBeat;
 
-    int ptrRow = juce::jlimit (0, numRows - 1, pos.y / rowHeight);
-    int rowDelta = (ptrRow - moving->rowOffset) - noteToRow (moving->anchorNote);
+    int ptrRow = juce::jlimit (0, getDisplayRowCount() - 1, pos.y / rowHeight);
+    int rowDelta = (ptrRow - moving->rowOffset) - midiToRowForDisplay (moving->anchorNote);
 
     for (auto& s : moving->snapshots)
     {
         timeDelta = juce::jlimit (-s.startBeat, (double) numBeats - (s.startBeat + s.lengthBeats), timeDelta);
-        int sRow = noteToRow (s.midiNote);
-        rowDelta = juce::jlimit (-sRow, (numRows - 1) - sRow, rowDelta);
+        int sRow = midiToRowForDisplay (s.midiNote);
+        rowDelta = juce::jlimit (-sRow, (getDisplayRowCount() - 1) - sRow, rowDelta);
     }
 
     for (auto& s : moving->snapshots)
@@ -924,8 +949,8 @@ void PianoRollComponent::updateMove (juce::Point<int> pos)
         if (! idx.has_value()) continue;
         auto& note = notes[*idx];
         note.startBeat = s.startBeat + timeDelta;
-        note.midiNote = rowToNote (noteToRow (s.midiNote) + rowDelta);
-        note.label = getNoteName (note.midiNote);
+        note.midiNote = rowToMidiForDisplay (midiToRowForDisplay (s.midiNote) + rowDelta);
+        note.label = getDisplayLabelForMidi (note.midiNote);
     }
     refreshDisplay();
 }
@@ -969,14 +994,14 @@ void PianoRollComponent::updateResize (juce::Point<int> pos)
 void PianoRollComponent::startDraw (juce::Point<int> pos)
 {
     using namespace PianoRoll;
-    int row = juce::jlimit (0, numRows - 1, pos.y / rowHeight);
+    int row = juce::jlimit (0, getDisplayRowCount() - 1, pos.y / rowHeight);
     double raw = juce::jlimit (0.0, (double) numBeats, pos.x / (double) beatWidth);
     double step = getStepBeats();
     double start = std::floor (raw / step) * step;
     start = juce::jlimit (0.0, (double) numBeats - step, start);
-    int midi = rowToNote (row);
+    int midi = rowToMidiForDisplay (row);
 
-    drawingNote = PianoRoll::Note { nextId++, start, step, midi, getNoteName (midi) };
+    drawingNote = PianoRoll::Note { nextId++, start, step, midi, getDisplayLabelForMidi (midi) };
     refreshDisplay();
 }
 
@@ -1030,9 +1055,9 @@ void PianoRollComponent::commitDraw()
 void PianoRollComponent::eraseAt (juce::Point<int> pos)
 {
     using namespace PianoRoll;
-    int row = juce::jlimit (0, numRows - 1, pos.y / rowHeight);
+    int row = juce::jlimit (0, getDisplayRowCount() - 1, pos.y / rowHeight);
     double beat = pos.x / (double) beatWidth;
-    int midi = rowToNote (row);
+    int midi = rowToMidiForDisplay (row);
 
     auto before = notes.size();
     for (size_t i = 0; i < notes.size();)
@@ -1109,16 +1134,16 @@ void PianoRollComponent::nudgeSelected (double beatDelta, int rowDelta)
     {
         if (! selectedIds.count (n.id)) continue;
         beatDelta = juce::jlimit (-n.startBeat, (double) numBeats - (n.startBeat + n.lengthBeats), beatDelta);
-        int row = noteToRow (n.midiNote);
-        rowDelta = juce::jlimit (-row, (numRows - 1) - row, rowDelta);
+        int row = midiToRowForDisplay (n.midiNote);
+        rowDelta = juce::jlimit (-row, (getDisplayRowCount() - 1) - row, rowDelta);
     }
 
     for (auto& n : notes)
     {
         if (! selectedIds.count (n.id)) continue;
         n.startBeat += beatDelta;
-        n.midiNote = rowToNote (noteToRow (n.midiNote) + rowDelta);
-        n.label = getNoteName (n.midiNote);
+        n.midiNote = rowToMidiForDisplay (midiToRowForDisplay (n.midiNote) + rowDelta);
+        n.label = getDisplayLabelForMidi (n.midiNote);
     }
     refreshDisplay();
 }
@@ -1162,14 +1187,14 @@ void PianoRollComponent::updateScrollbars()
 {
     using namespace PianoRoll;
     int cw = numBeats * beatWidth;
-    int ch = numRows * rowHeight;
+    int ch = getDisplayRowCount() * rowHeight;
 
     hScroll.setRangeLimits (0.0, (double) cw);
-    hScroll.setCurrentRange ((double) scrollX, (double) scrollX + gridArea.getWidth());
+    hScroll.setCurrentRange ((double) scrollX, (double) scrollX + gridArea.getWidth(), juce::dontSendNotification);
     hScroll.setSingleStepSize (getStepBeats() * beatWidth);
 
     vScroll.setRangeLimits (0.0, (double) ch);
-    vScroll.setCurrentRange ((double) scrollY, (double) scrollY + gridArea.getHeight());
+    vScroll.setCurrentRange ((double) scrollY, (double) scrollY + gridArea.getHeight(), juce::dontSendNotification);
     vScroll.setSingleStepSize ((double) rowHeight);
 }
 
@@ -1177,13 +1202,13 @@ void PianoRollComponent::updateViewport()
 {
     using namespace PianoRoll;
     int maxX = juce::jmax (0, numBeats * beatWidth - gridArea.getWidth());
-    int maxY = juce::jmax (0, numRows * rowHeight - gridArea.getHeight());
+    int maxY = juce::jmax (0, getDisplayRowCount() * rowHeight - gridArea.getHeight());
 
     scrollX = juce::jlimit (0, maxX, scrollX);
     scrollY = juce::jlimit (0, maxY, scrollY);
 
-    hScroll.setCurrentRangeStart ((double) scrollX);
-    vScroll.setCurrentRangeStart ((double) scrollY);
+    hScroll.setCurrentRangeStart ((double) scrollX, juce::dontSendNotification);
+    vScroll.setCurrentRangeStart ((double) scrollY, juce::dontSendNotification);
     repaint();
 }
 
@@ -1196,6 +1221,73 @@ void PianoRollComponent::refreshDisplay()
 double PianoRollComponent::getStepBeats() const
 {
     return 1.0; // always snap to 1/4 note
+}
+
+bool PianoRollComponent::isDrumMode() const
+{
+    return instrumentName.containsIgnoreCase ("drum");
+}
+
+int PianoRollComponent::getDisplayRowCount() const
+{
+    return isDrumMode() ? (int) std::size (drumLanes) : PianoRoll::numRows;
+}
+
+int PianoRollComponent::rowToMidiForDisplay (int row) const
+{
+    if (isDrumMode())
+        return drumLanes[(size_t) juce::jlimit (0, getDisplayRowCount() - 1, row)].midi;
+
+    return PianoRoll::rowToNote (row);
+}
+
+int PianoRollComponent::midiToRowForDisplay (int midiNote) const
+{
+    if (isDrumMode())
+    {
+        for (int i = 0; i < (int) std::size (drumLanes); ++i)
+            if (drumLanes[(size_t) i].midi == midiNote)
+                return i;
+
+        int bestRow = 0;
+        int bestDistance = std::numeric_limits<int>::max();
+        for (int i = 0; i < (int) std::size (drumLanes); ++i)
+        {
+            const int distance = std::abs (drumLanes[(size_t) i].midi - midiNote);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestRow = i;
+            }
+        }
+        return bestRow;
+    }
+
+    return PianoRoll::noteToRow (midiNote);
+}
+
+juce::String PianoRollComponent::getDisplayLabelForMidi (int midiNote) const
+{
+    if (isDrumMode())
+        for (const auto& lane : drumLanes)
+            if (lane.midi == midiNote)
+                return juce::String (lane.name) + "  " + juce::String (midiNote);
+
+    return PianoRoll::getNoteName (midiNote);
+}
+
+bool PianoRollComponent::isDarkDisplayRow (int row) const
+{
+    return isDrumMode() ? (row % 2) == 1 : PianoRoll::isBlackKey (rowToMidiForDisplay (row));
+}
+
+juce::Rectangle<float> PianoRollComponent::getNoteBoundsForDisplay (const PianoRoll::Note& note) const
+{
+    const auto row = midiToRowForDisplay (note.midiNote);
+    auto x = (float) (note.startBeat * PianoRoll::beatWidth);
+    auto y = (float) (row * PianoRoll::rowHeight);
+    auto w = (float) juce::jmax (12.0, note.lengthBeats * PianoRoll::beatWidth);
+    return { x + 1.5f, y + 2.0f, w - 3.0f, (float) PianoRoll::rowHeight - 4.0f };
 }
 
 PianoRollWindow::PianoRollWindow()

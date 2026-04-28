@@ -55,7 +55,7 @@ TempoControlComponent::TempoControlComponent(DAWState& stateIn, ThemeData& theme
 
     tempoSlider.setSliderStyle(juce::Slider::LinearHorizontal);
     tempoSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    tempoSlider.setRange(40.0, 240.0, 1.0);
+    tempoSlider.setRange(DAWState::minTempoBpm, DAWState::maxTempoBpm, 1.0);
     sliderLookAndFeel = std::make_unique<MixerStyleSliderLookAndFeel>(theme);
     tempoSlider.setLookAndFeel(sliderLookAndFeel.get());
     tempoSlider.onValueChange = [this]

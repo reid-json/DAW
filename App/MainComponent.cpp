@@ -37,13 +37,12 @@ MainComponent::MainComponent()
     engine.getIODeviceManager().setFxProcessCallback([this] (juce::AudioBuffer<float>& buffer)
     {
         if (gui == nullptr) return;
-        auto& phm = gui->getPluginHostManager();
-        int trackCount = gui->getState().trackCount;
-
-        for (int i = 0; i < trackCount; ++i)
-            phm.processTrackEffects(i, buffer);
-
-        phm.processMasterEffects(buffer);
+        gui->getPluginHostManager().processMasterEffects(buffer);
+    });
+    engine.setTrackFxProcessor([this] (int trackIndex, juce::AudioBuffer<float>& buffer)
+    {
+        if (gui == nullptr) return;
+        gui->getPluginHostManager().processTrackEffects(trackIndex, buffer);
     });
     gui->onRecordToggleRequested = [this] { handleRecordToggle(); };
     gui->onMonitoringToggleRequested = [this] { handleMonitoringToggle(); };
@@ -60,7 +59,7 @@ MainComponent::MainComponent()
     gui->onPatternEditRequested = [this] (int a) { handlePatternEditRequested(a); };
     gui->onTimelineClipMoved = [this] (int p, int t, double s) { handleTimelineClipMoved(p, t, s); };
     gui->onTimelineClipDeleteRequested = [this] (int p) { handleTimelineClipRemoved(p); };
-    gui->onSavePatternRequested = [this] (int a, const std::vector<PianoRoll::Note>& n) { handleSavePattern(a, n); };
+    gui->onSavePatternRequested = [this] (int a, const std::vector<PianoRoll::Note>& n, const juce::String& inst) { handleSavePattern(a, n, inst); };
     gui->onPianoRollInstrumentChangeRequested = [this] (const juce::String& n) { handlePianoRollInstrumentChange(n); };
 
     addAndMakeVisible(gui.get());
@@ -72,7 +71,14 @@ MainComponent::MainComponent()
 MainComponent::~MainComponent()
 {
     stopTimer();
+    audioFileChooser.reset();
+    projectFileChooser.reset();
+    engine.setPatternTrackRenderer({});
+    engine.setTrackFxProcessor({});
+    engine.getIODeviceManager().setFxProcessCallback({});
     engine.shutdown();
+    tooltipWindow.reset();
+    gui.reset();
 }
 
 void MainComponent::resized()
@@ -106,6 +112,73 @@ void MainComponent::syncMixerStateToEngine()
     }
 }
 
+void MainComponent::capturePluginStateIntoProjectState()
+{
+    if (gui == nullptr)
+        return;
+
+    auto& state = gui->getState();
+    auto& pluginHost = gui->getPluginHostManager();
+
+    for (int slot = 0; slot < state.getMasterFxSlotCount(); ++slot)
+        state.getMasterFxSlot(slot).pluginState = pluginHost.getMasterPluginState(slot);
+
+    for (int trackIndex = 0; trackIndex < state.trackCount; ++trackIndex)
+    {
+        auto& track = state.getTrackMixerState(trackIndex);
+        for (int slot = 0; slot < (int) track.fxSlots.size(); ++slot)
+            track.fxSlots[(size_t) slot].pluginState = pluginHost.getTrackPluginState(trackIndex, slot);
+
+        auto& pattern = state.getTrackPatternState(trackIndex);
+        const auto instrumentName = pluginHost.getTrackInstrumentPluginName(trackIndex);
+        if (instrumentName.isNotEmpty())
+            pattern.instrumentName = instrumentName;
+        pattern.instrumentState = pluginHost.getTrackInstrumentPluginState(trackIndex);
+    }
+}
+
+void MainComponent::restorePluginsFromProjectState()
+{
+    if (gui == nullptr)
+        return;
+
+    auto& state = gui->getState();
+    auto& pluginHost = gui->getPluginHostManager();
+    const auto& arrangement = engine.getArrangementState();
+
+    pluginHost.clearAllPlugins();
+
+    for (int slot = 0; slot < state.getMasterFxSlotCount(); ++slot)
+    {
+        const auto& fx = state.getMasterFxSlot(slot);
+        if (fx.hasPlugin && fx.name.isNotEmpty() && pluginHost.loadMasterPlugin(fx.name, slot))
+            pluginHost.setMasterPluginState(slot, fx.pluginState);
+    }
+
+    for (int trackIndex = 0; trackIndex < state.trackCount; ++trackIndex)
+    {
+        const auto& track = state.getTrackMixerState(trackIndex);
+        for (int slot = 0; slot < (int) track.fxSlots.size(); ++slot)
+        {
+            const auto& fx = track.fxSlots[(size_t) slot];
+            if (fx.hasPlugin && fx.name.isNotEmpty() && pluginHost.loadTrackPlugin(fx.name, trackIndex, slot))
+                pluginHost.setTrackPluginState(trackIndex, slot, fx.pluginState);
+        }
+
+        auto& pattern = state.getTrackPatternState(trackIndex);
+        if (pattern.instrumentName.isEmpty() && pattern.assetId > 0)
+            if (const auto* asset = arrangement.findAsset(pattern.assetId))
+                pattern.instrumentName = asset->instrumentName;
+
+        if (pattern.instrumentName.isNotEmpty() && pluginHost.loadTrackInstrumentPlugin(pattern.instrumentName, trackIndex))
+            pluginHost.setTrackInstrumentPluginState(trackIndex, pattern.instrumentState);
+    }
+
+    for (const auto& asset : arrangement.getAssets())
+        if (asset.kind == AssetKind::pianoRollPattern && asset.instrumentName.isNotEmpty())
+            pluginHost.preloadInstrumentPlugin(asset.instrumentName);
+}
+
 float MainComponent::resolveRoutedGain(const DAWState& dawState, int trackIndex, int depth) const
 {
     if (depth > 8 || trackIndex < 0 || trackIndex >= dawState.trackCount)
@@ -136,7 +209,7 @@ void MainComponent::syncStateFromEngine()
     if (gui == nullptr)
         return;
 
-    const auto currentTempoBpm = juce::jlimit(40.0, 240.0, gui->getState().tempoBpm);
+    const auto currentTempoBpm = juce::jlimit(DAWState::minTempoBpm, DAWState::maxTempoBpm, gui->getState().tempoBpm);
     if (std::abs(currentTempoBpm - lastSyncedTempoBpm) > 0.001)
     {
         rescalePatternsForTempo(lastSyncedTempoBpm, currentTempoBpm);
@@ -305,6 +378,7 @@ void MainComponent::handleSaveProject()
                     file = file.withFileExtension("dawproj");
 
                 syncTrackPatternsToAssets();
+                capturePluginStateIntoProjectState();
                 juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
                 saveProject(file, gui->getState(), engine.getArrangementState());
             }
@@ -326,7 +400,8 @@ void MainComponent::handleOpenProject()
             {
                 engine.stopPlayback();
                 juce::ScopedLock lock(engine.getDeviceManager().getAudioCallbackLock());
-                loadProject(file, gui->getState(), engine.getArrangementState());
+                if (loadProject(file, gui->getState(), engine.getArrangementState()))
+                    restorePluginsFromProjectState();
             }
             projectFileChooser.reset();
             lastSyncedTempoBpm = gui->getState().tempoBpm;
@@ -382,6 +457,8 @@ void MainComponent::handleExportWav()
                     juce::AudioBuffer<float> block(2, thisBlock);
                     block.clear();
                     arr.render(block, pos);
+                    if (gui != nullptr)
+                        gui->getPluginHostManager().processMasterEffects(block);
 
                     for (int ch = 0; ch < 2; ++ch)
                         fullBuffer.copyFrom(ch, static_cast<int>(pos), block, ch, 0, thisBlock);
@@ -469,7 +546,7 @@ void MainComponent::handlePatternEditRequested(int assetId)
     if (asset == nullptr || asset->kind != AssetKind::pianoRollPattern)
         return;
 
-    gui->openPianoRollForPattern(toPianoRollNotes(*asset), assetId);
+    gui->openPianoRollForPattern(toPianoRollNotes(*asset), assetId, asset->instrumentName);
 }
 
 void MainComponent::syncTrackPatternsToAssets()
@@ -491,12 +568,17 @@ void MainComponent::syncTrackPatternsToAssets()
         const auto lengthSeconds = getPatternLengthSeconds(pattern);
         auto patternNotes = toPatternNotes(pattern);
 
+        auto instrumentName = pattern.instrumentName;
+        const auto hostedInstrumentName = gui->getPluginHostManager().getTrackInstrumentPluginName(trackIndex);
+        if (hostedInstrumentName.isNotEmpty())
+            instrumentName = hostedInstrumentName;
+
         if (pattern.assetId <= 0)
             pattern.assetId = engine.createPatternAsset(patternName, lengthSeconds, std::move(patternNotes),
-                                                        gui->getPluginHostManager().getTrackInstrumentPluginName(trackIndex));
+                                                        instrumentName);
         else
             engine.updatePatternAsset(pattern.assetId, patternName, lengthSeconds, std::move(patternNotes),
-                                      gui->getPluginHostManager().getTrackInstrumentPluginName(trackIndex));
+                                      instrumentName);
     }
 }
 
@@ -504,8 +586,8 @@ void MainComponent::rescalePatternsForTempo(double oldTempoBpm, double newTempoB
 {
     if (gui == nullptr) return;
 
-    oldTempoBpm = juce::jlimit(40.0, 240.0, oldTempoBpm);
-    newTempoBpm = juce::jlimit(40.0, 240.0, newTempoBpm);
+    oldTempoBpm = juce::jlimit(DAWState::minTempoBpm, DAWState::maxTempoBpm, oldTempoBpm);
+    newTempoBpm = juce::jlimit(DAWState::minTempoBpm, DAWState::maxTempoBpm, newTempoBpm);
     if (std::abs(oldTempoBpm - newTempoBpm) <= 0.001) return;
 
     const double scale = oldTempoBpm / newTempoBpm;
@@ -575,13 +657,13 @@ void MainComponent::handleTimelineClipRemoved(int placementId)
     syncStateFromEngine();
 }
 
-void MainComponent::handleSavePattern(int assetId, const std::vector<PianoRoll::Note>& pianoNotes)
+void MainComponent::handleSavePattern(int assetId, const std::vector<PianoRoll::Note>& pianoNotes, const juce::String& instrumentName)
 {
     if (pianoNotes.empty()) return;
 
-    const auto instrumentName = gui->getPluginHostManager().getTrackInstrumentPluginName(gui->getState().selectedTrackIndex);
     if (instrumentName.isNotEmpty())
         gui->getPluginHostManager().preloadInstrumentPlugin(instrumentName);
+    gui->getState().getTrackPatternState(gui->getState().selectedTrackIndex).instrumentName = instrumentName;
 
     const auto secondsPerBeat = getSecondsPerBeat();
     std::vector<PatternNote> patternNotes;
@@ -619,6 +701,8 @@ void MainComponent::handlePianoRollInstrumentChange(const juce::String& pluginNa
     const int trackIndex = gui != nullptr ? gui->getState().selectedTrackIndex : -1;
     gui->getPluginHostManager().loadTrackInstrumentPlugin(pluginName, trackIndex);
     gui->getPluginHostManager().preloadInstrumentPlugin(pluginName);
+    if (trackIndex >= 0)
+        gui->getState().getTrackPatternState(trackIndex).instrumentName = pluginName;
 }
 
 int MainComponent::getNewestRecentAssetId() const {
@@ -631,7 +715,7 @@ double MainComponent::getSecondsPerBeat() const
     if (gui == nullptr)
         return 0.5;
 
-    const auto bpm = juce::jlimit(40.0, 240.0, gui->getState().tempoBpm);
+    const auto bpm = juce::jlimit(DAWState::minTempoBpm, DAWState::maxTempoBpm, gui->getState().tempoBpm);
     return 60.0 / bpm;
 }
 
