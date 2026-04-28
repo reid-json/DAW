@@ -40,7 +40,7 @@ public:
     PluginHostManager& getPluginHostManager() { return pluginHostManager; }
     void syncFromEngine(bool shouldRefreshControls, bool shouldRebuildTrackList);
     void repaintDynamicViews();
-    void openPianoRollForPattern(std::vector<PianoRoll::Note> notes, int assetId);
+    void openPianoRollForPattern(std::vector<PianoRoll::Note> notes, int assetId, const juce::String& instrumentName);
 
     std::function<void()> onRecordToggleRequested;
     std::function<void()> onMonitoringToggleRequested;
@@ -57,7 +57,7 @@ public:
     std::function<void(int assetId)> onPatternEditRequested;
     std::function<void(int placementId, int trackIndex, double startSeconds)> onTimelineClipMoved;
     std::function<void(int placementId)> onTimelineClipDeleteRequested;
-    std::function<void(int assetId, const std::vector<PianoRoll::Note>&)> onSavePatternRequested;
+    std::function<void(int assetId, const std::vector<PianoRoll::Note>&, const juce::String& instrumentName)> onSavePatternRequested;
     std::function<void(const juce::String&)> onPianoRollInstrumentChangeRequested;
 
 private:

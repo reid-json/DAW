@@ -69,6 +69,7 @@ public:
                                                     juce::AudioBuffer<float>& buffer,
                                                     juce::MidiBuffer& midi,
                                                     double sampleRate)>;
+    using TrackFxProcessor = std::function<void(int trackIndex, juce::AudioBuffer<float>& buffer)>;
 
     void initialiseDefaults(int numMixerTracks = 4, int numTimelineTracks = 9);
 
@@ -82,6 +83,7 @@ public:
     bool removeTimelinePlacement(int placementId);
 
     void setPatternTrackRenderer(PatternTrackRenderer renderer);
+    void setTrackFxProcessor(TrackFxProcessor processor);
     void setMixerTrackGain(int trackIndex, float gain);
     void setMixerTrackPan(int trackIndex, float pan);
     void setMasterGain(float gain);
@@ -129,6 +131,7 @@ private:
                             float gain) const;
 
     mutable PatternTrackRenderer patternTrackRenderer;
+    mutable TrackFxProcessor trackFxProcessor;
     mutable std::map<int, std::set<ActivePatternNote>> activePatternNotesByTrack;
     mutable juce::int64 lastPatternRenderEndSample = -1;
     int nextAssetId = 1;

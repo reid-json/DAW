@@ -19,6 +19,8 @@ private:
     void timerCallback() override;
     void syncStateFromEngine();
     void syncMixerStateToEngine();
+    void capturePluginStateIntoProjectState();
+    void restorePluginsFromProjectState();
     float resolveRoutedGain(const DAWState& dawState, int trackIndex, int depth) const;
     void placeRecordingOnArmedTrack();
     void handleRecordToggle();
@@ -42,7 +44,7 @@ private:
     double getPatternLengthSeconds(const TrackPatternState& pattern) const;
     void handleTimelineClipMoved(int placementId, int trackIndex, double startSeconds);
     void handleTimelineClipRemoved(int placementId);
-    void handleSavePattern(int assetId, const std::vector<PianoRoll::Note>& notes);
+    void handleSavePattern(int assetId, const std::vector<PianoRoll::Note>& notes, const juce::String& instrumentName);
     void handlePianoRollInstrumentChange(const juce::String& pluginName);
     int getNewestRecentAssetId() const;
 

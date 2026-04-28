@@ -279,3 +279,9 @@ void AudioEngine::setPatternTrackRenderer(ArrangementState::PatternTrackRenderer
     juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
     arrangementState.setPatternTrackRenderer(std::move(renderer));
 }
+
+void AudioEngine::setTrackFxProcessor(ArrangementState::TrackFxProcessor processor)
+{
+    juce::ScopedLock sl(deviceManager.getAudioCallbackLock());
+    arrangementState.setTrackFxProcessor(std::move(processor));
+}

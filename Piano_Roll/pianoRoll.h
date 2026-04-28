@@ -14,7 +14,9 @@ namespace PianoRoll
     static constexpr int rowHeight   = 24;
     static constexpr int beatWidth   = 48;
     static constexpr int numRows     = 73;
-    static constexpr int numBeats    = 32;
+    static constexpr int beatsPerBar = 4;
+    static constexpr int numBars     = 32;
+    static constexpr int numBeats    = numBars * beatsPerBar;
     static constexpr int topNote     = 96; // C7 down to C1, covering common drum maps
 
     struct Note
@@ -51,7 +53,7 @@ public:
     bool keyPressed (const juce::KeyPress& key) override;
 
     void setNotes (std::vector<PianoRoll::Note> newNotes);
-    void setOnSavePattern (std::function<void (const std::vector<PianoRoll::Note>&)> cb);
+    void setOnSavePattern (std::function<void (const std::vector<PianoRoll::Note>&, const juce::String&)> cb);
     void setOnGetAvailableInstruments (std::function<juce::StringArray()> cb);
     void setOnInstrumentChanged (std::function<void (const juce::String&)> cb);
     void setOnShowInstrumentEditor (std::function<void()> cb);
@@ -151,6 +153,13 @@ private:
     void updateViewport();
     void refreshDisplay();
     double getStepBeats() const;
+    bool isDrumMode() const;
+    int getDisplayRowCount() const;
+    int rowToMidiForDisplay (int row) const;
+    int midiToRowForDisplay (int midiNote) const;
+    juce::String getDisplayLabelForMidi (int midiNote) const;
+    bool isDarkDisplayRow (int row) const;
+    juce::Rectangle<float> getNoteBoundsForDisplay (const PianoRoll::Note& note) const;
 
     std::unique_ptr<PianoRollLookAndFeel> pianoRollLookAndFeel;
 
@@ -178,7 +187,7 @@ private:
     int nextId = 1;
     int scrollX = 0, scrollY = (PianoRoll::topNote - 48) * PianoRoll::rowHeight;
     juce::String instrumentName;
-    std::function<void (const std::vector<PianoRoll::Note>&)> onSavePatternRequested;
+    std::function<void (const std::vector<PianoRoll::Note>&, const juce::String&)> onSavePatternRequested;
     std::function<juce::StringArray()> onGetAvailableInstruments;
     std::function<void (const juce::String&)> onInstrumentChangeRequested;
     std::function<void()> onShowInstrumentEditorRequested;

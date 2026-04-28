@@ -46,6 +46,7 @@ public:
     bool updatePatternAsset(int assetId, const juce::String& name, double lengthSeconds, std::vector<PatternNote> patternNotes = {}, const juce::String& instrumentName = {});
     bool renameAsset(int assetId, const juce::String& newName);
     void setPatternTrackRenderer(ArrangementState::PatternTrackRenderer renderer);
+    void setTrackFxProcessor(ArrangementState::TrackFxProcessor processor);
 
     const ArrangementState& getArrangementState() const { return arrangementState; }
     ArrangementState& getArrangementState() { return arrangementState; }
